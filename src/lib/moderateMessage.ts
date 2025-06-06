@@ -1,5 +1,5 @@
-import OpenAI from 'openai';
 import emojiRegex from 'emoji-regex';
+import { createChatCompletion } from './openai';
 
 const SYSTEM_PROMPT = `Tu es un modérateur bienveillant qui aide à reformuler les messages des parents tout en préservant leur sens et leur émotion.
 
@@ -60,32 +60,22 @@ export const moderateMessage = async (message: string, isResponse: boolean = fal
       };
     }
 
-    const openai = new OpenAI({
-      apiKey: import.meta.env.VITE_OPENAI_API_KEY,
-      dangerouslyAllowBrowser: true
-    });
-
     const systemPrompt = isResponse ? 
       `${SYSTEM_PROMPT}\n\nNote: Ce message est une réponse à un autre message. Assure-toi qu'il reste dans le contexte d'une réponse bienveillante.` :
       SYSTEM_PROMPT;
 
-    const completion = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo",
-      messages: [
-        {
-          role: "system",
-          content: systemPrompt
-        },
-        {
-          role: "user",
-          content: `Modère ce message et retourne un objet JSON selon le format spécifié : ${message}`
-        }
-      ],
-      temperature: 0.7,
-      max_tokens: 500,
-      response_format: { type: "json_object" }
-    });
+    const messages = [
+      {
+        role: "system",
+        content: systemPrompt
+      },
+      {
+        role: "user",
+        content: `Modère ce message et retourne un objet JSON selon le format spécifié : ${message}`
+      }
+    ];
 
+    const completion = await createChatCompletion(messages, "gpt-3.5-turbo", 500);
     const response = JSON.parse(completion.choices[0].message.content || '{}');
     
     if (response.error) {

@@ -1,5 +1,5 @@
 import AudioRecorder from 'audio-recorder-polyfill';
-import OpenAI from 'openai';
+import { createChatCompletion } from './openai';
 
 interface VoiceRecorderOptions {
   onDataAvailable?: (data: Blob) => void;
@@ -14,17 +14,12 @@ export class VoiceRecorder {
   private recognition: SpeechRecognition | null = null;
   private options: VoiceRecorderOptions;
   private isRecording = false;
-  private openai: OpenAI;
   private accumulatedText = '';
   private silenceTimer: NodeJS.Timeout | null = null;
   private lastSpeechTime: number = 0;
 
   constructor(options: VoiceRecorderOptions) {
     this.options = options;
-    this.openai = new OpenAI({
-      apiKey: import.meta.env.VITE_OPENAI_API_KEY,
-      dangerouslyAllowBrowser: true
-    });
   }
 
   async start() {
@@ -74,22 +69,18 @@ export class VoiceRecorder {
 
   private async processWithAI(text: string) {
     try {
-      const completion = await this.openai.chat.completions.create({
-        model: "gpt-3.5-turbo",
-        messages: [
-          {
-            role: "system",
-            content: "Voici un texte dicté par un parent. Reformule ce texte de manière claire, fluide et bienveillante.\n\nGarde le sens et l'intention du parent.\n\nNe change pas l'idée exprimée.\n\nNe donne pas ton avis, pas de commentaire, pas d'interprétation, pas de jugement.\n\nNe rajoute rien qui n'est pas dans le texte.\n\nCorrige seulement si c'est nécessaire pour rendre le texte compréhensible (syntaxe, répétitions, fautes très gênantes).\n\n🎯 Objectif : respecter les mots du parent tout en améliorant la lisibilité du message."
-          },
-          {
-            role: "user",
-            content: text
-          }
-        ],
-        temperature: 0.7,
-        max_tokens: 500
-      });
+      const messages = [
+        {
+          role: "system",
+          content: "Voici un texte dicté par un parent. Reformule ce texte de manière claire, fluide et bienveillante.\n\nGarde le sens et l'intention du parent.\n\nNe change pas l'idée exprimée.\n\nNe donne pas ton avis, pas de commentaire, pas d'interprétation, pas de jugement.\n\nNe rajoute rien qui n'est pas dans le texte.\n\nCorrige seulement si c'est nécessaire pour rendre le texte compréhensible (syntaxe, répétitions, fautes très gênantes).\n\n🎯 Objectif : respecter les mots du parent tout en améliorant la lisibilité du message."
+        },
+        {
+          role: "user",
+          content: text
+        }
+      ];
 
+      const completion = await createChatCompletion(messages, "gpt-3.5-turbo", 500);
       const refinedText = completion.choices[0].message.content;
       if (refinedText) {
         this.options.onTranscriptionComplete?.(refinedText);

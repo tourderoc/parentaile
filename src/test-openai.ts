@@ -1,34 +1,18 @@
-import OpenAI from 'openai';
+import { createChatCompletion } from './lib/openai';
 
 const testOpenAIKey = async () => {
   console.log('%c OpenAI API Key Test ', 'background: #000; color: #fff; padding: 2px 6px; border-radius: 4px;');
   console.log('Starting API test...');
 
   try {
-    if (!import.meta.env.VITE_OPENAI_API_KEY) {
-      throw new Error('API key is not defined in environment variables');
-    }
-
-    console.log('API Key found in environment variables');
-    console.log('Initializing OpenAI client...');
-
-    const openai = new OpenAI({
-      apiKey: import.meta.env.VITE_OPENAI_API_KEY,
-      dangerouslyAllowBrowser: true
-    });
-
-    console.log('Making test request to OpenAI API...');
+    console.log('Making test request to OpenAI API via Netlify function...');
     
-    const completion = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo",
-      messages: [
-        {
-          role: "user",
-          content: "Say hello"
-        }
-      ],
-      max_tokens: 10
-    });
+    const completion = await createChatCompletion([
+      {
+        role: "user",
+        content: "Say hello"
+      }
+    ], "gpt-3.5-turbo", 10);
 
     console.log('%c ✅ SUCCESS ', 'background: #4CAF50; color: #fff; padding: 2px 6px; border-radius: 4px;');
     console.log('API Response:', completion.choices[0].message);
