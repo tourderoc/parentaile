@@ -65,3 +65,20 @@ Si vous rencontrez des erreurs lors de la compilation des fonctions TypeScript, 
 2. Le fichier stripeWebhook.ts utilise la syntaxe CommonJS (require/exports) et non ESM (import/export)
 
 3. Les deux fichiers (stripeWebhook.ts et stripeWebhook.js) sont présents dans le répertoire netlify/functions
+
+## Problèmes courants lors du déploiement
+
+### Erreur "Could not load edge function"
+
+Si vous voyez une erreur comme celle-ci lors du déploiement :
+```
+Could not load edge function at '/opt/build/repo/netlify/edge-functions/stripeWebhook.js'
+```
+
+Cela signifie que Netlify essaie de charger votre fonction comme une Edge Function au lieu d'une fonction serverless standard. Pour résoudre ce problème :
+
+1. Assurez-vous qu'il n'y a pas de fichier `stripeWebhook.js` dans le répertoire `netlify/edge-functions/`
+2. Si ce fichier existe, supprimez-le avec la commande : `rm netlify/edge-functions/stripeWebhook.js`
+3. Vérifiez que votre fichier `netlify.toml` ne contient pas de configuration edge_functions pour stripeWebhook
+
+Les Edge Functions et les Netlify Functions sont deux types de fonctions différents, et vous ne pouvez pas utiliser le même nom pour les deux.
