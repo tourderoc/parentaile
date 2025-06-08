@@ -13,7 +13,7 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
 const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
 // Using CommonJS handler format
 const handler = async (event) => {
-    var _a, _b, _c;
+    var _a, _b, _c, _d;
     // Handle CORS preflight
     if (event.httpMethod === 'OPTIONS') {
         return {
@@ -56,35 +56,64 @@ const handler = async (event) => {
                     console.error('Error parsing shipping info:', e);
                 }
             }
-            // Set order data
-            batch.set(orderRef, {
-                userId: (_b = session.metadata) === null || _b === void 0 ? void 0 : _b.userId,
-                sessionId: session.id,
+            // Prepare order data - remove any undefined values
+            const orderData = {
+                sessionId: session.id || '',
                 amount: (session.amount_total || 0) / 100,
                 status: 'paid',
                 createdAt: admin.firestore.FieldValue.serverTimestamp(),
-                paymentIntentId: session.payment_intent,
-                items: lineItems.data.map((item) => {
-                    var _a, _b;
-                    return ({
-                        id: (_a = item.price) === null || _a === void 0 ? void 0 : _a.product,
-                        quantity: item.quantity,
-                        price: (((_b = item.price) === null || _b === void 0 ? void 0 : _b.unit_amount) || 0) / 100,
-                        title: item.description
-                    });
-                }),
-                shipping: shippingInfo,
                 orderId: `ORD-${Date.now()}-${Math.floor(Math.random() * 1000)}`
-            });
-            // Update stock levels for each item
-            for (const item of lineItems.data) {
-                if (!((_c = item.price) === null || _c === void 0 ? void 0 : _c.product) || !item.quantity)
-                    continue;
-                const bookRef = db.collection('livres_enfants').doc(item.price.product);
-                batch.update(bookRef, {
-                    stock: admin.firestore.FieldValue.increment(-item.quantity)
+            };
+            // Only add fields if they exist
+            if ((_b = session.metadata) === null || _b === void 0 ? void 0 : _b.userId) {
+                orderData.userId = session.metadata.userId;
+            }
+            if (session.payment_intent) {
+                orderData.paymentIntentId = session.payment_intent;
+            }
+            if (shippingInfo) {
+                orderData.shipping = shippingInfo;
+            }
+            // Process line items
+            if (lineItems && lineItems.data && lineItems.data.length > 0) {
+                orderData.items = lineItems.data.map((item) => {
+                    var _a, _b;
+                    const itemData = {
+                        quantity: item.quantity || 0,
+                        price: ((((_a = item.price) === null || _a === void 0 ? void 0 : _a.unit_amount) || 0) / 100)
+                    };
+                    if ((_b = item.price) === null || _b === void 0 ? void 0 : _b.product) {
+                        itemData.id = item.price.product;
+                    }
+                    if (item.description) {
+                        itemData.title = item.description;
+                    }
+                    return itemData;
                 });
-                console.log(`Updating stock for book ${item.price.product}: -${item.quantity}`);
+            }
+            else {
+                orderData.items = [];
+            }
+            // Set order data
+            batch.set(orderRef, orderData);
+            console.log('Order data prepared:', JSON.stringify(orderData, null, 2));
+            // Update stock levels for each item
+            if (lineItems && lineItems.data && lineItems.data.length > 0) {
+                for (const item of lineItems.data) {
+                    if (!((_c = item.price) === null || _c === void 0 ? void 0 : _c.product) || !item.quantity)
+                        continue;
+                    try {
+                        const bookRef = db.collection('livres_enfants').doc(item.price.product);
+                        batch.update(bookRef, {
+                            stock: admin.firestore.FieldValue.increment(-item.quantity)
+                        });
+                        console.log(`Updating stock for book ${item.price.product}: -${item.quantity}`);
+                    }
+                    catch (error) {
+                        console.error(`Error updating stock for book ${(_d = item.price) === null || _d === void 0 ? void 0 : _d.product}:`, error);
+                        // Continue with other items even if one fails
+                    }
+                }
             }
             // Commit all changes
             await batch.commit();

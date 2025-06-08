@@ -82,3 +82,22 @@ Cela signifie que Netlify essaie de charger votre fonction comme une Edge Functi
 3. Vérifiez que votre fichier `netlify.toml` ne contient pas de configuration edge_functions pour stripeWebhook
 
 Les Edge Functions et les Netlify Functions sont deux types de fonctions différents, et vous ne pouvez pas utiliser le même nom pour les deux.
+
+### Erreur "Value for argument 'data' is not a valid Firestore document"
+
+Si vous rencontrez cette erreur lors de l'exécution du webhook :
+```
+Error: Value for argument "data" is not a valid Firestore document. Cannot use "undefined" as a Firestore value.
+```
+
+Cela signifie que vous essayez d'écrire des valeurs `undefined` dans Firestore, ce qui n'est pas autorisé. Pour résoudre ce problème :
+
+1. Assurez-vous que tous les champs que vous écrivez dans Firestore ont des valeurs par défaut
+2. Utilisez des vérifications conditionnelles pour n'ajouter que les champs qui ont des valeurs définies
+3. Utilisez des objets intermédiaires pour préparer les données avant de les écrire dans Firestore
+
+La version actuelle du webhook a été mise à jour pour gérer ce problème en :
+- Préparant un objet `orderData` avec des valeurs par défaut
+- N'ajoutant des champs supplémentaires que s'ils existent
+- Vérifiant l'existence des données de ligne avant de les traiter
+- Ajoutant des blocs try/catch pour gérer les erreurs lors de la mise à jour du stock

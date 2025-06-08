@@ -103,34 +103,72 @@ const handler = async (event: NetlifyEvent): Promise<NetlifyResponse> => {
         }
       }
 
-      // Set order data
-      batch.set(orderRef, {
-        userId: session.metadata?.userId,
-        sessionId: session.id,
+      // Prepare order data - remove any undefined values
+      const orderData: Record<string, any> = {
+        sessionId: session.id || '',
         amount: (session.amount_total || 0) / 100,
         status: 'paid',
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        paymentIntentId: session.payment_intent,
-        items: lineItems.data.map((item: LineItem) => ({
-          id: item.price?.product,
-          quantity: item.quantity,
-          price: (item.price?.unit_amount || 0) / 100,
-          title: item.description
-        })),
-        shipping: shippingInfo,
         orderId: `ORD-${Date.now()}-${Math.floor(Math.random() * 1000)}`
-      });
+      };
+
+      // Only add fields if they exist
+      if (session.metadata?.userId) {
+        orderData.userId = session.metadata.userId;
+      }
+
+      if (session.payment_intent) {
+        orderData.paymentIntentId = session.payment_intent;
+      }
+
+      if (shippingInfo) {
+        orderData.shipping = shippingInfo;
+      }
+
+      // Process line items
+      if (lineItems && lineItems.data && lineItems.data.length > 0) {
+        orderData.items = lineItems.data.map((item: LineItem) => {
+          const itemData: Record<string, any> = {
+            quantity: item.quantity || 0,
+            price: ((item.price?.unit_amount || 0) / 100)
+          };
+
+          if (item.price?.product) {
+            itemData.id = item.price.product;
+          }
+
+          if (item.description) {
+            itemData.title = item.description;
+          }
+
+          return itemData;
+        });
+      } else {
+        orderData.items = [];
+      }
+
+      // Set order data
+      batch.set(orderRef, orderData);
+
+      console.log('Order data prepared:', JSON.stringify(orderData, null, 2));
 
       // Update stock levels for each item
-      for (const item of lineItems.data as LineItem[]) {
-        if (!item.price?.product || !item.quantity) continue;
+      if (lineItems && lineItems.data && lineItems.data.length > 0) {
+        for (const item of lineItems.data as LineItem[]) {
+          if (!item.price?.product || !item.quantity) continue;
 
-        const bookRef = db.collection('livres_enfants').doc(item.price.product as string);
-        batch.update(bookRef, {
-          stock: admin.firestore.FieldValue.increment(-item.quantity)
-        });
+          try {
+            const bookRef = db.collection('livres_enfants').doc(item.price.product as string);
+            batch.update(bookRef, {
+              stock: admin.firestore.FieldValue.increment(-item.quantity)
+            });
 
-        console.log(`Updating stock for book ${item.price.product}: -${item.quantity}`);
+            console.log(`Updating stock for book ${item.price.product}: -${item.quantity}`);
+          } catch (error) {
+            console.error(`Error updating stock for book ${item.price?.product}:`, error);
+            // Continue with other items even if one fails
+          }
+        }
       }
 
       // Commit all changes
