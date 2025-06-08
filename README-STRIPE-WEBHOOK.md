@@ -14,6 +14,7 @@ Assurez-vous que ces variables d'environnement sont configurées dans les param�
 
 - `STRIPE_SECRET_KEY` : Clé secrète de votre compte Stripe
 - `STRIPE_WEBHOOK_SECRET` : Secret du webhook Stripe (généré lors de la création du webhook dans le dashboard Stripe)
+- `FIREBASE_SERVICE_ACCOUNT` : (Optionnel) JSON de votre compte de service Firebase pour l'authentification
 
 ## Déploiement sur Netlify
 
@@ -120,3 +121,30 @@ Pour résoudre ce problème :
 4. **Journalisation améliorée** : Des logs détaillés ont été ajoutés pour faciliter le débogage.
 
 Ces modifications permettent à la fonction de répondre à Stripe dans le délai imparti tout en assurant que les données sont correctement enregistrées dans Firestore.
+
+### Problèmes d'écriture dans Firestore
+
+Si les commandes ne sont pas enregistrées dans Firestore malgré l'absence d'erreurs dans les logs Netlify, cela peut être dû à plusieurs raisons :
+
+1. **Problèmes d'authentification Firebase** : 
+   - Assurez-vous que les identifiants Firebase sont correctement configurés
+   - Ajoutez la variable d'environnement `FIREBASE_SERVICE_ACCOUNT` avec le JSON de votre compte de service
+
+2. **Problèmes de permissions Firestore** :
+   - Vérifiez que les règles de sécurité Firestore permettent l'écriture dans la collection `orders`
+   - Assurez-vous que le compte de service a les droits d'écriture nécessaires
+
+3. **Débogage amélioré** :
+   - La fonction a été mise à jour pour inclure une journalisation détaillée dans Firestore
+   - Une collection `webhook_logs` est créée pour stocker les logs d'exécution
+   - Chaque étape du processus est enregistrée pour faciliter le débogage
+
+4. **Vérification de la connexion** :
+   - Un test de connexion à Firestore est effectué au démarrage de la fonction
+   - Les erreurs de connexion sont enregistrées dans les logs Netlify
+
+5. **Vérification des documents créés** :
+   - Après chaque opération d'écriture, la fonction vérifie que le document a bien été créé
+   - Les résultats de ces vérifications sont enregistrés dans les logs
+
+Consultez la collection `webhook_logs` dans Firestore pour voir les détails d'exécution et identifier les problèmes potentiels.

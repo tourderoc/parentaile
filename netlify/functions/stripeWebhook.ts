@@ -43,9 +43,24 @@ interface NetlifyResponse {
 // Initialize Firebase Admin if not already initialized
 if (!admin.apps.length) {
   try {
+    // Check if we have service account credentials in environment variables
+    let serviceAccount;
+    if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+      try {
+        serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+        console.log('Using service account from environment variable');
+      } catch (e) {
+        console.error('Error parsing FIREBASE_SERVICE_ACCOUNT:', e);
+      }
+    }
+
+    // Initialize with explicit configuration
     admin.initializeApp({
-      // Using default credentials
-      // If you need specific credentials, add them here
+      credential: serviceAccount 
+        ? admin.credential.cert(serviceAccount)
+        : admin.credential.applicationDefault(),
+      // If you have a specific database URL, add it here
+      // databaseURL: "https://your-project-id.firebaseio.com"
     });
     console.log('Firebase Admin initialized successfully');
   } catch (error) {
@@ -53,17 +68,47 @@ if (!admin.apps.length) {
     // Continue anyway to avoid blocking the webhook response
   }
 }
+
+// Get Firestore instance and test connection
 const db = admin.firestore();
+console.log('Firestore instance created');
+
+// Test Firestore connection
+(async () => {
+  try {
+    // Try to access a collection to verify connection
+    const testRef = db.collection('_test_connection');
+    await testRef.listDocuments();
+    console.log('Firestore connection verified successfully');
+  } catch (error) {
+    console.error('Error connecting to Firestore:', error);
+  }
+})();
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
   apiVersion: '2023-10-16', // Use a specific API version
 });
 const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
+// Function to log to both console and a debug collection in Firestore
+const logToFirestore = async (message: string, data?: any) => {
+  try {
+    const logRef = db.collection('webhook_logs').doc();
+    await logRef.set({
+      message,
+      data: data ? JSON.stringify(data) : null,
+      timestamp: admin.firestore.FieldValue.serverTimestamp()
+    });
+    console.log(`[LOGGED TO FIRESTORE] ${message}`);
+  } catch (error) {
+    console.error('Error logging to Firestore:', error);
+  }
+};
+
 // Process the webhook event asynchronously without blocking the response
 const processWebhookEvent = async (stripeEvent: StripeEvent) => {
   try {
-    console.log('Processing webhook event asynchronously:', stripeEvent.type);
+    await logToFirestore(`Processing webhook event asynchronously: ${stripeEvent.type}`, { eventType: stripeEvent.type });
     
     if (stripeEvent.type === 'checkout.session.completed') {
       const session = stripeEvent.data.object;
@@ -73,7 +118,16 @@ const processWebhookEvent = async (stripeEvent: StripeEvent) => {
       
       // Create order in Firestore
       const orderRef = db.collection('orders').doc();
-      console.log('Creating order with ID:', orderRef.id);
+      await logToFirestore(`Creating order with ID: ${orderRef.id}`);
+      
+      // Verify the orders collection exists
+      try {
+        const ordersCollection = db.collection('orders');
+        const snapshot = await ordersCollection.limit(1).get();
+        await logToFirestore(`Orders collection exists: ${snapshot.size > 0 ? 'Yes (has documents)' : 'Yes (empty)'}`);
+      } catch (error) {
+        await logToFirestore('Error checking orders collection', error);
+      }
       
       // Parse shipping info from metadata if available
       let shippingInfo = null;
@@ -130,8 +184,21 @@ const processWebhookEvent = async (stripeEvent: StripeEvent) => {
       }
 
       // Set order data directly without batch
-      await orderRef.set(orderData);
-      console.log('Order data saved to Firestore:', orderRef.id);
+      try {
+        await orderRef.set(orderData);
+        await logToFirestore(`Order data saved to Firestore: ${orderRef.id}`, orderData);
+        
+        // Verify the document was created
+        const docSnapshot = await orderRef.get();
+        if (docSnapshot.exists) {
+          await logToFirestore(`Verified order document exists: ${orderRef.id}`);
+        } else {
+          await logToFirestore(`WARNING: Order document does not exist after set: ${orderRef.id}`);
+        }
+      } catch (error) {
+        await logToFirestore(`ERROR saving order data to Firestore: ${orderRef.id}`, error);
+        throw error; // Re-throw to handle in the outer catch block
+      }
 
       // Update stock levels for each item separately
       if (lineItems && lineItems.data && lineItems.data.length > 0) {
@@ -199,11 +266,15 @@ const handler = async (event: NetlifyEvent): Promise<NetlifyResponse> => {
 
     // Start processing the event asynchronously
     // This allows us to respond to Stripe quickly
-    setTimeout(() => {
-      processWebhookEvent(stripeEvent).catch(error => {
-        console.error('Error in delayed webhook processing:', error);
-      });
-    }, 0);
+    // Using a more reliable approach than setTimeout
+    const processingPromise = processWebhookEvent(stripeEvent);
+    
+    // We don't await this promise, but we handle any errors
+    processingPromise.catch(error => {
+      console.error('Error in async webhook processing:', error);
+      // Try to log to Firestore as well
+      logToFirestore('Error in async webhook processing', error).catch(() => {});
+    });
 
     return {
       statusCode: 200,
