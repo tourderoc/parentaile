@@ -1,47 +1,55 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import Stripe from "https://esm.sh/stripe@14.19.0";
-import { initializeApp } from "https://esm.sh/firebase-admin@11.8.0/app";
-import { getFirestore, FieldValue } from "https://esm.sh/firebase-admin@11.8.0/firestore";
+import { Handler, HandlerEvent, HandlerResponse } from '@netlify/functions';
+import Stripe from 'stripe';
+import * as admin from 'firebase-admin';
 
-// Initialize Firebase Admin
-initializeApp();
-const db = getFirestore();
+// Initialize Firebase Admin if not already initialized
+if (!admin.apps.length) {
+  admin.initializeApp();
+}
+const db = admin.firestore();
 
-const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY') || '');
-const endpointSecret = Deno.env.get('STRIPE_WEBHOOK_SECRET');
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
+  apiVersion: '2023-10-16', // Use a specific API version
+});
+const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
-serve(async (req) => {
-  const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  };
-
+const handler: Handler = async (event: HandlerEvent): Promise<HandlerResponse> => {
   // Handle CORS preflight
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
+  if (event.httpMethod === 'OPTIONS') {
+    return {
+      statusCode: 200,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type'
+      },
+      body: 'ok'
+    };
   }
 
   try {
-    const signature = req.headers.get('stripe-signature');
+    const signature = event.headers['stripe-signature'];
     if (!signature || !endpointSecret) {
       console.error('Missing signature or webhook secret');
-      return new Response('Webhook Error: Missing signature', { status: 400 });
+      return {
+        statusCode: 400,
+        body: JSON.stringify({ error: 'Webhook Error: Missing signature' }),
+      };
     }
 
     // Get the raw body
-    const body = await req.text();
+    const body = event.body || '';
     
     // Verify webhook signature
-    const event = stripe.webhooks.constructEvent(
+    const stripeEvent = stripe.webhooks.constructEvent(
       body,
       signature,
       endpointSecret
     );
 
-    console.log('Processing webhook event:', event.type);
+    console.log('Processing webhook event:', stripeEvent.type);
 
-    if (event.type === 'checkout.session.completed') {
-      const session = event.data.object as Stripe.Checkout.Session;
+    if (stripeEvent.type === 'checkout.session.completed') {
+      const session = stripeEvent.data.object as Stripe.Checkout.Session;
       
       // Get line items to update stock
       const lineItems = await stripe.checkout.sessions.listLineItems(session.id);
@@ -66,7 +74,7 @@ serve(async (req) => {
         sessionId: session.id,
         amount: session.amount_total! / 100,
         status: 'paid',
-        createdAt: FieldValue.serverTimestamp(),
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
         paymentIntentId: session.payment_intent,
         items: lineItems.data.map(item => ({
           id: item.price?.product,
@@ -84,7 +92,7 @@ serve(async (req) => {
 
         const bookRef = db.collection('livres_enfants').doc(item.price.product as string);
         batch.update(bookRef, {
-          stock: FieldValue.increment(-item.quantity)
+          stock: admin.firestore.FieldValue.increment(-item.quantity)
         });
 
         console.log(`Updating stock for book ${item.price.product}: -${item.quantity}`);
@@ -95,18 +103,28 @@ serve(async (req) => {
       console.log('Order created and stocks updated:', orderRef.id);
     }
 
-    return new Response(JSON.stringify({ received: true }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-    });
+    return {
+      statusCode: 200,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ received: true })
+    };
 
   } catch (error) {
     console.error('Webhook error:', error);
-    return new Response(
-      JSON.stringify({ error: 'Webhook handler failed' }), 
-      { 
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      }
-    );
+    return {
+      statusCode: 400,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ error: 'Webhook handler failed' })
+    };
   }
-});
+};
+
+export { handler };
