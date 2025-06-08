@@ -101,3 +101,22 @@ La version actuelle du webhook a été mise à jour pour gérer ce problème en 
 - N'ajoutant des champs supplémentaires que s'ils existent
 - Vérifiant l'existence des données de ligne avant de les traiter
 - Ajoutant des blocs try/catch pour gérer les erreurs lors de la mise à jour du stock
+
+### Erreur "502 Sandbox.Timeout" dans Stripe
+
+Si vous voyez des erreurs 502 Timeout dans le dashboard Stripe, cela signifie que votre fonction webhook prend trop de temps pour répondre. Netlify Functions ont une limite de temps d'exécution de 10 secondes, et si votre fonction dépasse cette limite, Stripe recevra une erreur de timeout.
+
+Pour résoudre ce problème :
+
+1. **Répondre rapidement à Stripe** : La fonction a été modifiée pour répondre immédiatement à Stripe avec un statut 200, puis continuer le traitement en arrière-plan.
+
+2. **Traitement asynchrone** : Le traitement des données et les opérations Firestore sont effectués de manière asynchrone après avoir envoyé la réponse à Stripe.
+
+3. **Optimisations de performance** :
+   - Utilisation de `set()` direct au lieu de batches Firestore pour les commandes
+   - Utilisation de `Promise.all()` pour les mises à jour de stock en parallèle
+   - Meilleure gestion des erreurs pour éviter les blocages
+
+4. **Journalisation améliorée** : Des logs détaillés ont été ajoutés pour faciliter le débogage.
+
+Ces modifications permettent à la fonction de répondre à Stripe dans le délai imparti tout en assurant que les données sont correctement enregistrées dans Firestore.

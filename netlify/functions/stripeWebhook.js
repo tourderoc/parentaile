@@ -2,50 +2,40 @@
 const { Handler } = require('@netlify/functions');
 const Stripe = require('stripe');
 const admin = require('firebase-admin');
+// Netlify Functions have a 10-second timeout
+// We need to respond to Stripe quickly to avoid 502 errors
+const RESPONSE_TIMEOUT = 8000; // 8 seconds to be safe
 // Initialize Firebase Admin if not already initialized
 if (!admin.apps.length) {
-    admin.initializeApp();
+    try {
+        admin.initializeApp({
+        // Using default credentials
+        // If you need specific credentials, add them here
+        });
+        console.log('Firebase Admin initialized successfully');
+    }
+    catch (error) {
+        console.error('Error initializing Firebase Admin:', error);
+        // Continue anyway to avoid blocking the webhook response
+    }
 }
 const db = admin.firestore();
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
     apiVersion: '2023-10-16', // Use a specific API version
 });
 const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
-// Using CommonJS handler format
-const handler = async (event) => {
-    var _a, _b, _c, _d;
-    // Handle CORS preflight
-    if (event.httpMethod === 'OPTIONS') {
-        return {
-            statusCode: 200,
-            headers: {
-                'Access-Control-Allow-Origin': '*',
-                'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type'
-            },
-            body: 'ok'
-        };
-    }
+// Process the webhook event asynchronously without blocking the response
+const processWebhookEvent = async (stripeEvent) => {
+    var _a, _b;
     try {
-        const signature = event.headers['stripe-signature'];
-        if (!signature || !endpointSecret) {
-            console.error('Missing signature or webhook secret');
-            return {
-                statusCode: 400,
-                body: JSON.stringify({ error: 'Webhook Error: Missing signature' }),
-            };
-        }
-        // Get the raw body
-        const body = event.body || '';
-        // Verify webhook signature
-        const stripeEvent = stripe.webhooks.constructEvent(body, signature, endpointSecret);
-        console.log('Processing webhook event:', stripeEvent.type);
+        console.log('Processing webhook event asynchronously:', stripeEvent.type);
         if (stripeEvent.type === 'checkout.session.completed') {
             const session = stripeEvent.data.object;
             // Get line items to update stock
             const lineItems = await stripe.checkout.sessions.listLineItems(session.id);
             // Create order in Firestore
             const orderRef = db.collection('orders').doc();
-            const batch = db.batch();
+            console.log('Creating order with ID:', orderRef.id);
             // Parse shipping info from metadata if available
             let shippingInfo = null;
             if ((_a = session.metadata) === null || _a === void 0 ? void 0 : _a.shippingInfo) {
@@ -94,31 +84,72 @@ const handler = async (event) => {
             else {
                 orderData.items = [];
             }
-            // Set order data
-            batch.set(orderRef, orderData);
-            console.log('Order data prepared:', JSON.stringify(orderData, null, 2));
-            // Update stock levels for each item
+            // Set order data directly without batch
+            await orderRef.set(orderData);
+            console.log('Order data saved to Firestore:', orderRef.id);
+            // Update stock levels for each item separately
             if (lineItems && lineItems.data && lineItems.data.length > 0) {
-                for (const item of lineItems.data) {
-                    if (!((_c = item.price) === null || _c === void 0 ? void 0 : _c.product) || !item.quantity)
-                        continue;
+                const updatePromises = lineItems.data.map(async (item) => {
+                    var _a, _b;
+                    if (!((_a = item.price) === null || _a === void 0 ? void 0 : _a.product) || !item.quantity)
+                        return Promise.resolve();
                     try {
                         const bookRef = db.collection('livres_enfants').doc(item.price.product);
-                        batch.update(bookRef, {
+                        await bookRef.update({
                             stock: admin.firestore.FieldValue.increment(-item.quantity)
                         });
-                        console.log(`Updating stock for book ${item.price.product}: -${item.quantity}`);
+                        console.log(`Updated stock for book ${item.price.product}: -${item.quantity}`);
+                        return Promise.resolve();
                     }
                     catch (error) {
-                        console.error(`Error updating stock for book ${(_d = item.price) === null || _d === void 0 ? void 0 : _d.product}:`, error);
-                        // Continue with other items even if one fails
+                        console.error(`Error updating stock for book ${(_b = item.price) === null || _b === void 0 ? void 0 : _b.product}:`, error);
+                        return Promise.resolve(); // Continue with other items even if one fails
                     }
-                }
+                });
+                // Wait for all stock updates to complete
+                await Promise.all(updatePromises);
+                console.log('All stock updates completed');
             }
-            // Commit all changes
-            await batch.commit();
-            console.log('Order created and stocks updated:', orderRef.id);
         }
+    }
+    catch (error) {
+        console.error('Error in async webhook processing:', error);
+    }
+};
+// Using CommonJS handler format
+const handler = async (event) => {
+    // Handle CORS preflight
+    if (event.httpMethod === 'OPTIONS') {
+        return {
+            statusCode: 200,
+            headers: {
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type'
+            },
+            body: 'ok'
+        };
+    }
+    try {
+        const signature = event.headers['stripe-signature'];
+        if (!signature || !endpointSecret) {
+            console.error('Missing signature or webhook secret');
+            return {
+                statusCode: 400,
+                body: JSON.stringify({ error: 'Webhook Error: Missing signature' }),
+            };
+        }
+        // Get the raw body
+        const body = event.body || '';
+        // Verify webhook signature
+        const stripeEvent = stripe.webhooks.constructEvent(body, signature, endpointSecret);
+        console.log('Webhook event received:', stripeEvent.type);
+        // Start processing the event asynchronously
+        // This allows us to respond to Stripe quickly
+        setTimeout(() => {
+            processWebhookEvent(stripeEvent).catch(error => {
+                console.error('Error in delayed webhook processing:', error);
+            });
+        }, 0);
         return {
             statusCode: 200,
             headers: {
