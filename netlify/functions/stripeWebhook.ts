@@ -1,6 +1,40 @@
-import { Handler, HandlerEvent, HandlerResponse } from '@netlify/functions';
-import Stripe from 'stripe';
-import * as admin from 'firebase-admin';
+// Using CommonJS syntax for better Netlify compatibility
+const { Handler } = require('@netlify/functions');
+const Stripe = require('stripe');
+const admin = require('firebase-admin');
+
+// TypeScript interfaces for type safety
+interface StripeEvent {
+  type: string;
+  data: {
+    object: any;
+  };
+}
+
+interface LineItem {
+  price?: {
+    product?: string;
+    unit_amount?: number;
+  };
+  quantity?: number;
+  description?: string;
+}
+
+interface NetlifyEvent {
+  httpMethod: string;
+  headers: {
+    [key: string]: string;
+  };
+  body: string;
+}
+
+interface NetlifyResponse {
+  statusCode: number;
+  headers?: {
+    [key: string]: string;
+  };
+  body: string;
+}
 
 // Initialize Firebase Admin if not already initialized
 if (!admin.apps.length) {
@@ -13,7 +47,8 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
 });
 const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
-const handler: Handler = async (event: HandlerEvent): Promise<HandlerResponse> => {
+// Using CommonJS handler format
+const handler = async (event: NetlifyEvent): Promise<NetlifyResponse> => {
   // Handle CORS preflight
   if (event.httpMethod === 'OPTIONS') {
     return {
@@ -40,7 +75,7 @@ const handler: Handler = async (event: HandlerEvent): Promise<HandlerResponse> =
     const body = event.body || '';
     
     // Verify webhook signature
-    const stripeEvent = stripe.webhooks.constructEvent(
+    const stripeEvent: StripeEvent = stripe.webhooks.constructEvent(
       body,
       signature,
       endpointSecret
@@ -49,7 +84,7 @@ const handler: Handler = async (event: HandlerEvent): Promise<HandlerResponse> =
     console.log('Processing webhook event:', stripeEvent.type);
 
     if (stripeEvent.type === 'checkout.session.completed') {
-      const session = stripeEvent.data.object as Stripe.Checkout.Session;
+      const session = stripeEvent.data.object;
       
       // Get line items to update stock
       const lineItems = await stripe.checkout.sessions.listLineItems(session.id);
@@ -72,14 +107,14 @@ const handler: Handler = async (event: HandlerEvent): Promise<HandlerResponse> =
       batch.set(orderRef, {
         userId: session.metadata?.userId,
         sessionId: session.id,
-        amount: session.amount_total! / 100,
+        amount: (session.amount_total || 0) / 100,
         status: 'paid',
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
         paymentIntentId: session.payment_intent,
-        items: lineItems.data.map(item => ({
+        items: lineItems.data.map((item: LineItem) => ({
           id: item.price?.product,
           quantity: item.quantity,
-          price: item.price?.unit_amount! / 100,
+          price: (item.price?.unit_amount || 0) / 100,
           title: item.description
         })),
         shipping: shippingInfo,
@@ -87,7 +122,7 @@ const handler: Handler = async (event: HandlerEvent): Promise<HandlerResponse> =
       });
 
       // Update stock levels for each item
-      for (const item of lineItems.data) {
+      for (const item of lineItems.data as LineItem[]) {
         if (!item.price?.product || !item.quantity) continue;
 
         const bookRef = db.collection('livres_enfants').doc(item.price.product as string);
@@ -127,4 +162,5 @@ const handler: Handler = async (event: HandlerEvent): Promise<HandlerResponse> =
   }
 };
 
-export { handler };
+// Using CommonJS exports
+exports.handler = handler;
