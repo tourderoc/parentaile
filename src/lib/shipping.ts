@@ -8,6 +8,8 @@ export interface ShippingInfo {
   city: string;
   postalCode: string;
   country: string;
+  email?: string;
+  phone?: string;
   saveForNextOrder: boolean;
 }
 

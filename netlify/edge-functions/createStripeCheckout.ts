@@ -17,7 +17,7 @@ export default async (req: Request): Promise<Response> => {
       httpClient: Stripe.createFetchHttpClient(),
     });
 
-    const { items, shippingInfo, success_url, cancel_url } = await req.json();
+    const { items, shippingInfo, success_url, cancel_url, orderId } = await req.json();
 
     if (!items?.length) {
       throw new Error("No items provided");
@@ -46,11 +46,18 @@ export default async (req: Request): Promise<Response> => {
       cancel_url,
     };
 
+    // Initialize metadata object
+    sessionParams.metadata = {};
+
+    // Add order ID to metadata if provided
+    if (orderId) {
+      sessionParams.metadata.orderId = orderId;
+      console.log(`Including orderId in metadata: ${orderId}`);
+    }
+
     // Add shipping information as metadata if provided
     if (shippingInfo) {
-      sessionParams.metadata = {
-        shippingInfo: JSON.stringify(shippingInfo),
-      };
+      sessionParams.metadata.shippingInfo = JSON.stringify(shippingInfo);
       
       // No shipping address collection or email pre-filling
       // We already collected this information on our custom shipping page
