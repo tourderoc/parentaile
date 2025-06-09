@@ -5,32 +5,33 @@ const admin = require('firebase-admin');
 // Initialize Firebase Admin if not already initialized
 if (!admin.apps.length) {
     try {
-        // Check if we have service account credentials in environment variables
-        let serviceAccount;
-        if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-            try {
-                serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-                console.log('Using service account from environment variable');
-            }
-            catch (e) {
-                console.error('Error parsing FIREBASE_SERVICE_ACCOUNT:', e);
-            }
-        }
-        // Initialize with explicit configuration
-        if (serviceAccount) {
+        // Charger directement le fichier de clé de service
+        const path = require('path');
+        const fs = require('fs');
+        // Chemin vers le fichier de clé de service
+        const serviceAccountPath = path.join(__dirname, 'firebase-service-account.json');
+        console.log('Chargement du fichier de clé de service depuis:', serviceAccountPath);
+        // Vérifier si le fichier existe
+        if (fs.existsSync(serviceAccountPath)) {
+            // Lire et parser le fichier JSON
+            const serviceAccount = JSON.parse(fs.readFileSync(serviceAccountPath, 'utf8'));
+            // Initialiser Firebase Admin avec la clé de service
             admin.initializeApp({
                 credential: admin.credential.cert(serviceAccount),
             });
+            console.log('Firebase Admin initialisé avec succès via le fichier de clé de service');
         }
         else {
+            console.error('Fichier de clé de service introuvable:', serviceAccountPath);
+            // Fallback à la méthode par défaut si le fichier n'existe pas
             admin.initializeApp({
                 credential: admin.credential.applicationDefault(),
             });
+            console.log('Firebase Admin initialisé avec les identifiants par défaut (fallback)');
         }
-        console.log('Firebase Admin initialized successfully');
     }
     catch (error) {
-        console.error('Error initializing Firebase Admin:', error);
+        console.error('Erreur lors de l\'initialisation de Firebase Admin:', error);
     }
 }
 // Get Firestore instance
