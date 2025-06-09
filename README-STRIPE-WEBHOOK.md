@@ -1,6 +1,6 @@
-# Configuration du Webhook Stripe pour Netlify
+# Configuration du Webhook Stripe pour Netlify (Approche Simplifiée)
 
-Ce document explique comment configurer et déployer correctement le webhook Stripe sur Netlify.
+Ce document explique comment configurer et déployer correctement le webhook Stripe sur Netlify avec l'approche simplifiée où le webhook sert uniquement à vérifier le succès du paiement.
 
 ## Structure du projet
 
@@ -14,7 +14,6 @@ Assurez-vous que ces variables d'environnement sont configurées dans les param�
 
 - `STRIPE_SECRET_KEY` : Clé secrète de votre compte Stripe
 - `STRIPE_WEBHOOK_SECRET` : Secret du webhook Stripe (généré lors de la création du webhook dans le dashboard Stripe)
-- `FIREBASE_SERVICE_ACCOUNT` : (Optionnel) JSON de votre compte de service Firebase pour l'authentification
 
 ## Déploiement sur Netlify
 
@@ -84,67 +83,48 @@ Cela signifie que Netlify essaie de charger votre fonction comme une Edge Functi
 
 Les Edge Functions et les Netlify Functions sont deux types de fonctions différents, et vous ne pouvez pas utiliser le même nom pour les deux.
 
-### Erreur "Value for argument 'data' is not a valid Firestore document"
+## Approche simplifiée
 
-Si vous rencontrez cette erreur lors de l'exécution du webhook :
-```
-Error: Value for argument "data" is not a valid Firestore document. Cannot use "undefined" as a Firestore value.
-```
+Avec cette approche simplifiée :
 
-Cela signifie que vous essayez d'écrire des valeurs `undefined` dans Firestore, ce qui n'est pas autorisé. Pour résoudre ce problème :
+1. **Le webhook Stripe ne sert qu'à vérifier le succès du paiement** :
+   - Il reçoit l'événement `checkout.session.completed`
+   - Il vérifie la signature pour s'assurer que l'événement vient bien de Stripe
+   - Il enregistre les informations de base dans les logs Netlify
+   - Il répond rapidement à Stripe avec un statut 200
 
-1. Assurez-vous que tous les champs que vous écrivez dans Firestore ont des valeurs par défaut
-2. Utilisez des vérifications conditionnelles pour n'ajouter que les champs qui ont des valeurs définies
-3. Utilisez des objets intermédiaires pour préparer les données avant de les écrire dans Firestore
+2. **Aucune opération Firestore n'est effectuée dans le webhook** :
+   - Pas de création de commande
+   - Pas de mise à jour de stock
+   - Pas d'écriture de logs dans Firestore
 
-La version actuelle du webhook a été mise à jour pour gérer ce problème en :
-- Préparant un objet `orderData` avec des valeurs par défaut
-- N'ajoutant des champs supplémentaires que s'ils existent
-- Vérifiant l'existence des données de ligne avant de les traiter
-- Ajoutant des blocs try/catch pour gérer les erreurs lors de la mise à jour du stock
+3. **Le traitement des données est géré côté client** :
+   - Après redirection vers la page de succès, le frontend récupère les informations nécessaires
+   - Le frontend crée la commande dans Firestore
+   - Le frontend affiche un modal de confirmation avec les détails de la commande
 
-### Erreur "502 Sandbox.Timeout" dans Stripe
+Cette approche présente plusieurs avantages :
+- Webhook plus simple et plus fiable
+- Pas de problèmes de timeout avec Stripe
+- Meilleur contrôle du processus de commande
+- Expérience utilisateur plus fluide
 
-Si vous voyez des erreurs 502 Timeout dans le dashboard Stripe, cela signifie que votre fonction webhook prend trop de temps pour répondre. Netlify Functions ont une limite de temps d'exécution de 10 secondes, et si votre fonction dépasse cette limite, Stripe recevra une erreur de timeout.
+## Affichage client après paiement
 
-Pour résoudre ce problème :
+Une fois le paiement confirmé, le frontend doit :
 
-1. **Répondre rapidement à Stripe** : La fonction a été modifiée pour répondre immédiatement à Stripe avec un statut 200, puis continuer le traitement en arrière-plan.
+1. **Afficher un modal de confirmation** :
+   ```
+   "Merci pour votre commande ! Elle sera traitée dans les plus brefs délais."
+   ```
 
-2. **Traitement asynchrone** : Le traitement des données et les opérations Firestore sont effectués de manière asynchrone après avoir envoyé la réponse à Stripe.
+2. **Inclure un résumé de la commande** :
+   - Numéro de commande
+   - Produits achetés (titre + quantité)
+   - Prix total
+   - Adresse de livraison
 
-3. **Optimisations de performance** :
-   - Utilisation de `set()` direct au lieu de batches Firestore pour les commandes
-   - Utilisation de `Promise.all()` pour les mises à jour de stock en parallèle
-   - Meilleure gestion des erreurs pour éviter les blocages
-
-4. **Journalisation améliorée** : Des logs détaillés ont été ajoutés pour faciliter le débogage.
-
-Ces modifications permettent à la fonction de répondre à Stripe dans le délai imparti tout en assurant que les données sont correctement enregistrées dans Firestore.
-
-### Problèmes d'écriture dans Firestore
-
-Si les commandes ne sont pas enregistrées dans Firestore malgré l'absence d'erreurs dans les logs Netlify, cela peut être dû à plusieurs raisons :
-
-1. **Problèmes d'authentification Firebase** : 
-   - Assurez-vous que les identifiants Firebase sont correctement configurés
-   - Ajoutez la variable d'environnement `FIREBASE_SERVICE_ACCOUNT` avec le JSON de votre compte de service
-
-2. **Problèmes de permissions Firestore** :
-   - Vérifiez que les règles de sécurité Firestore permettent l'écriture dans la collection `orders`
-   - Assurez-vous que le compte de service a les droits d'écriture nécessaires
-
-3. **Débogage amélioré** :
-   - La fonction a été mise à jour pour inclure une journalisation détaillée dans Firestore
-   - Une collection `webhook_logs` est créée pour stocker les logs d'exécution
-   - Chaque étape du processus est enregistrée pour faciliter le débogage
-
-4. **Vérification de la connexion** :
-   - Un test de connexion à Firestore est effectué au démarrage de la fonction
-   - Les erreurs de connexion sont enregistrées dans les logs Netlify
-
-5. **Vérification des documents créés** :
-   - Après chaque opération d'écriture, la fonction vérifie que le document a bien été créé
-   - Les résultats de ces vérifications sont enregistrés dans les logs
-
-Consultez la collection `webhook_logs` dans Firestore pour voir les détails d'exécution et identifier les problèmes potentiels.
+3. **Enregistrer la commande dans Firestore** :
+   - Créer un document dans la collection `orders`
+   - Inclure toutes les informations nécessaires (produits, prix, adresse, etc.)
+   - Mettre à jour les stocks si nécessaire
