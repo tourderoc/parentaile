@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { collection, query, orderBy, getDocs, where } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { Button } from "../../components/ui/button";
@@ -8,6 +8,7 @@ import { Input } from "../../components/ui/input";
 import { ArrowLeft, Search, Filter, Clock, Home, ChevronLeft, ChevronRight, Loader2, ShoppingBag } from 'lucide-react';
 import { Swiper, SwiperSlide } from 'swiper/react';
 import { Navigation, Pagination } from 'swiper/modules';
+import { OrderConfirmationDialog } from '../../components/ui/OrderConfirmationDialog';
 import 'swiper/css';
 import 'swiper/css/navigation';
 import 'swiper/css/pagination';
@@ -38,9 +39,27 @@ const categories = [
 
 export default function Shop() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [books, setBooks] = useState<Book[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [showOrderConfirmation, setShowOrderConfirmation] = useState(false);
+  const [orderId, setOrderId] = useState<string | null>(null);
+  
+  // Vérifier si l'utilisateur revient d'un paiement réussi
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    const success = searchParams.get('success') === 'true';
+    const orderIdParam = searchParams.get('orderId');
+    
+    if (success && orderIdParam) {
+      setOrderId(orderIdParam);
+      setShowOrderConfirmation(true);
+      
+      // Nettoyer l'URL pour éviter d'afficher la pop-up à chaque rechargement
+      navigate('/boutique', { replace: true });
+    }
+  }, [location, navigate]);
 
   useEffect(() => {
     const fetchBooks = async () => {
@@ -203,6 +222,13 @@ export default function Shop() {
           ))}
         </div>
       </div>
+      
+      {/* Dialogue de confirmation de commande */}
+      <OrderConfirmationDialog
+        open={showOrderConfirmation}
+        onOpenChange={setShowOrderConfirmation}
+        orderId={orderId}
+      />
     </div>
   );
 }
