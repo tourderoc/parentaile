@@ -17,11 +17,16 @@ if (!admin.apps.length) {
             }
         }
         // Initialize with explicit configuration
-        admin.initializeApp({
-            credential: serviceAccount
-                ? admin.credential.cert(serviceAccount)
-                : admin.credential.applicationDefault(),
-        });
+        if (serviceAccount) {
+            admin.initializeApp({
+                credential: admin.credential.cert(serviceAccount),
+            });
+        }
+        else {
+            admin.initializeApp({
+                credential: admin.credential.applicationDefault(),
+            });
+        }
         console.log('Firebase Admin initialized successfully');
     }
     catch (error) {
