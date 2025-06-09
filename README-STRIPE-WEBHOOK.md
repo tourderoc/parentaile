@@ -1,6 +1,6 @@
-# Configuration du Webhook Stripe pour Netlify (Approche Simplifiée)
+# Configuration du Webhook Stripe pour Netlify
 
-Ce document explique comment configurer et déployer correctement le webhook Stripe sur Netlify avec l'approche simplifiée où le webhook sert uniquement à vérifier le succès du paiement.
+Ce document explique comment configurer et déployer correctement le webhook Stripe sur Netlify pour mettre à jour les commandes existantes dans Firestore.
 
 ## Structure du projet
 
@@ -83,48 +83,38 @@ Cela signifie que Netlify essaie de charger votre fonction comme une Edge Functi
 
 Les Edge Functions et les Netlify Functions sont deux types de fonctions différents, et vous ne pouvez pas utiliser le même nom pour les deux.
 
-## Approche simplifiée
+## Flux de traitement des commandes
 
-Avec cette approche simplifiée :
+Le processus de commande suit désormais ce flux :
 
-1. **Le webhook Stripe ne sert qu'à vérifier le succès du paiement** :
-   - Il reçoit l'événement `checkout.session.completed`
-   - Il vérifie la signature pour s'assurer que l'événement vient bien de Stripe
-   - Il enregistre les informations de base dans les logs Netlify
-   - Il répond rapidement à Stripe avec un statut 200
+1. **Création de la commande côté frontend** :
+   - Avant d'initier le paiement Stripe, le frontend crée une commande dans Firestore
+   - La commande a un statut initial `pending`
+   - Un `orderId` unique est généré (par exemple : `timestamp-userId`)
+   - Toutes les informations de commande sont enregistrées (articles, infos de livraison, etc.)
 
-2. **Aucune opération Firestore n'est effectuée dans le webhook** :
-   - Pas de création de commande
-   - Pas de mise à jour de stock
-   - Pas d'écriture de logs dans Firestore
+2. **Création de la session Stripe** :
+   - Lors de la création de la session Stripe via `createStripeCheckout`
+   - L'`orderId` est passé dans le champ `metadata` de la session Stripe
+   - L'utilisateur est redirigé vers la page de paiement Stripe
 
-3. **Le traitement des données est géré côté client** :
-   - Après redirection vers la page de succès, le frontend récupère les informations nécessaires
-   - Le frontend crée la commande dans Firestore
-   - Le frontend affiche un modal de confirmation avec les détails de la commande
+3. **Traitement du webhook après paiement** :
+   - Lorsque le paiement est complété (`checkout.session.completed`)
+   - Le webhook récupère l'`orderId` depuis `metadata`
+   - Il recherche la commande correspondante dans Firestore
+   - Il met à jour son statut à `paid` et ajoute les détails du paiement
+
+4. **Affichage client après paiement** :
+   - Une fois redirigé vers la page de succès
+   - Le frontend affiche un modal de confirmation
+   - Le modal inclut un résumé de la commande (numéro, produits, prix, adresse)
+
+## Avantages de cette approche
 
 Cette approche présente plusieurs avantages :
-- Webhook plus simple et plus fiable
-- Pas de problèmes de timeout avec Stripe
-- Meilleur contrôle du processus de commande
-- Expérience utilisateur plus fluide
 
-## Affichage client après paiement
-
-Une fois le paiement confirmé, le frontend doit :
-
-1. **Afficher un modal de confirmation** :
-   ```
-   "Merci pour votre commande ! Elle sera traitée dans les plus brefs délais."
-   ```
-
-2. **Inclure un résumé de la commande** :
-   - Numéro de commande
-   - Produits achetés (titre + quantité)
-   - Prix total
-   - Adresse de livraison
-
-3. **Enregistrer la commande dans Firestore** :
-   - Créer un document dans la collection `orders`
-   - Inclure toutes les informations nécessaires (produits, prix, adresse, etc.)
-   - Mettre à jour les stocks si nécessaire
+- **Fiabilité** : La commande est créée avant même que le paiement ne soit initié
+- **Traçabilité** : Toutes les commandes sont enregistrées, même celles abandonnées
+- **Cohérence** : Le webhook met à jour une commande existante plutôt que d'en créer une nouvelle
+- **Expérience utilisateur** : Le frontend peut afficher immédiatement les détails de la commande
+- **Sécurité** : Vérification en deux temps (création côté client + confirmation par webhook)
