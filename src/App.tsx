@@ -21,6 +21,7 @@ import { BooksPage } from './screens/Admin/BooksPage';
 import { WorkshopsPage } from './screens/Admin/WorkshopsPage';
 import { PromptsPage } from './screens/Admin/PromptsPage';
 import { ShopPage } from './screens/Admin/ShopPage';
+import OrdersPage from './screens/Admin/OrdersPage';
 import { ConsultationDetails } from './screens/Admin/ConsultationDetails';
 import { WorkshopManagement } from './screens/Instructor/WorkshopManagement';
 import { Workshops } from './screens/Workshops';
@@ -80,6 +81,7 @@ const Layout = () => {
         <Route path="/my-consultations" element={<MyConsultations />} />
         <Route path="/admin" element={<Admin />} />
         <Route path="/admin/consultations" element={<ConsultationsPage />} />
+        <Route path="/admin/orders" element={<OrdersPage />} />
         <Route path="/admin/books" element={<BooksPage />} />
         <Route path="/admin/workshops" element={<WorkshopsPage />} />
         <Route path="/admin/prompts" element={<PromptsPage />} />

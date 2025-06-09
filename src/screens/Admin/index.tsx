@@ -4,7 +4,7 @@ import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db, auth } from '../../lib/firebase';
 import { Button } from "../../components/ui/button";
 import { Card } from "../../components/ui/card";
-import { User, MessageSquare, Book, Loader2, Home, Calendar, Bot, Users } from 'lucide-react';
+import { User, MessageSquare, Book, Loader2, Home, Calendar, Bot, Users, ShoppingBag } from 'lucide-react';
 import { WelcomeMessageEditor } from './components/WelcomeMessageEditor';
 
 interface Stats {
@@ -72,6 +72,13 @@ export const Admin = () => {
       description: "Gérer les créneaux et consultations",
       link: "/admin/consultations",
       stat: `${stats.pendingConsultations} en attente`
+    },
+    {
+      title: "Commandes",
+      icon: <ShoppingBag className="w-8 h-8 text-primary" />,
+      description: "Gérer les commandes et expéditions",
+      link: "/admin/orders",
+      stat: null
     },
     {
       title: "Livres",
