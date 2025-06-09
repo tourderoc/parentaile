@@ -36,6 +36,5 @@ yarn-error.log*
 # Firebase
 .firebase/
 serviceAccountKey.json
-netlify/functions/firebase-service-account.json
 # Local Netlify folder
 .netlify

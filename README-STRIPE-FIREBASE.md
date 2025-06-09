@@ -4,70 +4,65 @@ Ce document explique comment configurer Firebase Admin SDK pour les fonctions Ne
 
 ## Problématique
 
-Les webhooks Stripe nécessitent une connexion fiable à Firebase Firestore pour mettre à jour le statut des commandes lorsqu'un paiement est complété. L'approche initiale utilisant une variable d'environnement `FIREBASE_SERVICE_ACCOUNT` peut poser des problèmes :
+Les webhooks Stripe nécessitent une connexion fiable à Firebase Firestore pour mettre à jour le statut des commandes lorsqu'un paiement est complété. Les approches précédentes ont posé des problèmes :
 
-- Erreurs de parsing JSON (unexpected token, too few bytes)
+- Erreurs de parsing JSON avec la variable d'environnement `FIREBASE_SERVICE_ACCOUNT`
+- Problèmes d'accès au fichier de clé de service dans l'environnement Netlify
 - Erreurs d'initialisation Firebase (app/no-app, invalid-credential)
-- Complexité d'encodage et de décodage des clés privées
 
-## Solution : Utilisation directe du fichier de clé de service
+## Solution : Identifiants Firebase intégrés directement dans le code
 
-Pour une méthode plus stable et fiable, nous utilisons maintenant un fichier JSON de clé de service directement dans le projet.
+Pour une méthode plus stable et fiable, nous avons intégré directement les identifiants Firebase dans le code du webhook.
 
-### Étapes de configuration
+### Avantages de cette approche
 
-1. **Obtenir le fichier de clé de service Firebase**
-   - Allez sur la [Console Firebase](https://console.firebase.google.com/)
-   - Sélectionnez votre projet
-   - Allez dans Paramètres du projet > Comptes de service
-   - Cliquez sur "Générer une nouvelle clé privée"
-   - Téléchargez le fichier JSON
-
-2. **Placer le fichier dans le projet**
-   - Copiez le contenu du fichier JSON téléchargé
-   - Remplacez le contenu du fichier `netlify/functions/firebase-service-account.json` avec vos informations réelles
-
-3. **Déploiement sur Netlify**
-   - Le fichier de clé de service sera déployé avec vos fonctions Netlify
-   - Aucune configuration supplémentaire n'est nécessaire dans l'interface Netlify
-
-### Structure du fichier de clé de service
-
-Le fichier `firebase-service-account.json` doit contenir les informations suivantes :
-
-```json
-{
-  "type": "service_account",
-  "project_id": "votre-projet-id",
-  "private_key_id": "votre-private-key-id",
-  "private_key": "-----BEGIN PRIVATE KEY-----\nVotre clé privée...\n-----END PRIVATE KEY-----\n",
-  "client_email": "firebase-adminsdk-xxxx@votre-projet.iam.gserviceaccount.com",
-  "client_id": "votre-client-id",
-  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-  "token_uri": "https://oauth2.googleapis.com/token",
-  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/firebase-adminsdk-xxxx%40votre-projet.iam.gserviceaccount.com",
-  "universe_domain": "googleapis.com"
-}
-```
+1. **Fiabilité maximale** : Aucune dépendance à des fichiers externes ou des variables d'environnement
+2. **Simplicité de déploiement** : Aucune configuration supplémentaire nécessaire sur Netlify
+3. **Performances optimales** : Pas de lecture de fichier ou de parsing JSON à l'exécution
 
 ### Sécurité
 
-⚠️ **Important** : Le fichier de clé de service contient des informations sensibles.
+⚠️ **Important** : Les identifiants Firebase sont intégrés directement dans le code.
 
-- Assurez-vous que ce fichier est inclus dans votre `.gitignore` pour éviter de le committer accidentellement
-- Limitez les permissions du compte de service dans Firebase aux opérations strictement nécessaires
-- Considérez la rotation périodique de la clé pour une sécurité renforcée
+- Le code est déployé sur Netlify dans un environnement sécurisé
+- Les fonctions Netlify ne sont pas exposées publiquement dans leur code source
+- Les identifiants ne sont accessibles que par le service Netlify et non par les utilisateurs
+
+### Rotation des identifiants
+
+Si vous devez changer les identifiants Firebase :
+
+1. Générez une nouvelle clé de service dans la console Firebase
+2. Mettez à jour le code dans `netlify/functions/stripeWebhook.ts` avec les nouveaux identifiants
+3. Redéployez l'application sur Netlify
 
 ## Fonctionnement
 
 Le webhook Stripe (`stripeWebhook.ts`) est configuré pour :
 
-1. Charger automatiquement le fichier de clé de service depuis `netlify/functions/firebase-service-account.json`
+1. Utiliser directement les identifiants Firebase intégrés dans le code
 2. Initialiser Firebase Admin avec ces identifiants
 3. Se connecter à Firestore pour mettre à jour les commandes lorsqu'un paiement est complété
 
 Cette approche est plus robuste car elle :
-- Évite les problèmes de parsing JSON des variables d'environnement
-- Simplifie le déploiement et la configuration
-- Assure une connexion fiable à Firebase Firestore
+- Élimine complètement les problèmes de parsing JSON
+- Fonctionne de manière fiable dans l'environnement Netlify
+- Assure une connexion stable à Firebase Firestore
+
+## Résolution des problèmes courants
+
+### Erreur "No orderId found in session metadata"
+
+Cette erreur indique que la session Stripe ne contient pas l'identifiant de commande dans ses métadonnées. Pour résoudre ce problème :
+
+1. Assurez-vous que lors de la création de la session Stripe, vous incluez l'identifiant de commande dans les métadonnées :
+   ```javascript
+   const session = await stripe.checkout.sessions.create({
+     // Autres paramètres...
+     metadata: {
+       orderId: 'votre-identifiant-de-commande'
+     }
+   });
+   ```
+
+2. Vérifiez que l'identifiant de commande est correctement formaté et correspond à celui stocké dans Firestore
