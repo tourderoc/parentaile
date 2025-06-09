@@ -10,44 +10,44 @@ Les webhooks Stripe nécessitent une connexion fiable à Firebase Firestore pour
 - Problèmes d'accès au fichier de clé de service dans l'environnement Netlify
 - Erreurs d'initialisation Firebase (app/no-app, invalid-credential)
 
-## Solution : Identifiants Firebase intégrés directement dans le code
+## Solution : Variables d'environnement Netlify simplifiées
 
-Pour une méthode plus stable et fiable, nous avons intégré directement les identifiants Firebase dans le code du webhook.
+Pour une méthode plus stable et fiable, nous utilisons maintenant des variables d'environnement Netlify individuelles pour les informations d'identification Firebase.
+
+### Configuration des variables d'environnement
+
+Dans l'interface Netlify, configurez les variables d'environnement suivantes :
+
+1. `FIREBASE_PROJECT_ID` : L'ID de votre projet Firebase (par exemple, "parentaile")
+2. `FIREBASE_CLIENT_EMAIL` : L'email du compte de service (par exemple, "firebase-adminsdk-xxxx@parentaile.iam.gserviceaccount.com")
+3. `FIREBASE_PRIVATE_KEY` : La clé privée complète, y compris les parties "-----BEGIN PRIVATE KEY-----" et "-----END PRIVATE KEY-----"
+
+### Obtenir ces informations
+
+1. Allez sur la [Console Firebase](https://console.firebase.google.com/)
+2. Sélectionnez votre projet
+3. Allez dans Paramètres du projet > Comptes de service
+4. Cliquez sur "Générer une nouvelle clé privée"
+5. Ouvrez le fichier JSON téléchargé et copiez les valeurs correspondantes
 
 ### Avantages de cette approche
 
-1. **Fiabilité maximale** : Aucune dépendance à des fichiers externes ou des variables d'environnement
-2. **Simplicité de déploiement** : Aucune configuration supplémentaire nécessaire sur Netlify
-3. **Performances optimales** : Pas de lecture de fichier ou de parsing JSON à l'exécution
-
-### Sécurité
-
-⚠️ **Important** : Les identifiants Firebase sont intégrés directement dans le code.
-
-- Le code est déployé sur Netlify dans un environnement sécurisé
-- Les fonctions Netlify ne sont pas exposées publiquement dans leur code source
-- Les identifiants ne sont accessibles que par le service Netlify et non par les utilisateurs
-
-### Rotation des identifiants
-
-Si vous devez changer les identifiants Firebase :
-
-1. Générez une nouvelle clé de service dans la console Firebase
-2. Mettez à jour le code dans `netlify/functions/stripeWebhook.ts` avec les nouveaux identifiants
-3. Redéployez l'application sur Netlify
+1. **Sécurité améliorée** : Les identifiants sensibles ne sont pas stockés dans le code
+2. **Simplicité de configuration** : Variables individuelles faciles à configurer dans Netlify
+3. **Facilité de mise à jour** : Possibilité de mettre à jour les identifiants sans modifier le code
 
 ## Fonctionnement
 
 Le webhook Stripe (`stripeWebhook.ts`) est configuré pour :
 
-1. Utiliser directement les identifiants Firebase intégrés dans le code
+1. Récupérer les variables d'environnement Netlify pour Firebase
 2. Initialiser Firebase Admin avec ces identifiants
 3. Se connecter à Firestore pour mettre à jour les commandes lorsqu'un paiement est complété
 
 Cette approche est plus robuste car elle :
-- Élimine complètement les problèmes de parsing JSON
-- Fonctionne de manière fiable dans l'environnement Netlify
-- Assure une connexion stable à Firebase Firestore
+- Évite les problèmes de parsing JSON complexes
+- Utilise des variables d'environnement individuelles plus faciles à gérer
+- Assure une connexion fiable à Firebase Firestore
 
 ## Résolution des problèmes courants
 
@@ -66,3 +66,11 @@ Cette erreur indique que la session Stripe ne contient pas l'identifiant de comm
    ```
 
 2. Vérifiez que l'identifiant de commande est correctement formaté et correspond à celui stocké dans Firestore
+
+### Problèmes avec la clé privée
+
+Si vous rencontrez des erreurs liées à la clé privée, assurez-vous que :
+
+1. La clé privée est complète, y compris les délimiteurs "-----BEGIN PRIVATE KEY-----" et "-----END PRIVATE KEY-----"
+2. Les sauts de ligne sont préservés (le code remplace automatiquement les `\\n` par de vrais sauts de ligne)
+3. La clé est correctement échappée dans l'interface Netlify
