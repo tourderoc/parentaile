@@ -8,9 +8,9 @@ import { Input } from "../../components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "../../components/ui/form";
 import { auth, db } from "../../lib/firebase";
 import { createUserWithEmailAndPassword, GoogleAuthProvider, signInWithPopup } from "firebase/auth";
-import { doc, setDoc, serverTimestamp, collection, query, where, getDocs } from "firebase/firestore";
+import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { Eye, EyeOff, Loader2, ArrowRight } from "lucide-react";
-import OpenAI from 'openai';
+import { validatePseudo } from "../../lib/pseudoFilter";
 
 const usernameSchema = z.object({
   username: z.string().min(3, "Le pseudo doit contenir au moins 3 caractères"),
@@ -54,41 +54,8 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({ onClose }) => {
     },
   });
 
-  const validateUsername = async (username: string): Promise<boolean> => {
-    try {
-      const openai = new OpenAI({
-        apiKey: import.meta.env.VITE_OPENAI_API_KEY,
-        dangerouslyAllowBrowser: true
-      });
-
-      const prompt = `Ce pseudo est-il inapproprié, vulgaire ou à connotation sexuelle, moqueuse ou violente ? Cela inclut les formes camouflées ou fusionnées comme 'niketamer', 'put1', 'cacaboudin', etc. Si le pseudo est sain, positif ou neutre, réponds : ACCEPTÉ. Sinon : REFUSÉ. Réponds uniquement par ACCEPTÉ ou REFUSÉ.`;
-
-      const completion = await openai.chat.completions.create({
-        model: "gpt-3.5-turbo",
-        messages: [
-          {
-            role: "user",
-            content: `${prompt}\n\nPseudo à vérifier : "${username}"`
-          }
-        ],
-        temperature: 0.7,
-        max_tokens: 10
-      });
-
-      const response = completion.choices[0].message.content?.trim();
-      return response === 'ACCEPTÉ';
-    } catch (error) {
-      console.error('Error validating username:', error);
-      return false;
-    }
-  };
-
-  const checkUsernameAvailability = async (username: string) => {
-    const usersRef = collection(db, "users");
-    const q = query(usersRef, where("pseudo", "==", username));
-    const querySnapshot = await getDocs(q);
-    return querySnapshot.empty;
-  };
+  // Validation du pseudo via le service local (sans IA)
+  // Vérifie: format, mots interdits, et disponibilité dans Firebase
 
   const handleGoogleSignIn = async () => {
     if (!validatedUsername) return;
@@ -118,17 +85,10 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({ onClose }) => {
       setError(null);
       setIsValidatingUsername(true);
 
-      // Check if username is available
-      const isUsernameAvailable = await checkUsernameAvailability(values.username);
-      if (!isUsernameAvailable) {
-        setError("Ce pseudo est déjà utilisé. Veuillez en choisir un autre.");
-        return;
-      }
-
-      // Validate username with AI
-      const isUsernameValid = await validateUsername(values.username);
-      if (!isUsernameValid) {
-        setError("Ce pseudo n'est pas approprié. Veuillez en choisir un autre.");
+      // Validation complète: format + mots interdits + disponibilité
+      const validation = await validatePseudo(values.username);
+      if (!validation.valid) {
+        setError(validation.error || "Ce pseudo n'est pas valide.");
         return;
       }
 

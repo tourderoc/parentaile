@@ -8,7 +8,7 @@ import { Input } from "../../components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../../components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
 import { Switch } from "../../components/ui/switch";
-import OpenAI from 'openai';
+import { validatePseudo as validatePseudoService } from "../../lib/pseudoFilter";
 import { 
   User,
   Mail,
@@ -107,33 +107,9 @@ export const Profile = () => {
     }
   };
 
-  const validatePseudo = async (pseudo: string): Promise<boolean> => {
-    try {
-      const openai = new OpenAI({
-        apiKey: import.meta.env.VITE_OPENAI_API_KEY,
-        dangerouslyAllowBrowser: true
-      });
-
-      const prompt = `Ce pseudo est-il inapproprié, vulgaire ou à connotation sexuelle, moqueuse ou violente ? Cela inclut les formes camouflées ou fusionnées comme 'niketamer', 'put1', 'cacaboudin', etc. Si le pseudo est sain, positif ou neutre, réponds : ACCEPTÉ. Sinon : REFUSÉ. Réponds uniquement par ACCEPTÉ ou REFUSÉ.`;
-
-      const completion = await openai.chat.completions.create({
-        model: "gpt-3.5-turbo",
-        messages: [
-          {
-            role: "user",
-            content: `${prompt}\n\nPseudo à vérifier : "${pseudo}"`
-          }
-        ],
-        temperature: 0.7,
-        max_tokens: 10
-      });
-
-      const response = completion.choices[0].message.content?.trim();
-      return response === 'ACCEPTÉ';
-    } catch (error) {
-      console.error('Error validating pseudo:', error);
-      return false;
-    }
+  // Validation du pseudo via le service local (sans IA)
+  const validatePseudo = async (pseudo: string): Promise<{ valid: boolean; error?: string }> => {
+    return validatePseudoService(pseudo);
   };
 
   const handleSave = async () => {
@@ -144,9 +120,9 @@ export const Profile = () => {
       setValidationError(null);
 
       if (editingField === 'identity' && tempValues.pseudo !== userData?.pseudo) {
-        const isValidPseudo = await validatePseudo(tempValues.pseudo);
-        if (!isValidPseudo) {
-          setValidationError("Ce pseudo n'est pas approprié. Veuillez en choisir un autre.");
+        const validation = await validatePseudo(tempValues.pseudo);
+        if (!validation.valid) {
+          setValidationError(validation.error || "Ce pseudo n'est pas valide.");
           return;
         }
       }
