@@ -38,6 +38,7 @@ export const MessageHistory = () => {
   const [showChildSelector, setShowChildSelector] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [childrenLoaded, setChildrenLoaded] = useState(false);
 
   useEffect(() => {
     const loadChildren = async () => {
@@ -57,13 +58,14 @@ export const MessageHistory = () => {
           nickname: doc.data().nickname
         }));
 
-        // Redirect to settings if no children (tokens)
+        // Redirect to settings if no children (tokens) - keep loading state during redirect
         if (childrenData.length === 0) {
-          navigate('/espace/parametres');
-          return;
+          navigate('/espace/parametres', { replace: true });
+          return; // Keep isLoading true to avoid flash
         }
 
         setChildren(childrenData);
+        setChildrenLoaded(true);
 
         const childFromUrl = searchParams.get('childId');
         if (childFromUrl) {
@@ -74,6 +76,9 @@ export const MessageHistory = () => {
         }
       } catch (err) {
         console.error('Erreur chargement enfants:', err);
+        // On error, redirect to settings as well
+        navigate('/espace/parametres', { replace: true });
+        return;
       }
     };
 
@@ -82,6 +87,9 @@ export const MessageHistory = () => {
 
   useEffect(() => {
     const loadMessages = async () => {
+      // Only proceed if children have been loaded
+      if (!childrenLoaded) return;
+
       if (!selectedChild) {
         setIsLoading(false);
         return;
@@ -114,7 +122,7 @@ export const MessageHistory = () => {
     };
 
     loadMessages();
-  }, [selectedChild]);
+  }, [selectedChild, childrenLoaded]);
 
   const getStatusIcon = (status: string) => {
     switch (status) {
