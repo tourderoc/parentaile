@@ -7,10 +7,11 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { auth } from '../../lib/firebase';
-import { signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+import { signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, sendPasswordResetEmail } from 'firebase/auth';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
-import { Eye, EyeOff, Loader2, Home, QrCode, Mail } from 'lucide-react';
+import { Eye, EyeOff, Loader2, Home, QrCode, Mail, X, CheckCircle, ArrowLeft } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface EspaceLoginProps {
   onRegisterWithToken: (token: string) => void;
@@ -25,6 +26,13 @@ export const EspaceLogin: React.FC<EspaceLoginProps> = ({ onRegisterWithToken })
   const [error, setError] = useState<string | null>(null);
   const [showTokenInput, setShowTokenInput] = useState(false);
   const [tokenInput, setTokenInput] = useState('');
+
+  // Forgot password states
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [resetEmail, setResetEmail] = useState('');
+  const [isResetting, setIsResetting] = useState(false);
+  const [resetSuccess, setResetSuccess] = useState(false);
+  const [resetError, setResetError] = useState<string | null>(null);
 
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -78,6 +86,38 @@ export const EspaceLogin: React.FC<EspaceLoginProps> = ({ onRegisterWithToken })
     }
   };
 
+  // Reset password handler
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setResetError(null);
+    setIsResetting(true);
+
+    try {
+      await sendPasswordResetEmail(auth, resetEmail.trim());
+      setResetSuccess(true);
+    } catch (err: any) {
+      console.error('Password reset error:', err.code);
+      if (err.code === 'auth/user-not-found') {
+        setResetError('Aucun compte associé à cet email');
+      } else if (err.code === 'auth/invalid-email') {
+        setResetError('Adresse email invalide');
+      } else if (err.code === 'auth/too-many-requests') {
+        setResetError('Trop de tentatives. Réessayez plus tard.');
+      } else {
+        setResetError('Erreur lors de l\'envoi. Réessayez.');
+      }
+    } finally {
+      setIsResetting(false);
+    }
+  };
+
+  const openForgotPassword = () => {
+    setResetEmail(email); // Pre-fill with email if already entered
+    setResetError(null);
+    setResetSuccess(false);
+    setShowForgotPassword(true);
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-orange-50 to-white flex items-center justify-center p-4">
       <div className="max-w-md w-full">
@@ -114,9 +154,18 @@ export const EspaceLogin: React.FC<EspaceLoginProps> = ({ onRegisterWithToken })
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Mot de passe
-              </label>
+              <div className="flex justify-between items-center mb-1">
+                <label className="block text-sm font-medium text-gray-700">
+                  Mot de passe
+                </label>
+                <button
+                  type="button"
+                  onClick={openForgotPassword}
+                  className="text-xs text-orange-500 hover:text-orange-600 hover:underline"
+                >
+                  Mot de passe oublié ?
+                </button>
+              </div>
               <div className="relative">
                 <Input
                   type={showPassword ? 'text' : 'password'}
@@ -214,6 +263,108 @@ export const EspaceLogin: React.FC<EspaceLoginProps> = ({ onRegisterWithToken })
           </Link>
         </div>
       </div>
+
+      {/* Forgot Password Modal */}
+      <AnimatePresence>
+        {showForgotPassword && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-center justify-center px-4"
+            onClick={() => setShowForgotPassword(false)}
+          >
+            <motion.div
+              initial={{ y: 50, scale: 0.95 }}
+              animate={{ y: 0, scale: 1 }}
+              exit={{ y: 50, scale: 0.95 }}
+              onClick={(e: React.MouseEvent) => e.stopPropagation()}
+              className="bg-white rounded-2xl w-full max-w-md p-6 shadow-xl"
+            >
+              {!resetSuccess ? (
+                <>
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-xl font-bold text-gray-800">Mot de passe oublié</h3>
+                    <button
+                      onClick={() => setShowForgotPassword(false)}
+                      className="p-2 hover:bg-gray-100 rounded-lg text-gray-400"
+                    >
+                      <X size={20} />
+                    </button>
+                  </div>
+
+                  <p className="text-gray-600 text-sm mb-4">
+                    Entrez votre adresse email et nous vous enverrons un lien pour réinitialiser votre mot de passe.
+                  </p>
+
+                  {resetError && (
+                    <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm mb-4">
+                      {resetError}
+                    </div>
+                  )}
+
+                  <form onSubmit={handleForgotPassword} className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Adresse email
+                      </label>
+                      <Input
+                        type="email"
+                        value={resetEmail}
+                        onChange={(e) => setResetEmail(e.target.value)}
+                        placeholder="votre@email.com"
+                        required
+                        autoFocus
+                      />
+                    </div>
+
+                    <div className="flex gap-3">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="flex-1"
+                        onClick={() => setShowForgotPassword(false)}
+                      >
+                        Annuler
+                      </Button>
+                      <Button
+                        type="submit"
+                        className="flex-1 bg-orange-500 hover:bg-orange-600"
+                        disabled={isResetting}
+                      >
+                        {isResetting ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          'Envoyer'
+                        )}
+                      </Button>
+                    </div>
+                  </form>
+                </>
+              ) : (
+                <div className="text-center py-4">
+                  <div className="w-16 h-16 mx-auto bg-green-100 rounded-full flex items-center justify-center mb-4">
+                    <CheckCircle className="w-8 h-8 text-green-500" />
+                  </div>
+                  <h3 className="text-xl font-bold text-gray-800 mb-2">Email envoyé !</h3>
+                  <p className="text-gray-600 text-sm mb-4">
+                    Consultez votre boîte mail <strong>{resetEmail}</strong> et suivez les instructions pour réinitialiser votre mot de passe.
+                  </p>
+                  <p className="text-gray-400 text-xs mb-4">
+                    Pensez à vérifier vos spams si vous ne trouvez pas l'email.
+                  </p>
+                  <Button
+                    onClick={() => setShowForgotPassword(false)}
+                    className="bg-orange-500 hover:bg-orange-600"
+                  >
+                    Retour à la connexion
+                  </Button>
+                </div>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
