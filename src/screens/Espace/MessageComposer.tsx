@@ -41,6 +41,7 @@ export const MessageComposer: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   const recognitionRef = useRef<any>(null);
+  const finalTranscriptRef = useRef<string>('');
 
   // Charger les enfants
   useEffect(() => {
@@ -89,11 +90,21 @@ export const MessageComposer: React.FC = () => {
       recognitionRef.current.lang = 'fr-FR';
 
       recognitionRef.current.onresult = (event: any) => {
-        let transcript = '';
+        let interimTranscript = '';
+
         for (let i = event.resultIndex; i < event.results.length; i++) {
-          transcript += event.results[i][0].transcript;
+          const transcript = event.results[i][0].transcript;
+          if (event.results[i].isFinal) {
+            // Only add final results to the accumulated text
+            finalTranscriptRef.current += transcript + ' ';
+          } else {
+            // Interim results are just for display preview
+            interimTranscript += transcript;
+          }
         }
-        setMessage(prev => prev + transcript);
+
+        // Update message with final text + current interim preview
+        setMessage(finalTranscriptRef.current + interimTranscript);
       };
 
       recognitionRef.current.onerror = (event: any) => {
@@ -103,6 +114,10 @@ export const MessageComposer: React.FC = () => {
 
       recognitionRef.current.onend = () => {
         setIsRecording(false);
+        // Ensure we keep only the final transcript
+        if (finalTranscriptRef.current) {
+          setMessage(finalTranscriptRef.current.trim());
+        }
       };
     }
 
@@ -124,8 +139,11 @@ export const MessageComposer: React.FC = () => {
     if (isRecording) {
       recognitionRef.current.stop();
       setIsRecording(false);
+      // Keep the final transcript in the message
+      setMessage(finalTranscriptRef.current.trim());
     } else {
-      setMessage(prev => prev + (prev ? ' ' : ''));
+      // Initialize with current message content
+      finalTranscriptRef.current = message ? message + ' ' : '';
       recognitionRef.current.start();
       setIsRecording(true);
       setError(null);
@@ -313,7 +331,13 @@ export const MessageComposer: React.FC = () => {
           <div className={`glass rounded-[2rem] p-4 border-2 transition-all duration-300 shadow-glass min-h-[240px] flex flex-col ${isRecording ? 'border-red-400 bg-red-50/30' : 'border-white focus-within:border-orange-200 focus-within:bg-orange-50/10'}`}>
             <textarea
               value={message}
-              onChange={(e) => setMessage(e.target.value)}
+              onChange={(e) => {
+                setMessage(e.target.value);
+                // Sync finalTranscriptRef when user types manually
+                if (!isRecording) {
+                  finalTranscriptRef.current = e.target.value;
+                }
+              }}
               placeholder="Écrivez ici... n'hésitez pas à utiliser la dictée vocale !"
               className="flex-1 w-full bg-transparent resize-none focus:outline-none font-medium text-gray-700 placeholder:text-gray-300 leading-relaxed min-h-[160px]"
             />
@@ -327,7 +351,10 @@ export const MessageComposer: React.FC = () => {
                   {isRecording ? <MicOff size={20} /> : <Mic size={20} />}
                 </button>
                 <button
-                  onClick={() => setMessage('')}
+                  onClick={() => {
+                    setMessage('');
+                    finalTranscriptRef.current = '';
+                  }}
                   className="p-3 bg-gray-100 text-gray-400 hover:text-red-500 rounded-xl transition-all"
                   title="Effacer"
                 >
