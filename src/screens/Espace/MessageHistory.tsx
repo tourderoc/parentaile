@@ -57,6 +57,12 @@ export const MessageHistory = () => {
           nickname: doc.data().nickname
         }));
 
+        // Redirect to settings if no children (tokens)
+        if (childrenData.length === 0) {
+          navigate('/espace/parametres');
+          return;
+        }
+
         setChildren(childrenData);
 
         const childFromUrl = searchParams.get('childId');
