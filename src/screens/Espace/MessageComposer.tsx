@@ -42,6 +42,8 @@ export const MessageComposer: React.FC = () => {
 
   const recognitionRef = useRef<any>(null);
   const finalTranscriptRef = useRef<string>('');
+  const isRecordingRef = useRef<boolean>(false);
+  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
   // Charger les enfants
   useEffect(() => {
@@ -85,7 +87,9 @@ export const MessageComposer: React.FC = () => {
     if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
       const SpeechRecognition = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition;
       recognitionRef.current = new SpeechRecognition();
-      recognitionRef.current.continuous = true;
+
+      // On mobile, continuous mode doesn't work well - use single shot and restart
+      recognitionRef.current.continuous = !isMobile;
       recognitionRef.current.interimResults = true;
       recognitionRef.current.lang = 'fr-FR';
 
@@ -109,11 +113,39 @@ export const MessageComposer: React.FC = () => {
 
       recognitionRef.current.onerror = (event: any) => {
         console.error('Erreur reconnaissance vocale:', event.error);
+
+        // Don't stop on 'no-speech' or 'aborted' errors on mobile - just restart
+        if (isMobile && (event.error === 'no-speech' || event.error === 'aborted')) {
+          if (isRecordingRef.current) {
+            setTimeout(() => {
+              try {
+                recognitionRef.current?.start();
+              } catch (e) {}
+            }, 100);
+          }
+          return;
+        }
+
         setIsRecording(false);
+        isRecordingRef.current = false;
       };
 
       recognitionRef.current.onend = () => {
+        // On mobile, restart recognition if still recording
+        if (isMobile && isRecordingRef.current) {
+          setTimeout(() => {
+            try {
+              recognitionRef.current?.start();
+            } catch (e) {
+              setIsRecording(false);
+              isRecordingRef.current = false;
+            }
+          }, 100);
+          return;
+        }
+
         setIsRecording(false);
+        isRecordingRef.current = false;
         // Ensure we keep only the final transcript
         if (finalTranscriptRef.current) {
           setMessage(finalTranscriptRef.current.trim());
@@ -122,31 +154,53 @@ export const MessageComposer: React.FC = () => {
     }
 
     return () => {
+      isRecordingRef.current = false;
       if (recognitionRef.current) {
         try {
           recognitionRef.current.stop();
         } catch (e) {}
       }
     };
-  }, []);
+  }, [isMobile]);
 
-  const toggleRecording = () => {
+  const toggleRecording = async () => {
     if (!recognitionRef.current) {
       setError('La dictée vocale n\'est pas disponible sur ce navigateur');
       return;
     }
 
     if (isRecording) {
+      isRecordingRef.current = false;
       recognitionRef.current.stop();
       setIsRecording(false);
       // Keep the final transcript in the message
       setMessage(finalTranscriptRef.current.trim());
     } else {
+      // On mobile, request microphone permission first
+      if (isMobile) {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          // Stop the stream immediately - we just needed permission
+          stream.getTracks().forEach(track => track.stop());
+        } catch (err) {
+          console.error('Permission micro refusée:', err);
+          setError('Veuillez autoriser l\'accès au microphone pour utiliser la dictée vocale');
+          return;
+        }
+      }
+
       // Initialize with current message content
       finalTranscriptRef.current = message ? message + ' ' : '';
-      recognitionRef.current.start();
-      setIsRecording(true);
-      setError(null);
+
+      try {
+        recognitionRef.current.start();
+        isRecordingRef.current = true;
+        setIsRecording(true);
+        setError(null);
+      } catch (err) {
+        console.error('Erreur démarrage reconnaissance:', err);
+        setError('Impossible de démarrer la dictée vocale. Réessayez.');
+      }
     }
   };
 
