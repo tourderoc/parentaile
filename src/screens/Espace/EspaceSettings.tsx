@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { auth, db } from '../../lib/firebase';
-import { signOut } from 'firebase/auth';
+import { signOut, updateEmail, updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
 import {
   collection,
   getDocs,
@@ -32,7 +32,10 @@ import {
   ChevronRight,
   Baby,
   ShieldCheck,
-  Mail
+  Mail,
+  Key,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 
 interface Child {
@@ -56,6 +59,19 @@ export const EspaceSettings = () => {
   const [isValidating, setIsValidating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
+
+  // Edit account states
+  const [editModal, setEditModal] = useState<'pseudo' | 'email' | 'password' | null>(null);
+  const [newPseudo, setNewPseudo] = useState('');
+  const [newEmail, setNewEmail] = useState('');
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+  const [editSuccess, setEditSuccess] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
@@ -187,6 +203,145 @@ export const EspaceSettings = () => {
     navigate('/welcome');
   };
 
+  // Ouvrir modal d'édition
+  const openEditModal = (type: 'pseudo' | 'email' | 'password') => {
+    setEditError(null);
+    setEditSuccess(null);
+    setCurrentPassword('');
+    setNewPassword('');
+    setConfirmPassword('');
+
+    if (type === 'pseudo') {
+      setNewPseudo(pseudo);
+    } else if (type === 'email') {
+      setNewEmail(auth.currentUser?.email || '');
+    }
+    setEditModal(type);
+  };
+
+  // Sauvegarder le pseudo
+  const handleSavePseudo = async () => {
+    if (!newPseudo.trim() || newPseudo.trim().length < 2) {
+      setEditError('Le pseudo doit contenir au moins 2 caractères');
+      return;
+    }
+
+    setIsSaving(true);
+    setEditError(null);
+
+    try {
+      const user = auth.currentUser;
+      if (!user) throw new Error('Non connecté');
+
+      const accountRef = doc(db, 'accounts', user.uid);
+      await updateDoc(accountRef, { pseudo: newPseudo.trim() });
+
+      setPseudo(newPseudo.trim());
+      setEditSuccess('Pseudo mis à jour !');
+      setTimeout(() => setEditModal(null), 1500);
+    } catch (err: any) {
+      console.error('Erreur:', err);
+      setEditError('Erreur lors de la mise à jour');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Sauvegarder l'email
+  const handleSaveEmail = async () => {
+    if (!newEmail.trim() || !newEmail.includes('@')) {
+      setEditError('Email invalide');
+      return;
+    }
+
+    if (!currentPassword) {
+      setEditError('Mot de passe actuel requis');
+      return;
+    }
+
+    setIsSaving(true);
+    setEditError(null);
+
+    try {
+      const user = auth.currentUser;
+      if (!user || !user.email) throw new Error('Non connecté');
+
+      // Ré-authentification requise pour changer l'email
+      const credential = EmailAuthProvider.credential(user.email, currentPassword);
+      await reauthenticateWithCredential(user, credential);
+
+      // Mettre à jour l'email
+      await updateEmail(user, newEmail.trim());
+
+      // Mettre à jour Firestore
+      const accountRef = doc(db, 'accounts', user.uid);
+      await updateDoc(accountRef, { email: newEmail.trim() });
+
+      setEditSuccess('Email mis à jour !');
+      setTimeout(() => setEditModal(null), 1500);
+    } catch (err: any) {
+      console.error('Erreur:', err);
+      if (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
+        setEditError('Mot de passe incorrect');
+      } else if (err.code === 'auth/email-already-in-use') {
+        setEditError('Cet email est déjà utilisé');
+      } else if (err.code === 'auth/requires-recent-login') {
+        setEditError('Veuillez vous reconnecter pour changer l\'email');
+      } else {
+        setEditError('Erreur lors de la mise à jour');
+      }
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Sauvegarder le mot de passe
+  const handleSavePassword = async () => {
+    if (!currentPassword) {
+      setEditError('Mot de passe actuel requis');
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      setEditError('Le nouveau mot de passe doit contenir au moins 6 caractères');
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setEditError('Les mots de passe ne correspondent pas');
+      return;
+    }
+
+    setIsSaving(true);
+    setEditError(null);
+
+    try {
+      const user = auth.currentUser;
+      if (!user || !user.email) throw new Error('Non connecté');
+
+      // Ré-authentification requise pour changer le mot de passe
+      const credential = EmailAuthProvider.credential(user.email, currentPassword);
+      await reauthenticateWithCredential(user, credential);
+
+      // Mettre à jour le mot de passe
+      await updatePassword(user, newPassword);
+
+      setEditSuccess('Mot de passe mis à jour !');
+      setTimeout(() => setEditModal(null), 1500);
+    } catch (err: any) {
+      console.error('Erreur:', err);
+      if (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
+        setEditError('Mot de passe actuel incorrect');
+      } else if (err.code === 'auth/requires-recent-login') {
+        setEditError('Veuillez vous reconnecter pour changer le mot de passe');
+      } else {
+        setEditError('Erreur lors de la mise à jour');
+      }
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-[#FFFBF0] flex items-center justify-center">
@@ -294,27 +449,52 @@ export const EspaceSettings = () => {
         <section className="space-y-4">
            <h2 className="text-xl font-extrabold text-gray-800 tracking-tight px-1">Mon Compte</h2>
            <div className="glass rounded-[2rem] border-2 border-white shadow-glass overflow-hidden">
-              <div className="p-6 flex items-center gap-4 border-b border-black/5">
+              {/* Pseudo */}
+              <button
+                 onClick={() => openEditModal('pseudo')}
+                 className="w-full p-6 flex items-center gap-4 border-b border-black/5 hover:bg-orange-50/50 transition-colors group"
+              >
                  <div className="w-12 h-12 bg-orange-100 rounded-2xl flex items-center justify-center text-orange-500">
                     <User size={24} />
                  </div>
-                 <div>
+                 <div className="flex-1 text-left">
                     <p className="text-[10px] font-bold text-orange-400 uppercase tracking-widest">Pseudo Parent</p>
                     <p className="text-lg font-extrabold text-gray-800">{pseudo || 'Non défini'}</p>
                  </div>
-              </div>
-              <div className="p-6 flex items-center gap-4 border-b border-black/5">
+                 <Pencil size={18} className="text-gray-300 group-hover:text-orange-500 transition-colors" />
+              </button>
+
+              {/* Email */}
+              <button
+                 onClick={() => openEditModal('email')}
+                 className="w-full p-6 flex items-center gap-4 border-b border-black/5 hover:bg-gray-50 transition-colors group"
+              >
                  <div className="w-12 h-12 bg-gray-100 rounded-2xl flex items-center justify-center text-gray-400">
                     <Mail size={24} />
                  </div>
-                 <div className="flex-1 truncate">
+                 <div className="flex-1 text-left truncate">
                     <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Email</p>
                     <p className="text-gray-600 font-bold truncate">{auth.currentUser?.email}</p>
                  </div>
-                 <div className="w-8 h-8 bg-green-50 rounded-lg flex items-center justify-center text-green-500">
-                    <ShieldCheck size={18} />
+                 <Pencil size={18} className="text-gray-300 group-hover:text-orange-500 transition-colors" />
+              </button>
+
+              {/* Mot de passe */}
+              <button
+                 onClick={() => openEditModal('password')}
+                 className="w-full p-6 flex items-center gap-4 border-b border-black/5 hover:bg-gray-50 transition-colors group"
+              >
+                 <div className="w-12 h-12 bg-gray-100 rounded-2xl flex items-center justify-center text-gray-400">
+                    <Key size={24} />
                  </div>
-              </div>
+                 <div className="flex-1 text-left">
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Mot de passe</p>
+                    <p className="text-gray-600 font-bold">••••••••</p>
+                 </div>
+                 <Pencil size={18} className="text-gray-300 group-hover:text-orange-500 transition-colors" />
+              </button>
+
+              {/* Déconnexion */}
               <button
                  onClick={handleLogout}
                  className="w-full p-6 flex items-center justify-between hover:bg-red-50 transition-colors group"
@@ -407,6 +587,197 @@ export const EspaceSettings = () => {
                    </div>
                 </div>
               )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Modal Edit Account */}
+      <AnimatePresence>
+        {editModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center px-4"
+            onClick={() => setEditModal(null)}
+          >
+            <motion.div
+              initial={{ y: 100, scale: 0.9 }}
+              animate={{ y: 0, scale: 1 }}
+              exit={{ y: 100, scale: 0.9 }}
+              onClick={(e: React.MouseEvent) => e.stopPropagation()}
+              className="bg-white rounded-[2.5rem] w-full max-w-md p-8 shadow-premium pb-12 sm:pb-8"
+            >
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-2xl font-extrabold text-gray-800 tracking-tight">
+                  {editModal === 'pseudo' && 'Modifier le pseudo'}
+                  {editModal === 'email' && 'Modifier l\'email'}
+                  {editModal === 'password' && 'Modifier le mot de passe'}
+                </h3>
+                <button onClick={() => setEditModal(null)} className="p-2 bg-gray-100 rounded-xl text-gray-400">
+                  <X size={20} />
+                </button>
+              </div>
+
+              {/* Success message */}
+              {editSuccess && (
+                <div className="mb-4 p-4 bg-green-50 text-green-600 rounded-2xl text-sm font-bold flex items-center gap-2">
+                  <Check size={18} />
+                  {editSuccess}
+                </div>
+              )}
+
+              {/* Error message */}
+              {editError && (
+                <div className="mb-4 p-4 bg-red-50 text-red-600 rounded-2xl text-sm font-bold">
+                  {editError}
+                </div>
+              )}
+
+              <div className="space-y-4">
+                {/* Pseudo form */}
+                {editModal === 'pseudo' && (
+                  <>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">
+                        Nouveau pseudo
+                      </label>
+                      <input
+                        value={newPseudo}
+                        onChange={(e) => setNewPseudo(e.target.value)}
+                        placeholder="Ex: Maman de Théo"
+                        maxLength={20}
+                        className="w-full h-14 bg-gray-50 rounded-2xl border-2 border-gray-100 px-5 focus:outline-none focus:border-orange-500 font-bold"
+                        autoFocus
+                      />
+                      <p className="text-[10px] text-gray-400 text-right">{newPseudo.length}/20</p>
+                    </div>
+                    <button
+                      onClick={handleSavePseudo}
+                      disabled={isSaving}
+                      className="w-full h-14 bg-orange-500 text-white rounded-2xl font-bold shadow-premium flex items-center justify-center"
+                    >
+                      {isSaving ? <Loader2 className="animate-spin" /> : 'Enregistrer'}
+                    </button>
+                  </>
+                )}
+
+                {/* Email form */}
+                {editModal === 'email' && (
+                  <>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">
+                        Nouvel email
+                      </label>
+                      <input
+                        type="email"
+                        value={newEmail}
+                        onChange={(e) => setNewEmail(e.target.value)}
+                        placeholder="votre@email.com"
+                        className="w-full h-14 bg-gray-50 rounded-2xl border-2 border-gray-100 px-5 focus:outline-none focus:border-orange-500 font-bold"
+                        autoFocus
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">
+                        Mot de passe actuel (requis)
+                      </label>
+                      <div className="relative">
+                        <input
+                          type={showCurrentPassword ? 'text' : 'password'}
+                          value={currentPassword}
+                          onChange={(e) => setCurrentPassword(e.target.value)}
+                          placeholder="••••••••"
+                          className="w-full h-14 bg-gray-50 rounded-2xl border-2 border-gray-100 px-5 pr-12 focus:outline-none focus:border-orange-500 font-bold"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                          className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400"
+                        >
+                          {showCurrentPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                        </button>
+                      </div>
+                    </div>
+                    <button
+                      onClick={handleSaveEmail}
+                      disabled={isSaving}
+                      className="w-full h-14 bg-orange-500 text-white rounded-2xl font-bold shadow-premium flex items-center justify-center"
+                    >
+                      {isSaving ? <Loader2 className="animate-spin" /> : 'Enregistrer'}
+                    </button>
+                  </>
+                )}
+
+                {/* Password form */}
+                {editModal === 'password' && (
+                  <>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">
+                        Mot de passe actuel
+                      </label>
+                      <div className="relative">
+                        <input
+                          type={showCurrentPassword ? 'text' : 'password'}
+                          value={currentPassword}
+                          onChange={(e) => setCurrentPassword(e.target.value)}
+                          placeholder="••••••••"
+                          className="w-full h-14 bg-gray-50 rounded-2xl border-2 border-gray-100 px-5 pr-12 focus:outline-none focus:border-orange-500 font-bold"
+                          autoFocus
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                          className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400"
+                        >
+                          {showCurrentPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                        </button>
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">
+                        Nouveau mot de passe
+                      </label>
+                      <div className="relative">
+                        <input
+                          type={showNewPassword ? 'text' : 'password'}
+                          value={newPassword}
+                          onChange={(e) => setNewPassword(e.target.value)}
+                          placeholder="••••••••"
+                          className="w-full h-14 bg-gray-50 rounded-2xl border-2 border-gray-100 px-5 pr-12 focus:outline-none focus:border-orange-500 font-bold"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowNewPassword(!showNewPassword)}
+                          className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400"
+                        >
+                          {showNewPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                        </button>
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">
+                        Confirmer le nouveau mot de passe
+                      </label>
+                      <input
+                        type={showNewPassword ? 'text' : 'password'}
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        placeholder="••••••••"
+                        className="w-full h-14 bg-gray-50 rounded-2xl border-2 border-gray-100 px-5 focus:outline-none focus:border-orange-500 font-bold"
+                      />
+                    </div>
+                    <button
+                      onClick={handleSavePassword}
+                      disabled={isSaving}
+                      className="w-full h-14 bg-orange-500 text-white rounded-2xl font-bold shadow-premium flex items-center justify-center"
+                    >
+                      {isSaving ? <Loader2 className="animate-spin" /> : 'Enregistrer'}
+                    </button>
+                  </>
+                )}
+              </div>
             </motion.div>
           </motion.div>
         )}
