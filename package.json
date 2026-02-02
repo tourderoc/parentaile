@@ -37,6 +37,7 @@
     "firebase": "^10.8.0",
     "firebase-admin": "^13.4.0",
     "framer-motion": "^11.0.8",
+    "lottie-react": "^2.4.1",
     "lucide-react": "^0.453.0",
     "nanoid": "^5.0.6",
     "openai": "^4.28.0",

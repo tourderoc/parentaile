@@ -1,24 +1,16 @@
-/**
- * Espace Patient - Point d'entrée
- *
- * Ce composant gère l'accès à l'Espace Patient :
- * 1. Vérifie s'il y a un token dans l'URL
- * 2. Si token : valide et affiche inscription/erreur
- * 3. Si connecté : redirige vers le dashboard
- * 4. Sinon : affiche formulaire de connexion
- */
-
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { auth } from '../../lib/firebase';
+import { auth, db } from '../../lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
 import { validateToken, getTokenFromCurrentUrl } from '../../lib/tokenService';
 import { TokenLogin } from './TokenLogin';
 import { EspaceLogin } from './EspaceLogin';
 import { EspaceRegister } from './EspaceRegister';
 import { Loader2 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 
-type EspaceView = 'loading' | 'token-validation' | 'login' | 'register' | 'error';
+type EspaceView = 'loading' | 'token-validation' | 'login' | 'register-with-token' | 'register-free' | 'error';
 
 export const Espace = () => {
   const navigate = useNavigate();
@@ -29,36 +21,56 @@ export const Espace = () => {
 
   useEffect(() => {
     const checkAuthAndToken = async () => {
-      // Vérifier si l'utilisateur est déjà connecté
       const unsubscribe = onAuthStateChanged(auth, async (user) => {
+        const token = searchParams.get('token') || getTokenFromCurrentUrl();
+        const mode = searchParams.get('mode');
+
         if (user) {
-          // Utilisateur connecté → dashboard
-          navigate('/espace/dashboard');
+          try {
+            // Check if profile exists
+            const accountRef = doc(db, 'accounts', user.uid);
+            const accountSnap = await getDoc(accountRef);
+            
+            if (!accountSnap.exists()) {
+              // User is authenticated but profile is missing -> must be registration Step 2
+              setView(token ? 'register-with-token' : 'register-free');
+              return;
+            }
+
+            // Profile exists -> safe to go to dashboard
+            if (token) {
+              navigate(`/espace/dashboard?token=${token}`);
+            } else {
+              navigate('/espace/dashboard');
+            }
+          } catch (err) {
+            console.error('Auth verification error:', err);
+            setView('error');
+          }
           return;
         }
 
-        // Pas connecté : vérifier s'il y a un token
-        const token = searchParams.get('token') || getTokenFromCurrentUrl();
-
+        // Deep Link: Token in URL
         if (token) {
           setTokenId(token);
           setView('token-validation');
-
-          // Valider le token
           const result = await validateToken(token);
 
           if (result.valid) {
-            // Token valide → afficher inscription
-            setView('register');
+            setView('register-with-token');
           } else {
-            // Token invalide → afficher erreur
-            setError(result.error || 'Token invalide');
+            setError(result.error || 'Code médecin invalide');
             setView('error');
           }
-        } else {
-          // Pas de token → afficher login
-          setView('login');
+          return;
         }
+
+        if (mode === 'register') {
+          setView('register-free');
+          return;
+        }
+
+        setView('login');
       });
 
       return () => unsubscribe();
@@ -67,55 +79,68 @@ export const Espace = () => {
     checkAuthAndToken();
   }, [navigate, searchParams]);
 
-  // Loading
-  if (view === 'loading' || view === 'token-validation') {
-    return (
-      <div className="min-h-screen bg-gradient-to-b from-orange-50 to-white flex items-center justify-center">
-        <div className="text-center">
-          <Loader2 className="w-12 h-12 animate-spin text-orange-500 mx-auto mb-4" />
-          <p className="text-gray-600">
-            {view === 'loading' ? 'Chargement...' : 'Vérification du token...'}
-          </p>
-        </div>
-      </div>
-    );
-  }
+  const renderContent = () => {
+    switch (view) {
+      case 'token-validation':
+      case 'loading':
+        return (
+          <motion.div 
+            key="loading"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="flex flex-col items-center"
+          >
+            <Loader2 className="w-12 h-12 animate-spin text-orange-500 mb-4" />
+            <p className="text-gray-500 font-bold uppercase tracking-widest text-xs">
+              {view === 'loading' ? 'Chargement...' : 'Vérification du code...'}
+            </p>
+          </motion.div>
+        );
 
-  // Erreur token
-  if (view === 'error') {
-    return (
-      <TokenLogin
-        error={error}
-        onRetry={() => setView('login')}
-        onManualToken={(token) => {
-          setTokenId(token);
-          navigate(`/espace?token=${token}`);
-          window.location.reload();
-        }}
-      />
-    );
-  }
+      case 'error':
+        return (
+          <TokenLogin
+            error={error}
+            onRetry={() => setView('login')}
+            onManualToken={(token) => {
+              setTokenId(token);
+              navigate(`/espace?token=${token}`);
+              window.location.reload();
+            }}
+          />
+        );
 
-  // Inscription avec token valide
-  if (view === 'register' && tokenId) {
-    return (
-      <EspaceRegister
-        tokenId={tokenId}
-        onLoginInstead={() => setView('login')}
-      />
-    );
-  }
+      case 'register-with-token':
+      case 'register-free':
+        return (
+          <EspaceRegister
+            tokenId={tokenId || undefined}
+            onLoginInstead={() => setView('login')}
+          />
+        );
 
-  // Login classique
+      default:
+        return (
+          <EspaceLogin
+            onRegisterWithToken={(token) => {
+              setTokenId(token);
+              navigate(`/espace?token=${token}`);
+              window.location.reload();
+            }}
+          />
+        );
+    }
+  };
+
   return (
-    <EspaceLogin
-      onRegisterWithToken={(token) => {
-        setTokenId(token);
-        navigate(`/espace?token=${token}`);
-        window.location.reload();
-      }}
-    />
+    <div className="min-h-screen flex items-center justify-center p-4">
+      <AnimatePresence mode="wait">
+        {renderContent()}
+      </AnimatePresence>
+    </div>
   );
 };
 
 export default Espace;
+

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, useLocation, Navigate } from 'react-router-dom';
 import NotificationColumn from './components/ui/NotificationColumn.tsx';
 import { ShortcutBar } from './components/ui/shortcut-bar';
 import { ComingSoonOverlay } from './components/ui/ComingSoonOverlay';
@@ -38,6 +38,10 @@ import { MyConsultations } from './screens/MyConsultations';
 import { NotificationBell } from './components/ui/NotificationBell';
 import { Espace } from './screens/Espace';
 import { EspaceDashboard } from './screens/Espace/EspaceDashboard';
+import { MessageComposer } from './screens/Espace/MessageComposer';
+import { MessageHistory } from './screens/Espace/MessageHistory';
+import { EspaceSettings } from './screens/Espace/EspaceSettings';
+import { WelcomeWithSplash } from './screens/Welcome/WelcomeWithSplash';
 
 // ============================================
 // CONFIGURATION V0 - Fonctionnalités grisées
@@ -87,10 +91,14 @@ const Layout = () => {
   const location = useLocation();
   const [isNotificationVisible, setIsNotificationVisible] = useState(true);
 
-  const hideNotifications = location.pathname === "/" ||
+  // V0: Cacher tout le chrome UI sur le nouveau parcours app-like
+  const isAppLikeRoute = location.pathname === "/" ||
+                         location.pathname === "/welcome" ||
+                         location.pathname.startsWith("/espace");
+
+  const hideNotifications = isAppLikeRoute ||
                           location.pathname === "/mentions-legales" ||
-                          location.pathname.startsWith("/admin") ||
-                          location.pathname.startsWith("/espace");
+                          location.pathname.startsWith("/admin");
 
   const toggleNotifications = () => {
     setIsNotificationVisible(!isNotificationVisible);
@@ -110,10 +118,16 @@ const Layout = () => {
           />
         </>
       )}
-      <ShortcutBar />
+      {/* V0: Cacher ShortcutBar sur le parcours app-like */}
+      {!isAppLikeRoute && <ShortcutBar />}
       <Routes>
-        {/* ========== ROUTES TOUJOURS ACTIVES ========== */}
-        <Route path="/" element={<ParentAile />} />
+        {/* ========== V0 - NOUVEAU POINT D'ENTRÉE ========== */}
+        {/* "/" redirige vers le nouveau parcours app-like */}
+        <Route path="/" element={<Navigate to="/welcome" replace />} />
+        <Route path="/welcome" element={<WelcomeWithSplash />} />
+
+        {/* ========== ROUTES LEGACY (gardées pour admin) ========== */}
+        <Route path="/old-home" element={<ParentAile />} />
         <Route path="/mentions-legales" element={<LegalNotice />} />
         <Route path="/test-openai" element={<OpenAITest />} />
 
@@ -235,6 +249,9 @@ const Layout = () => {
         {/* ========== ESPACE PATIENT - Token requis ========== */}
         <Route path="/espace" element={<Espace />} />
         <Route path="/espace/dashboard" element={<EspaceDashboard />} />
+        <Route path="/espace/nouveau-message" element={<MessageComposer />} />
+        <Route path="/espace/messages" element={<MessageHistory />} />
+        <Route path="/espace/parametres" element={<EspaceSettings />} />
         <Route path="/espace/*" element={<Espace />} />
 
         {/* ========== ADMIN - Toujours actif (protégé par auth) ========== */}

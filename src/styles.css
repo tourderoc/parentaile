@@ -2,64 +2,91 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --color-pink: #fff6fb;
-  --color-sage: #2b8a49;
-  --color-beige: #f3d8f080;
+@layer base {
+  :root {
+    /* Primary / Background */
+    --background: 0 0% 100%;
+    --foreground: 20 14.3% 4.1%;
+
+    /* Branding - Orange/Amber */
+    --primary: 24.6 95% 53.1%;
+    --primary-foreground: 60 9.1% 97.8%;
+
+    --secondary: 32 100% 95%;
+    --secondary-foreground: 24 9.8% 10%;
+
+    --muted: 24 100% 98%;
+    --muted-foreground: 25 5.3% 44.7%;
+
+    --accent: 32 100% 95%;
+    --accent-foreground: 24 9.8% 10%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 20 14.3% 4.1%;
+
+    --border: 20 5.9% 90%;
+    --input: 20 5.9% 90%;
+    --ring: 24.6 95% 53.1%;
+
+    --radius: 1.25rem;
+  }
 }
 
 body {
-  font-family: 'Quicksand', sans-serif;
+  font-family: "Outfit", "Quicksand", sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  overflow-x: hidden;
-  width: 100%;
-  position: relative;
+  background-color: #FFFBF0;
+  color: hsl(var(--foreground));
   min-height: 100vh;
 }
 
-.service-card {
-  background-color: var(--color-pink);
-  border-radius: 0.5rem;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  transition: transform 0.3s ease;
+/* Glassmorphism */
+.glass {
+  background: rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.4);
 }
 
-.service-card:hover {
-  transform: translateY(-4px);
+.glass-dark {
+  background: rgba(255, 255, 255, 0.4);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-img {
-  display: block;
-  max-width: 100%;
-  height: auto;
-}
-
-@media (max-width: 768px) {
-  .container {
-    padding-left: 1rem;
-    padding-right: 1rem;
+/* Animations */
+@keyframes float {
+  0% {
+    transform: translateY(0px);
   }
-  
-  .hero-section {
-    text-align: center;
+  50% {
+    transform: translateY(-8px);
   }
-  
-  .service-card {
-    height: auto;
-    min-height: 200px;
+  100% {
+    transform: translateY(0px);
   }
 }
 
-/* Mobile Navigation Styles */
-.mobile-menu {
-  transition: transform 0.3s ease-in-out;
+.animate-float {
+  animation: float 4s ease-in-out infinite;
 }
 
-.mobile-menu.open {
-  transform: translateX(0);
+/* Modern shadows */
+.shadow-premium {
+  box-shadow: 0 20px 40px -20px rgba(0, 0, 0, 0.1), 0 10px 30px -10px rgba(251, 146, 60, 0.15);
 }
 
-.mobile-menu.closed {
-  transform: translateX(-100%);
+.shadow-glass {
+  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.04);
+}
+
+/* Hide scrollbar but allow scroll */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }

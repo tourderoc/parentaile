@@ -35,12 +35,21 @@ export const EspaceLogin: React.FC<EspaceLoginProps> = ({ onRegisterWithToken })
       await signInWithEmailAndPassword(auth, email, password);
       navigate('/espace/dashboard');
     } catch (err: any) {
-      if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password') {
-        setError('Email ou mot de passe incorrect');
+      console.error('Firebase Auth Error:', err.code, err.message);
+
+      // Firebase v10+ utilise auth/invalid-credential pour login incorrect
+      if (err.code === 'auth/user-not-found' ||
+          err.code === 'auth/wrong-password' ||
+          err.code === 'auth/invalid-credential') {
+        setError('Email ou mot de passe incorrect. Si vous n\'avez pas encore de compte, cliquez sur "J\'ai un code médecin".');
       } else if (err.code === 'auth/invalid-email') {
         setError('Adresse email invalide');
+      } else if (err.code === 'auth/too-many-requests') {
+        setError('Trop de tentatives. Réessayez dans quelques minutes.');
+      } else if (err.code === 'auth/network-request-failed') {
+        setError('Erreur de connexion internet.');
       } else {
-        setError('Une erreur est survenue. Veuillez réessayer.');
+        setError(`Erreur: ${err.code || err.message}`);
       }
     } finally {
       setIsLoading(false);
