@@ -14,7 +14,6 @@ import {
   User,
   ChevronDown,
   Baby,
-  Calendar,
   Stethoscope,
   Send,
   AlertCircle,
@@ -368,15 +367,15 @@ export const MessageHistory = () => {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center"
+              className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-[100] flex items-end sm:items-center justify-center"
               onClick={() => setSelectedMessage(null)}
             >
               <motion.div
                 initial={{ y: 100, scale: 0.95 }}
                 animate={{ y: 0, scale: 1 }}
                 exit={{ y: 100, scale: 0.95 }}
-                onClick={(e) => e.stopPropagation()}
-                className="bg-white rounded-t-[2rem] sm:rounded-[2rem] w-full max-w-md max-h-[85vh] overflow-y-auto"
+                onClick={(e: React.MouseEvent) => e.stopPropagation()}
+              className="bg-white rounded-t-[2rem] sm:rounded-[2rem] w-full max-w-md max-h-[85vh] overflow-y-auto pb-24 sm:pb-0"
               >
                 {/* Header */}
                 <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between">

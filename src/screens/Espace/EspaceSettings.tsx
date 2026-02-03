@@ -32,7 +32,6 @@ import {
   Keyboard,
   ChevronRight,
   Baby,
-  ShieldCheck,
   Mail,
   Key,
   Eye,
@@ -519,7 +518,7 @@ export const EspaceSettings = () => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center px-4"
+            className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-[100] flex items-end sm:items-center justify-center px-4"
             onClick={() => setShowAddChild(false)}
           >
             <motion.div
@@ -527,7 +526,7 @@ export const EspaceSettings = () => {
               animate={{ y: 0, scale: 1 }}
               exit={{ y: 100, scale: 0.9 }}
               onClick={(e: React.MouseEvent) => e.stopPropagation()}
-              className="bg-white rounded-[2.5rem] w-full max-w-md p-8 shadow-premium pb-28 sm:pb-8 mb-20 sm:mb-0"
+              className="bg-white rounded-[2.5rem] w-full max-w-md p-8 shadow-premium pb-32 sm:pb-8 mb-0 sm:mb-0"
             >
               <div className="flex items-center justify-between mb-8">
                  <h3 className="text-2xl font-extrabold text-gray-800 tracking-tight">Ajouter un enfant</h3>
@@ -606,7 +605,7 @@ export const EspaceSettings = () => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center px-4"
+            className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-[100] flex items-end sm:items-center justify-center px-4"
             onClick={() => setEditModal(null)}
           >
             <motion.div
@@ -614,7 +613,7 @@ export const EspaceSettings = () => {
               animate={{ y: 0, scale: 1 }}
               exit={{ y: 100, scale: 0.9 }}
               onClick={(e: React.MouseEvent) => e.stopPropagation()}
-              className="bg-white rounded-[2.5rem] w-full max-w-md p-8 shadow-premium pb-12 sm:pb-8"
+              className="bg-white rounded-[2.5rem] w-full max-w-md p-8 shadow-premium pb-32 sm:pb-8"
             >
               <div className="flex items-center justify-between mb-6">
                 <h3 className="text-2xl font-extrabold text-gray-800 tracking-tight">
