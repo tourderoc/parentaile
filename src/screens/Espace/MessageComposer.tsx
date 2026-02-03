@@ -40,10 +40,22 @@ export const MessageComposer: React.FC = () => {
   const [isSent, setIsSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [voiceSupported, setVoiceSupported] = useState(true);
+  const [showQuickPhrases, setShowQuickPhrases] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const recognitionRef = useRef<any>(null);
   const finalTranscriptRef = useRef<string>('');
   const isRecordingRef = useRef<boolean>(false);
   const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+  // Phrases rapides pour faciliter l'écriture
+  const quickPhrases = [
+    "Bonjour, je souhaite prendre rendez-vous pour mon enfant.",
+    "Mon enfant ne se sent pas bien depuis quelques jours.",
+    "J'aurais besoin d'un renouvellement d'ordonnance.",
+    "Pouvez-vous me rappeler s'il vous plaît ?",
+    "J'ai une question concernant le traitement."
+  ];
 
   // Charger les enfants
   useEffect(() => {
@@ -84,7 +96,10 @@ export const MessageComposer: React.FC = () => {
 
   // Initialiser la reconnaissance vocale
   useEffect(() => {
-    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+    const hasSupport = 'webkitSpeechRecognition' in window || 'SpeechRecognition' in window;
+    setVoiceSupported(hasSupport);
+
+    if (hasSupport) {
       const SpeechRecognition = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition;
       recognitionRef.current = new SpeechRecognition();
 
@@ -379,11 +394,50 @@ export const MessageComposer: React.FC = () => {
           </div>
         )}
 
+        {/* Phrases rapides */}
+        <div className="space-y-2">
+          <button
+            onClick={() => setShowQuickPhrases(!showQuickPhrases)}
+            className="flex items-center gap-2 text-[10px] font-bold text-orange-500 uppercase ml-1 tracking-widest hover:text-orange-600 transition-colors"
+          >
+            <Sparkles size={12} />
+            {showQuickPhrases ? 'Masquer les suggestions' : 'Suggestions de messages'}
+            <ChevronDown size={12} className={`transition-transform ${showQuickPhrases ? 'rotate-180' : ''}`} />
+          </button>
+
+          <AnimatePresence>
+            {showQuickPhrases && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="flex flex-wrap gap-2 overflow-hidden"
+              >
+                {quickPhrases.map((phrase, index) => (
+                  <button
+                    key={index}
+                    onClick={() => {
+                      setMessage(phrase);
+                      finalTranscriptRef.current = phrase;
+                      setShowQuickPhrases(false);
+                      textareaRef.current?.focus();
+                    }}
+                    className="px-3 py-2 bg-white border border-orange-200 text-orange-700 rounded-xl text-xs font-medium hover:bg-orange-50 hover:border-orange-300 transition-all"
+                  >
+                    {phrase.length > 40 ? phrase.substring(0, 40) + '...' : phrase}
+                  </button>
+                ))}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
         {/* Message Area */}
         <div className="space-y-2 relative">
           <label className="text-[10px] font-bold text-gray-400 uppercase ml-1 tracking-widest">Votre Message</label>
           <div className={`glass rounded-[2rem] p-4 border-2 transition-all duration-300 shadow-glass min-h-[240px] flex flex-col ${isRecording ? 'border-red-400 bg-red-50/30' : 'border-white focus-within:border-orange-200 focus-within:bg-orange-50/10'}`}>
             <textarea
+              ref={textareaRef}
               value={message}
               onChange={(e) => {
                 setMessage(e.target.value);
@@ -392,25 +446,57 @@ export const MessageComposer: React.FC = () => {
                   finalTranscriptRef.current = e.target.value;
                 }
               }}
-              placeholder="Écrivez ici... n'hésitez pas à utiliser la dictée vocale !"
-              className="flex-1 w-full bg-transparent resize-none focus:outline-none font-medium text-gray-700 placeholder:text-gray-300 leading-relaxed min-h-[160px]"
+              placeholder={isMobile ? "Écrivez votre message ici..." : "Écrivez ici ou utilisez la dictée vocale..."}
+              className="flex-1 w-full bg-transparent resize-none focus:outline-none font-medium text-gray-700 placeholder:text-gray-300 leading-relaxed min-h-[160px] text-base"
+              style={{ fontSize: '16px' }} // Empêche le zoom auto sur iOS
             />
+
+            {/* Indicateur d'enregistrement */}
+            {isRecording && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="flex items-center gap-2 py-2 text-red-500"
+              >
+                <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+                <span className="text-xs font-bold">Enregistrement en cours... Parlez clairement</span>
+              </motion.div>
+            )}
+
+            {/* Compteur de caractères */}
+            <div className="text-right text-[10px] text-gray-400 font-medium">
+              {message.length} caractère{message.length > 1 ? 's' : ''}
+            </div>
             
             <div className="flex items-center justify-between pt-4 border-t border-black/5">
               <div className="flex gap-2">
-                <button
-                  onClick={toggleRecording}
-                  className={`p-3 rounded-xl transition-all ${isRecording ? 'bg-red-500 text-white shadow-lg animate-pulse' : 'bg-gray-100 text-gray-400 hover:text-orange-500'}`}
-                >
-                  {isRecording ? <MicOff size={20} /> : <Mic size={20} />}
-                </button>
+                {voiceSupported ? (
+                  <button
+                    onClick={toggleRecording}
+                    className={`p-3 rounded-xl transition-all ${isRecording ? 'bg-red-500 text-white shadow-lg animate-pulse' : 'bg-gray-100 text-gray-400 hover:text-orange-500 hover:bg-orange-50'}`}
+                    title={isRecording ? "Arrêter la dictée" : "Démarrer la dictée vocale"}
+                  >
+                    {isRecording ? <MicOff size={20} /> : <Mic size={20} />}
+                  </button>
+                ) : (
+                  <div
+                    className="p-3 rounded-xl bg-gray-100 text-gray-300 cursor-not-allowed relative"
+                    title="Dictée vocale non disponible sur ce navigateur"
+                  >
+                    <Mic size={20} />
+                    <span className="absolute -top-1 -right-1 w-3 h-3 bg-gray-400 rounded-full flex items-center justify-center">
+                      <span className="text-white text-[8px]">✕</span>
+                    </span>
+                  </div>
+                )}
                 <button
                   onClick={() => {
                     setMessage('');
                     finalTranscriptRef.current = '';
+                    textareaRef.current?.focus();
                   }}
-                  className="p-3 bg-gray-100 text-gray-400 hover:text-red-500 rounded-xl transition-all"
-                  title="Effacer"
+                  className="p-3 bg-gray-100 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
+                  title="Effacer le message"
                 >
                   <Eraser size={20} />
                 </button>
