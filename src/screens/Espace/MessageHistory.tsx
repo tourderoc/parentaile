@@ -14,7 +14,11 @@ import {
   User,
   ChevronDown,
   Baby,
-  Calendar
+  Calendar,
+  Stethoscope,
+  Send,
+  AlertCircle,
+  X
 } from 'lucide-react';
 
 interface Child {
@@ -25,9 +29,35 @@ interface Child {
 interface Message {
   id: string;
   content: string;
-  status: 'sent' | 'delivered' | 'read';
+  status: 'pending' | 'replied' | 'treated';
   createdAt: Date;
+  // Réponse du médecin
+  replyContent?: string;
+  replyDate?: Date;
+  replyAuthor?: string;
 }
+
+// Configuration des statuts
+const statusConfig = {
+  pending: {
+    label: 'En attente',
+    color: 'bg-orange-100 text-orange-600',
+    icon: Clock,
+    description: 'Réponse attendue sous 48h'
+  },
+  replied: {
+    label: 'Réponse reçue',
+    color: 'bg-blue-100 text-blue-600',
+    icon: CheckCheck,
+    description: 'Le médecin a répondu'
+  },
+  treated: {
+    label: 'Traité',
+    color: 'bg-green-100 text-green-600',
+    icon: Check,
+    description: 'Demande traitée'
+  }
+};
 
 export const MessageHistory = () => {
   const navigate = useNavigate();
@@ -39,6 +69,7 @@ export const MessageHistory = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [childrenLoaded, setChildrenLoaded] = useState(false);
+  const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
 
   useEffect(() => {
     const loadChildren = async () => {
@@ -98,6 +129,8 @@ export const MessageHistory = () => {
       setIsLoading(true);
 
       try {
+        console.log('🔍 Recherche messages pour tokenId:', selectedChild.tokenId);
+
         const messagesRef = collection(db, 'messages');
         const q = query(
           messagesRef,
@@ -106,12 +139,30 @@ export const MessageHistory = () => {
         );
         const snapshot = await getDocs(q);
 
-        const messagesData: Message[] = snapshot.docs.map(doc => ({
-          id: doc.id,
-          content: doc.data().content,
-          status: doc.data().status || 'sent',
-          createdAt: doc.data().createdAt?.toDate?.() || new Date()
-        }));
+        console.log('📨 Messages trouvés:', snapshot.docs.length);
+
+        const messagesData: Message[] = snapshot.docs.map(doc => {
+          const data = doc.data();
+          // Convertir les anciens statuts vers les nouveaux
+          let status: Message['status'] = 'pending';
+          if (data.status === 'treated' || data.status === 'read') {
+            status = 'treated';
+          } else if (data.replyContent) {
+            status = 'replied';
+          } else if (data.status === 'replied') {
+            status = 'replied';
+          }
+
+          return {
+            id: doc.id,
+            content: data.content,
+            status,
+            createdAt: data.createdAt?.toDate?.() || new Date(),
+            replyContent: data.replyContent,
+            replyDate: data.replyDate?.toDate?.(),
+            replyAuthor: data.replyAuthor || 'Dr.'
+          };
+        });
 
         setMessages(messagesData);
       } catch (err) {
@@ -124,24 +175,23 @@ export const MessageHistory = () => {
     loadMessages();
   }, [selectedChild, childrenLoaded]);
 
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'read':
-        return <CheckCheck className="w-4 h-4 text-blue-500" />;
-      case 'delivered':
-        return <CheckCheck className="w-4 h-4 text-gray-400" />;
-      default:
-        return <Check className="w-4 h-4 text-orange-500" />;
+  const formatDate = (date: Date) => {
+    const now = new Date();
+    const diff = now.getTime() - date.getTime();
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+
+    if (days === 0) {
+      return `Aujourd'hui à ${date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`;
+    } else if (days === 1) {
+      return `Hier à ${date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`;
+    } else if (days < 7) {
+      return date.toLocaleDateString('fr-FR', { weekday: 'long', hour: '2-digit', minute: '2-digit' });
     }
+    return date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
   };
 
-  const formatDate = (date: Date) => {
-    return date.toLocaleDateString('fr-FR', {
-      day: 'numeric',
-      month: 'short',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+  const formatShortDate = (date: Date) => {
+    return date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
   };
 
   return (
@@ -250,40 +300,180 @@ export const MessageHistory = () => {
              </button>
           </motion.div>
         ) : (
-          <div className="space-y-4">
-             {messages.map((msg, idx) => (
-               <motion.div
-                 key={msg.id}
-                 initial={{ opacity: 0, y: 20 }}
-                 animate={{ opacity: 1, y: 0 }}
-                 transition={{ delay: idx * 0.1 }}
-                 className="glass rounded-3xl p-6 border-2 border-white shadow-glass hover:shadow-premium transition-all space-y-4"
-               >
-                 <div className="flex items-center justify-between pb-3 border-b border-black/5">
-                    <div className="flex items-center gap-2 text-gray-400">
-                       <Calendar size={14} />
-                       <span className="text-[10px] font-bold uppercase tracking-widest">{formatDate(msg.createdAt)}</span>
-                    </div>
-                    <div className="bg-orange-100 px-3 py-1 rounded-full flex items-center gap-1.5">
-                       {getStatusIcon(msg.status)}
-                       <span className="text-[9px] font-extrabold text-orange-600 uppercase tracking-tight">
-                         {msg.status === 'read' ? 'Lu' : 'Envoyé'}
-                       </span>
-                    </div>
-                 </div>
-                 <p className="text-gray-700 font-medium leading-relaxed">{msg.content}</p>
-                 <div className="flex items-center gap-2 pt-2">
-                    <div className="w-6 h-6 bg-orange-50 rounded-lg flex items-center justify-center text-orange-400">
-                       <Clock size={12} />
-                    </div>
-                    <span className="text-[10px] font-bold text-orange-400 uppercase tracking-widest">
-                      Réponse attendue sous 48h
-                    </span>
-                 </div>
-               </motion.div>
-             ))}
+          <div className="space-y-3">
+             {/* Liste compacte des messages (inbox style) */}
+             {messages.map((msg, idx) => {
+               const config = statusConfig[msg.status];
+               const StatusIcon = config.icon;
+               const hasReply = !!msg.replyContent;
+
+               return (
+                 <motion.button
+                   key={msg.id}
+                   initial={{ opacity: 0, y: 10 }}
+                   animate={{ opacity: 1, y: 0 }}
+                   transition={{ delay: idx * 0.03 }}
+                   onClick={() => setSelectedMessage(msg)}
+                   className="w-full bg-white rounded-2xl p-4 border-2 border-gray-100 shadow-sm hover:border-orange-200 hover:shadow-md transition-all text-left"
+                 >
+                   <div className="flex items-start gap-3">
+                     {/* Indicateur statut */}
+                     <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                       hasReply ? 'bg-blue-100 text-blue-500' : 'bg-orange-100 text-orange-500'
+                     }`}>
+                       {hasReply ? <Stethoscope size={18} /> : <Send size={16} />}
+                     </div>
+
+                     {/* Contenu */}
+                     <div className="flex-1 min-w-0">
+                       <div className="flex items-center justify-between mb-1">
+                         <span className="text-[10px] text-gray-400 font-medium">
+                           {formatShortDate(msg.createdAt)}
+                         </span>
+                         <div className={`px-2 py-0.5 rounded-full flex items-center gap-1 ${config.color}`}>
+                           <StatusIcon size={10} />
+                           <span className="text-[8px] font-bold uppercase">
+                             {config.label}
+                           </span>
+                         </div>
+                       </div>
+
+                       {/* Aperçu du message */}
+                       <p className="text-gray-700 font-medium text-sm line-clamp-2">
+                         {msg.content}
+                       </p>
+
+                       {/* Indicateur réponse */}
+                       {hasReply && (
+                         <div className="flex items-center gap-1.5 mt-2 text-blue-500">
+                           <CheckCheck size={12} />
+                           <span className="text-[10px] font-bold">Réponse du médecin</span>
+                         </div>
+                       )}
+                     </div>
+
+                     {/* Chevron */}
+                     <ChevronDown size={16} className="text-gray-300 -rotate-90 flex-shrink-0 mt-2" />
+                   </div>
+                 </motion.button>
+               );
+             })}
           </div>
         )}
+
+        {/* Modal détail message */}
+        <AnimatePresence>
+          {selectedMessage && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center"
+              onClick={() => setSelectedMessage(null)}
+            >
+              <motion.div
+                initial={{ y: 100, scale: 0.95 }}
+                animate={{ y: 0, scale: 1 }}
+                exit={{ y: 100, scale: 0.95 }}
+                onClick={(e) => e.stopPropagation()}
+                className="bg-white rounded-t-[2rem] sm:rounded-[2rem] w-full max-w-md max-h-[85vh] overflow-y-auto"
+              >
+                {/* Header */}
+                <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between">
+                  <h3 className="font-bold text-gray-800">Détail du message</h3>
+                  <button
+                    onClick={() => setSelectedMessage(null)}
+                    className="p-2 bg-gray-100 rounded-xl text-gray-400"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+
+                <div className="p-6 space-y-6">
+                  {/* Réponse du médecin (si existe) */}
+                  {selectedMessage.replyContent && (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center text-blue-500">
+                          <Stethoscope size={16} />
+                        </div>
+                        <div>
+                          <p className="text-[10px] font-bold text-blue-600 uppercase tracking-widest">
+                            {selectedMessage.replyAuthor || 'Réponse du médecin'}
+                          </p>
+                          {selectedMessage.replyDate && (
+                            <p className="text-[10px] text-gray-400">
+                              {formatDate(selectedMessage.replyDate)}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="bg-blue-50 rounded-2xl p-4 border border-blue-100">
+                        <p className="text-blue-800 font-medium leading-relaxed">
+                          {selectedMessage.replyContent}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Message du parent */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 bg-orange-100 rounded-lg flex items-center justify-center text-orange-500">
+                          <Send size={14} />
+                        </div>
+                        <div>
+                          <p className="text-[10px] font-bold text-orange-600 uppercase tracking-widest">
+                            Votre message
+                          </p>
+                          <p className="text-[10px] text-gray-400">
+                            {formatDate(selectedMessage.createdAt)}
+                          </p>
+                        </div>
+                      </div>
+                      <div className={`px-2 py-1 rounded-full flex items-center gap-1 ${statusConfig[selectedMessage.status].color}`}>
+                        {(() => {
+                          const StatusIcon = statusConfig[selectedMessage.status].icon;
+                          return <StatusIcon size={12} />;
+                        })()}
+                        <span className="text-[9px] font-bold uppercase">
+                          {statusConfig[selectedMessage.status].label}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100">
+                      <p className="text-gray-700 font-medium leading-relaxed">
+                        {selectedMessage.content}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Info statut */}
+                  {selectedMessage.status === 'pending' && (
+                    <div className="flex items-center gap-3 p-4 bg-orange-50 rounded-2xl border border-orange-100">
+                      <AlertCircle size={20} className="text-orange-500 flex-shrink-0" />
+                      <div>
+                        <p className="text-orange-700 font-bold text-sm">En attente de réponse</p>
+                        <p className="text-orange-600 text-xs">Le médecin répondra sous 48h</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Footer */}
+                <div className="sticky bottom-0 bg-white border-t border-gray-100 p-4">
+                  <button
+                    onClick={() => setSelectedMessage(null)}
+                    className="w-full h-12 bg-gray-100 text-gray-600 rounded-2xl font-bold"
+                  >
+                    Fermer
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         <p className="text-center text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-12 px-8">
            Les réponses de votre médecin sont transmises par email.

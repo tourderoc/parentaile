@@ -150,10 +150,10 @@ export const EspaceRegister: React.FC<EspaceRegisterProps> = ({ tokenId: initial
   };
 
   return (
-    <div className="flex items-center justify-center relative overflow-hidden">
+    <div className="flex items-center justify-center relative overflow-hidden pb-32">
       <div className="absolute top-[-20%] right-[-20%] w-96 h-96 bg-orange-200/20 rounded-full blur-[100px] animate-float" />
-      
-      <div className="max-w-md w-full z-10">
+
+      <div className="max-w-md w-full z-10 px-4">
         <AnimatePresence mode="wait">
           {step === 'auth' ? (
             <motion.div

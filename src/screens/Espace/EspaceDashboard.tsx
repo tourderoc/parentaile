@@ -9,7 +9,6 @@ import {
   Plus,
   MessageSquare,
   User,
-  Settings,
   Baby,
   ChevronRight,
   ShieldCheck
@@ -208,33 +207,6 @@ export const EspaceDashboard = () => {
           </div>
         </motion.div>
 
-        {/* Quick Settings */}
-        <motion.div
-           initial={{ opacity: 0, y: 20 }}
-           animate={{ opacity: 1, y: 0 }}
-           transition={{ delay: 0.3 }}
-           className="grid grid-cols-2 gap-4"
-        >
-          <button
-            onClick={() => navigate('/espace/parametres')}
-            className="glass p-4 rounded-2xl flex flex-col items-center gap-2 hover:bg-white/80 transition-all shadow-glass"
-          >
-            <div className="w-10 h-10 bg-gray-100 rounded-xl flex items-center justify-center text-gray-500">
-              <Settings size={20} />
-            </div>
-            <span className="text-[10px] font-bold uppercase tracking-widest text-gray-500">Paramètres</span>
-          </button>
-          
-          <button
-            onClick={() => navigate('/espace/profile-settings')} // Assume this route or use /espace/dashboard for simple profile
-            className="glass p-4 rounded-2xl flex flex-col items-center gap-2 hover:bg-white/80 transition-all shadow-glass opacity-50 cursor-not-allowed"
-          >
-            <div className="w-10 h-10 bg-gray-100 rounded-xl flex items-center justify-center text-gray-500">
-              <ShieldCheck size={20} />
-            </div>
-            <span className="text-[10px] font-bold uppercase tracking-widest text-gray-500">Sécurité</span>
-          </button>
-        </motion.div>
 
       </main>
 

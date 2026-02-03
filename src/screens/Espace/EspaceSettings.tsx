@@ -16,6 +16,7 @@ import {
 } from 'firebase/firestore';
 import { validateToken, markTokenAsUsed } from '../../lib/tokenService';
 import { BottomNav } from '../../components/ui/BottomNav';
+import { QRScanner } from '../../components/QRScanner';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft,
@@ -526,7 +527,7 @@ export const EspaceSettings = () => {
               animate={{ y: 0, scale: 1 }}
               exit={{ y: 100, scale: 0.9 }}
               onClick={(e: React.MouseEvent) => e.stopPropagation()}
-              className="bg-white rounded-[2.5rem] w-full max-w-md p-8 shadow-premium pb-12 sm:pb-8"
+              className="bg-white rounded-[2.5rem] w-full max-w-md p-8 shadow-premium pb-28 sm:pb-8 mb-20 sm:mb-0"
             >
               <div className="flex items-center justify-between mb-8">
                  <h3 className="text-2xl font-extrabold text-gray-800 tracking-tight">Ajouter un enfant</h3>
@@ -542,11 +543,17 @@ export const EspaceSettings = () => {
                          <p className="text-white/60 text-xs">Entrez manuellement le token</p>
                       </div>
                    </button>
-                   <button className="w-full h-24 bg-gray-50 border-2 border-gray-100 rounded-[2rem] flex items-center gap-6 px-6 opacity-60 cursor-not-allowed">
-                      <div className="w-14 h-14 bg-gray-200 rounded-2xl flex items-center justify-center text-gray-400"><QrCode size={28}/></div>
+                   <button
+                      onClick={() => {
+                        setShowAddChild(false);
+                        setAddMode('scan');
+                      }}
+                      className="w-full h-24 bg-gray-50 border-2 border-gray-100 rounded-[2rem] flex items-center gap-6 px-6 hover:bg-gray-100 hover:border-gray-200 transition-all group"
+                   >
+                      <div className="w-14 h-14 bg-blue-100 rounded-2xl flex items-center justify-center text-blue-500 group-hover:bg-blue-200 transition-colors"><QrCode size={28}/></div>
                       <div className="text-left">
                          <p className="text-gray-800 font-extrabold text-lg">Scanner le QR</p>
-                         <p className="text-gray-400 text-xs">Bientôt disponible</p>
+                         <p className="text-gray-400 text-xs">Utilisez la caméra</p>
                       </div>
                    </button>
                 </div>
@@ -784,6 +791,22 @@ export const EspaceSettings = () => {
       </AnimatePresence>
 
       <BottomNav />
+
+      {/* QR Scanner (plein écran) */}
+      <AnimatePresence>
+        {addMode === 'scan' && (
+          <QRScanner
+            onScan={(scannedToken) => {
+              setNewToken(scannedToken);
+              setAddMode('manual');
+              setShowAddChild(true);
+            }}
+            onClose={() => {
+              setAddMode('choice');
+            }}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 };
