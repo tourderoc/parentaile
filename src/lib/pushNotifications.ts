@@ -14,7 +14,7 @@ import { db } from './firebase';
 import { initializeApp, getApps } from 'firebase/app';
 
 // Clé VAPID publique (Firebase Console > Cloud Messaging > Web Push certificates)
-const VAPID_KEY = '_t8Tx0kzw5-8bjiZ-0nUtOLYPpuAjCBVHSpE-nxqzFk';
+const VAPID_KEY = 'BM_HWgoaVmHT8E44P9D4gHEf52594f6xUKO67r_HEnwmFusTwGP04BRy-fBxSw1YwLOTYicQOeXLOA1B5L94gLA';
 
 // ============================================
 // TYPES
