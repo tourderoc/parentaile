@@ -15,10 +15,10 @@ export const BottomNav: React.FC = () => {
       path: '/espace/messages',
     },
     {
-      id: 'profile',
-      label: 'Mon Profil',
+      id: 'contact',
+      label: 'Contact',
       icon: User,
-      path: '/espace/dashboard', // Dashboard acts as the primary profile/home view
+      path: '/espace/dashboard', // Dashboard acts as the primary contact/home view
     },
     {
       id: 'settings',

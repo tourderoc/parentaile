@@ -200,6 +200,55 @@ export async function getUnreadCount(tokenIds: string[]): Promise<number> {
 }
 
 /**
+ * Récupère les notifications liées à un message spécifique
+ * @param messageId - L'ID du message
+ * @returns Liste des notifications liées à ce message
+ */
+export async function getNotificationsForMessage(messageId: string): Promise<DoctorNotification[]> {
+  if (!messageId) return [];
+
+  try {
+    const notificationsRef = collection(db, 'notifications');
+    // Note: Pas de orderBy pour éviter de nécessiter un index composite
+    const q = query(
+      notificationsRef,
+      where('replyToMessageId', '==', messageId)
+    );
+
+    console.log('[DoctorNotifications] Recherche notifications pour messageId:', messageId);
+    const snapshot = await getDocs(q);
+    console.log('[DoctorNotifications] Trouvé:', snapshot.docs.length, 'notifications');
+
+    const notifications = snapshot.docs.map(docSnap => {
+      const data = docSnap.data();
+      return {
+        id: docSnap.id,
+        type: data.type as DoctorNotificationType,
+        title: data.title || '',
+        body: data.body || '',
+        targetParentId: data.targetParentId || '',
+        tokenId: data.tokenId || '',
+        replyToMessageId: data.replyToMessageId,
+        createdAt: data.createdAt instanceof Timestamp
+          ? data.createdAt.toDate()
+          : new Date(data.createdAt || Date.now()),
+        read: data.read || false,
+        senderName: data.senderName || 'Votre médecin'
+      };
+    });
+
+    // Trier par date décroissante (fait en JS car pas d'orderBy dans la query)
+    return notifications.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+
+  } catch (error: any) {
+    console.error('[DoctorNotifications] Erreur récupération par message:', error);
+    console.error('[DoctorNotifications] Code erreur:', error?.code);
+    console.error('[DoctorNotifications] Message:', error?.message);
+    return [];
+  }
+}
+
+/**
  * Retourne l'icône appropriée selon le type de notification
  */
 export function getNotificationIcon(type: DoctorNotificationType): string {
@@ -228,6 +277,7 @@ export function getNotificationColor(type: DoctorNotificationType): string {
 export default {
   subscribeToNotifications,
   getNotificationsForTokens,
+  getNotificationsForMessage,
   markNotificationAsRead,
   getUnreadCount,
   getNotificationIcon,

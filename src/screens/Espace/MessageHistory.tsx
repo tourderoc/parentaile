@@ -17,8 +17,18 @@ import {
   Stethoscope,
   Send,
   AlertCircle,
-  X
+  X,
+  Mail,
+  ExternalLink,
+  Bell,
+  Zap
 } from 'lucide-react';
+import {
+  DoctorNotification,
+  getNotificationsForMessage,
+  getNotificationIcon,
+  markNotificationAsRead
+} from '../../lib/doctorNotifications';
 
 interface Child {
   tokenId: string;
@@ -69,6 +79,8 @@ export const MessageHistory = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [childrenLoaded, setChildrenLoaded] = useState(false);
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
+  const [messageNotifications, setMessageNotifications] = useState<DoctorNotification[]>([]);
+  const [loadingNotifications, setLoadingNotifications] = useState(false);
 
   useEffect(() => {
     const loadChildren = async () => {
@@ -173,6 +185,33 @@ export const MessageHistory = () => {
 
     loadMessages();
   }, [selectedChild, childrenLoaded]);
+
+  // Charger les notifications quand un message est sélectionné
+  useEffect(() => {
+    const loadNotifications = async () => {
+      if (!selectedMessage) {
+        setMessageNotifications([]);
+        return;
+      }
+
+      setLoadingNotifications(true);
+      try {
+        const notifications = await getNotificationsForMessage(selectedMessage.id);
+        setMessageNotifications(notifications);
+
+        // Marquer comme lues
+        for (const notif of notifications.filter(n => !n.read)) {
+          await markNotificationAsRead(notif.id);
+        }
+      } catch (error) {
+        console.error('Erreur chargement notifications:', error);
+      } finally {
+        setLoadingNotifications(false);
+      }
+    };
+
+    loadNotifications();
+  }, [selectedMessage]);
 
   const formatDate = (date: Date) => {
     const now = new Date();
@@ -349,6 +388,14 @@ export const MessageHistory = () => {
                            <span className="text-[10px] font-bold">Réponse du médecin</span>
                          </div>
                        )}
+
+                       {/* Badge notification (visible sur les messages avec statut replied mais sans contenu de réponse) */}
+                       {msg.status === 'replied' && !hasReply && (
+                         <div className="flex items-center gap-1.5 mt-2 text-green-600">
+                           <Bell size={12} />
+                           <span className="text-[10px] font-bold">Notification reçue - Voir détails</span>
+                         </div>
+                       )}
                      </div>
 
                      {/* Chevron */}
@@ -389,8 +436,9 @@ export const MessageHistory = () => {
                 </div>
 
                 <div className="p-6 space-y-6">
-                  {/* Réponse du médecin (si existe) */}
-                  {selectedMessage.replyContent && (
+                  {/* Réponse du médecin (si existe et ce n'est pas juste un marqueur email) */}
+                  {selectedMessage.replyContent &&
+                   !selectedMessage.replyContent.includes('[Réponse envoyée par email]') && (
                     <div className="space-y-2">
                       <div className="flex items-center gap-2">
                         <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center text-blue-500">
@@ -412,6 +460,88 @@ export const MessageHistory = () => {
                           {selectedMessage.replyContent}
                         </p>
                       </div>
+                    </div>
+                  )}
+
+                  {/* Notifications du médecin liées à ce message */}
+                  {loadingNotifications ? (
+                    <div className="flex items-center justify-center py-4">
+                      <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+                    </div>
+                  ) : messageNotifications.length > 0 && (
+                    <div className="space-y-3">
+                      {messageNotifications.map((notif) => (
+                        <div
+                          key={notif.id}
+                          className={`rounded-2xl p-4 border-2 ${
+                            notif.type === 'EmailReply'
+                              ? 'bg-green-50 border-green-200'
+                              : notif.type === 'Quick'
+                              ? 'bg-orange-50 border-orange-200'
+                              : 'bg-blue-50 border-blue-200'
+                          }`}
+                        >
+                          <div className="flex items-start gap-3">
+                            {/* Icône type */}
+                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-2xl flex-shrink-0 ${
+                              notif.type === 'EmailReply'
+                                ? 'bg-green-100'
+                                : notif.type === 'Quick'
+                                ? 'bg-orange-100'
+                                : 'bg-blue-100'
+                            }`}>
+                              {getNotificationIcon(notif.type)}
+                            </div>
+
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className={`text-[10px] font-bold uppercase tracking-widest ${
+                                  notif.type === 'EmailReply'
+                                    ? 'text-green-600'
+                                    : notif.type === 'Quick'
+                                    ? 'text-orange-600'
+                                    : 'text-blue-600'
+                                }`}>
+                                  {notif.type === 'EmailReply' ? 'Réponse reçue' : notif.senderName}
+                                </span>
+                                <span className="text-[10px] text-gray-400">
+                                  {formatDate(notif.createdAt)}
+                                </span>
+                              </div>
+
+                              <p className={`font-bold text-sm ${
+                                notif.type === 'EmailReply'
+                                  ? 'text-green-800'
+                                  : notif.type === 'Quick'
+                                  ? 'text-orange-800'
+                                  : 'text-blue-800'
+                              }`}>
+                                {notif.title}
+                              </p>
+
+                              <p className={`text-sm mt-1 ${
+                                notif.type === 'EmailReply'
+                                  ? 'text-green-700'
+                                  : notif.type === 'Quick'
+                                  ? 'text-orange-700'
+                                  : 'text-blue-700'
+                              }`}>
+                                {notif.body}
+                              </p>
+
+                              {/* Info supplémentaire pour EmailReply */}
+                              {notif.type === 'EmailReply' && (
+                                <div className="flex items-center gap-2 mt-3 px-3 py-2 bg-green-100 rounded-xl">
+                                  <Mail size={16} className="text-green-600" />
+                                  <span className="text-green-700 text-xs font-medium">
+                                    Consultez votre boîte mail pour lire la réponse complète
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   )}
 

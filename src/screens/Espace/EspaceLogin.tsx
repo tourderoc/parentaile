@@ -4,14 +4,18 @@
  * Pour les parents qui ont déjà un compte
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { auth } from '../../lib/firebase';
 import { signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, sendPasswordResetEmail } from 'firebase/auth';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
-import { Eye, EyeOff, Loader2, Home, QrCode, Mail, X, CheckCircle, ArrowLeft } from 'lucide-react';
+import { Eye, EyeOff, Loader2, Home, QrCode, Mail, X, CheckCircle, ArrowLeft, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+
+// Clés localStorage
+const REMEMBER_EMAIL_KEY = 'parentaile_remember_email';
+const REMEMBERED_EMAIL_KEY = 'parentaile_saved_email';
 
 interface EspaceLoginProps {
   onRegisterWithToken: (token: string) => void;
@@ -26,6 +30,7 @@ export const EspaceLogin: React.FC<EspaceLoginProps> = ({ onRegisterWithToken })
   const [error, setError] = useState<string | null>(null);
   const [showTokenInput, setShowTokenInput] = useState(false);
   const [tokenInput, setTokenInput] = useState('');
+  const [rememberMe, setRememberMe] = useState(false);
 
   // Forgot password states
   const [showForgotPassword, setShowForgotPassword] = useState(false);
@@ -34,6 +39,16 @@ export const EspaceLogin: React.FC<EspaceLoginProps> = ({ onRegisterWithToken })
   const [resetSuccess, setResetSuccess] = useState(false);
   const [resetError, setResetError] = useState<string | null>(null);
 
+  // Charger l'email sauvegardé au chargement
+  useEffect(() => {
+    const savedRemember = localStorage.getItem(REMEMBER_EMAIL_KEY);
+    const savedEmail = localStorage.getItem(REMEMBERED_EMAIL_KEY);
+    if (savedRemember === 'true' && savedEmail) {
+      setEmail(savedEmail);
+      setRememberMe(true);
+    }
+  }, []);
+
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -41,6 +56,16 @@ export const EspaceLogin: React.FC<EspaceLoginProps> = ({ onRegisterWithToken })
 
     try {
       await signInWithEmailAndPassword(auth, email, password);
+
+      // Sauvegarder ou effacer l'email selon "Se souvenir de moi"
+      if (rememberMe) {
+        localStorage.setItem(REMEMBER_EMAIL_KEY, 'true');
+        localStorage.setItem(REMEMBERED_EMAIL_KEY, email);
+      } else {
+        localStorage.removeItem(REMEMBER_EMAIL_KEY);
+        localStorage.removeItem(REMEMBERED_EMAIL_KEY);
+      }
+
       navigate('/espace/dashboard');
     } catch (err: any) {
       console.error('Firebase Auth Error:', err.code, err.message);
@@ -182,6 +207,27 @@ export const EspaceLogin: React.FC<EspaceLoginProps> = ({ onRegisterWithToken })
                   {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
               </div>
+            </div>
+
+            {/* Se souvenir de moi */}
+            <div className="flex items-center">
+              <button
+                type="button"
+                onClick={() => setRememberMe(!rememberMe)}
+                className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors mr-2 ${
+                  rememberMe
+                    ? 'bg-orange-500 border-orange-500'
+                    : 'border-gray-300 hover:border-orange-400'
+                }`}
+              >
+                {rememberMe && <Check size={14} className="text-white" />}
+              </button>
+              <label
+                onClick={() => setRememberMe(!rememberMe)}
+                className="text-sm text-gray-600 cursor-pointer select-none"
+              >
+                Se souvenir de moi
+              </label>
             </div>
 
             <Button

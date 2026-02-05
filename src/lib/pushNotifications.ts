@@ -12,6 +12,7 @@ import { getMessaging, getToken, onMessage, isSupported } from 'firebase/messagi
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from './firebase';
 import { initializeApp, getApps } from 'firebase/app';
+import { areNotificationsEnabled, playNotificationSound } from './userPreferences';
 
 // Clé VAPID publique (Firebase Console > Cloud Messaging > Web Push certificates)
 const VAPID_KEY = 'BM_HWgoaVmHT8E44P9D4gHEf52594f6xUKO67r_HEnwmFusTwGP04BRy-fBxSw1YwLOTYicQOeXLOA1B5L94gLA';
@@ -180,11 +181,20 @@ export function onForegroundNotification(callback: NotificationCallback): () => 
       onMessage(messaging, (payload) => {
         console.log('[PushNotifications] Notification en premier plan:', payload);
 
+        // Vérifier si les notifications sont activées
+        if (!areNotificationsEnabled()) {
+          console.log('[PushNotifications] Notifications désactivées par l\'utilisateur');
+          return;
+        }
+
         const notificationPayload: PushNotificationPayload = {
           title: payload.notification?.title || 'Notification',
           body: payload.notification?.body || '',
           data: payload.data as Record<string, string>
         };
+
+        // Jouer le son de notification
+        playNotificationSound();
 
         // Appeler tous les callbacks enregistrés
         foregroundCallbacks.forEach(cb => cb(notificationPayload));

@@ -8,7 +8,7 @@
  * - Broadcasts (messages à tous les parents)
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Bell, X, Check, ChevronDown, ChevronUp } from 'lucide-react';
 import {
@@ -18,6 +18,7 @@ import {
   getNotificationIcon,
   getNotificationColor
 } from '../../lib/doctorNotifications';
+import { areNotificationsEnabled, playNotificationSound } from '../../lib/userPreferences';
 
 interface DoctorNotificationsProps {
   tokenIds: string[];
@@ -28,9 +29,18 @@ export const DoctorNotifications = ({ tokenIds, maxVisible = 3 }: DoctorNotifica
   const [notifications, setNotifications] = useState<DoctorNotification[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showAll, setShowAll] = useState(false);
+  const previousUnreadCountRef = useRef<number | null>(null);
+  const isFirstLoadRef = useRef(true);
 
   useEffect(() => {
     const loadNotifications = async () => {
+      // Vérifier si les notifications sont activées
+      if (!areNotificationsEnabled()) {
+        setNotifications([]);
+        setIsLoading(false);
+        return;
+      }
+
       if (tokenIds.length === 0) {
         setNotifications([]);
         setIsLoading(false);
@@ -39,6 +49,18 @@ export const DoctorNotifications = ({ tokenIds, maxVisible = 3 }: DoctorNotifica
 
       setIsLoading(true);
       const data = await getNotificationsForTokens(tokenIds);
+      const unreadCount = data.filter(n => !n.read).length;
+
+      // Jouer un son si nouvelles notifications (après le premier chargement)
+      if (!isFirstLoadRef.current &&
+          previousUnreadCountRef.current !== null &&
+          unreadCount > previousUnreadCountRef.current) {
+        playNotificationSound();
+      }
+
+      previousUnreadCountRef.current = unreadCount;
+      isFirstLoadRef.current = false;
+
       setNotifications(data);
       setIsLoading(false);
     };

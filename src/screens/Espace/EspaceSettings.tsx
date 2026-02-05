@@ -35,8 +35,16 @@ import {
   Mail,
   Key,
   Eye,
-  EyeOff
+  EyeOff,
+  Bell,
+  Volume2
 } from 'lucide-react';
+import {
+  getUserPreferences,
+  setNotificationsEnabled,
+  setNotificationSoundEnabled,
+  playNotificationSound
+} from '../../lib/userPreferences';
 
 interface Child {
   tokenId: string;
@@ -73,8 +81,16 @@ export const EspaceSettings = () => {
   const [editError, setEditError] = useState<string | null>(null);
   const [editSuccess, setEditSuccess] = useState<string | null>(null);
 
+  // Notification preferences
+  const [notificationsEnabled, setNotificationsEnabledState] = useState(true);
+  const [soundEnabled, setSoundEnabledState] = useState(true);
+
   useEffect(() => {
     loadData();
+    // Charger les préférences de notifications
+    const prefs = getUserPreferences();
+    setNotificationsEnabledState(prefs.notificationsEnabled);
+    setSoundEnabledState(prefs.notificationSoundEnabled);
   }, [navigate]);
 
   const loadData = async () => {
@@ -201,6 +217,24 @@ export const EspaceSettings = () => {
   const handleLogout = async () => {
     await signOut(auth);
     navigate('/welcome');
+  };
+
+  // Gérer le toggle des notifications
+  const handleNotificationsToggle = () => {
+    const newValue = !notificationsEnabled;
+    setNotificationsEnabledState(newValue);
+    setNotificationsEnabled(newValue);
+  };
+
+  // Gérer le toggle du son
+  const handleSoundToggle = () => {
+    const newValue = !soundEnabled;
+    setSoundEnabledState(newValue);
+    setNotificationSoundEnabled(newValue);
+    // Jouer un son de test si on active
+    if (newValue) {
+      setTimeout(() => playNotificationSound(), 100);
+    }
   };
 
   // Ouvrir modal d'édition
@@ -508,6 +542,70 @@ export const EspaceSettings = () => {
                   <ChevronRight size={20} className="text-gray-300 group-hover:translate-x-1 transition-transform" />
               </button>
            </div>
+        </section>
+
+        {/* Section Notifications */}
+        <section className="space-y-4">
+           <h2 className="text-xl font-extrabold text-gray-800 tracking-tight px-1">Notifications</h2>
+           <div className="glass rounded-[2rem] border-2 border-white shadow-glass overflow-hidden">
+              {/* Toggle Notifications */}
+              <button
+                 onClick={handleNotificationsToggle}
+                 className="w-full p-6 flex items-center gap-4 border-b border-black/5 hover:bg-orange-50/50 transition-colors group"
+              >
+                 <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-colors ${
+                   notificationsEnabled ? 'bg-orange-100 text-orange-500' : 'bg-gray-100 text-gray-400'
+                 }`}>
+                    <Bell size={24} />
+                 </div>
+                 <div className="flex-1 text-left">
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Notifications</p>
+                    <p className="text-lg font-extrabold text-gray-800">
+                      {notificationsEnabled ? 'Activées' : 'Désactivées'}
+                    </p>
+                 </div>
+                 {/* Toggle Switch */}
+                 <div className={`w-14 h-8 rounded-full p-1 transition-colors ${
+                   notificationsEnabled ? 'bg-orange-500' : 'bg-gray-300'
+                 }`}>
+                   <div className={`w-6 h-6 bg-white rounded-full shadow-md transition-transform ${
+                     notificationsEnabled ? 'translate-x-6' : 'translate-x-0'
+                   }`} />
+                 </div>
+              </button>
+
+              {/* Toggle Son */}
+              <button
+                 onClick={handleSoundToggle}
+                 disabled={!notificationsEnabled}
+                 className={`w-full p-6 flex items-center gap-4 transition-colors ${
+                   notificationsEnabled ? 'hover:bg-gray-50' : 'opacity-50 cursor-not-allowed'
+                 }`}
+              >
+                 <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-colors ${
+                   soundEnabled && notificationsEnabled ? 'bg-blue-100 text-blue-500' : 'bg-gray-100 text-gray-400'
+                 }`}>
+                    <Volume2 size={24} />
+                 </div>
+                 <div className="flex-1 text-left">
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Son</p>
+                    <p className="text-lg font-extrabold text-gray-800">
+                      {soundEnabled ? 'Activé' : 'Désactivé'}
+                    </p>
+                 </div>
+                 {/* Toggle Switch */}
+                 <div className={`w-14 h-8 rounded-full p-1 transition-colors ${
+                   soundEnabled && notificationsEnabled ? 'bg-blue-500' : 'bg-gray-300'
+                 }`}>
+                   <div className={`w-6 h-6 bg-white rounded-full shadow-md transition-transform ${
+                     soundEnabled && notificationsEnabled ? 'translate-x-6' : 'translate-x-0'
+                   }`} />
+                 </div>
+              </button>
+           </div>
+           <p className="text-xs text-gray-400 text-center px-4">
+             Recevez des alertes lorsque votre médecin vous envoie un message
+           </p>
         </section>
       </main>
 
