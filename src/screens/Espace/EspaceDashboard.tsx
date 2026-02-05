@@ -15,6 +15,8 @@ import {
 } from 'lucide-react';
 import { BottomNav } from '../../components/ui/BottomNav';
 import { motion } from 'framer-motion';
+import { DoctorNotifications } from '../../components/ui/DoctorNotifications';
+import { initializePushNotifications } from '../../lib/pushNotifications';
 
 interface Child {
   tokenId: string;
@@ -63,6 +65,18 @@ export const EspaceDashboard = () => {
 
     loadData();
   }, [navigate]);
+
+  // Initialiser les notifications push quand les enfants sont chargés
+  useEffect(() => {
+    if (children.length > 0 && !isLoading) {
+      const tokenIds = children.map(c => c.tokenId);
+      initializePushNotifications(tokenIds).then(success => {
+        if (success) {
+          console.log('[EspaceDashboard] Push notifications initialisées');
+        }
+      });
+    }
+  }, [children, isLoading]);
 
   const handleLogout = async () => {
     await signOut(auth);
@@ -132,6 +146,17 @@ export const EspaceDashboard = () => {
             </div>
           </div>
         </motion.div>
+
+        {/* Doctor Notifications */}
+        {children.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.05 }}
+          >
+            <DoctorNotifications tokenIds={children.map(c => c.tokenId)} />
+          </motion.div>
+        )}
 
         {/* Messaging Quick Action */}
         <motion.div
