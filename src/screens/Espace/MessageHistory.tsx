@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { auth, db } from '../../lib/firebase';
-import { collection, getDocs, query, where, orderBy } from 'firebase/firestore';
+import { collection, getDocs, query, where, orderBy, deleteDoc, doc } from 'firebase/firestore';
 import { BottomNav } from '../../components/ui/BottomNav';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -19,6 +19,7 @@ import {
   AlertCircle,
   X,
   Mail,
+  Trash2,
   ExternalLink,
   Bell,
   Zap
@@ -81,6 +82,8 @@ export const MessageHistory = () => {
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
   const [messageNotifications, setMessageNotifications] = useState<DoctorNotification[]>([]);
   const [loadingNotifications, setLoadingNotifications] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     const loadChildren = async () => {
@@ -230,6 +233,30 @@ export const MessageHistory = () => {
 
   const formatShortDate = (date: Date) => {
     return date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+  };
+
+  // Supprimer un message de Firebase
+  const handleDeleteMessage = async () => {
+    if (!selectedMessage) return;
+    
+    setIsDeleting(true);
+    try {
+      // Supprimer le message de la collection 'messages'
+      await deleteDoc(doc(db, 'messages', selectedMessage.id));
+      
+      // Mettre à jour la liste locale
+      setMessages(prev => prev.filter(m => m.id !== selectedMessage.id));
+      
+      // Fermer les modals
+      setShowDeleteConfirm(false);
+      setSelectedMessage(null);
+      
+      console.log('✅ Message supprimé:', selectedMessage.id);
+    } catch (error) {
+      console.error('❌ Erreur suppression message:', error);
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   return (
@@ -591,7 +618,14 @@ export const MessageHistory = () => {
                 </div>
 
                 {/* Footer */}
-                <div className="sticky bottom-0 bg-white border-t border-gray-100 p-4">
+                <div className="sticky bottom-0 bg-white border-t border-gray-100 p-4 space-y-2">
+                  <button
+                    onClick={() => setShowDeleteConfirm(true)}
+                    className="w-full h-12 bg-red-50 text-red-500 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-red-100 transition-colors"
+                  >
+                    <Trash2 size={18} />
+                    Supprimer ce message
+                  </button>
                   <button
                     onClick={() => setSelectedMessage(null)}
                     className="w-full h-12 bg-gray-100 text-gray-600 rounded-2xl font-bold"
@@ -608,6 +642,63 @@ export const MessageHistory = () => {
            Les réponses de votre médecin sont transmises par email.
         </p>
       </main>
+
+      {/* Modal de confirmation de suppression */}
+      <AnimatePresence>
+        {showDeleteConfirm && selectedMessage && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-[200] flex items-center justify-center px-4"
+            onClick={() => setShowDeleteConfirm(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              onClick={(e: React.MouseEvent) => e.stopPropagation()}
+              className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl"
+            >
+              <div className="text-center">
+                <div className="w-16 h-16 mx-auto bg-red-100 rounded-2xl flex items-center justify-center mb-4">
+                  <Trash2 size={32} className="text-red-500" />
+                </div>
+                <h3 className="text-xl font-bold text-gray-800 mb-2">Supprimer ce message ?</h3>
+                <p className="text-gray-500 text-sm mb-6">
+                  {selectedMessage.replyContent 
+                    ? "Ce message et la réponse du médecin seront supprimés définitivement."
+                    : "Ce message sera supprimé définitivement."}
+                </p>
+              </div>
+              
+              <div className="space-y-2">
+                <button
+                  onClick={handleDeleteMessage}
+                  disabled={isDeleting}
+                  className="w-full h-12 bg-red-500 hover:bg-red-600 text-white rounded-2xl font-bold flex items-center justify-center gap-2 disabled:opacity-50 transition-colors"
+                >
+                  {isDeleting ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    <>
+                      <Trash2 size={18} />
+                      Supprimer
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={() => setShowDeleteConfirm(false)}
+                  disabled={isDeleting}
+                  className="w-full h-12 bg-gray-100 text-gray-600 rounded-2xl font-bold disabled:opacity-50"
+                >
+                  Annuler
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <BottomNav />
     </div>

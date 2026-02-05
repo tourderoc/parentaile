@@ -83,7 +83,9 @@ export const MessageComposer: React.FC = () => {
         if (childFromUrl) {
           const found = childrenData.find(c => c.tokenId === childFromUrl);
           if (found) setSelectedChild(found);
-        } else if (childrenData.length === 1) {
+        }
+        // Toujours sélectionner le premier enfant par défaut s'il n'y a pas de sélection
+        if (!childFromUrl && childrenData.length > 0) {
           setSelectedChild(childrenData[0]);
         }
       } catch (err) {

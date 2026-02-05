@@ -121,15 +121,7 @@ export const Espace = () => {
         );
 
       default:
-        return (
-          <EspaceLogin
-            onRegisterWithToken={(token) => {
-              setTokenId(token);
-              navigate(`/espace?token=${token}`);
-              window.location.reload();
-            }}
-          />
-        );
+        return <EspaceLogin />;
     }
   };
 

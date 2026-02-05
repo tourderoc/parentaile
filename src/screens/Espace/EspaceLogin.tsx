@@ -10,26 +10,20 @@ import { auth } from '../../lib/firebase';
 import { signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, sendPasswordResetEmail } from 'firebase/auth';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
-import { Eye, EyeOff, Loader2, Home, QrCode, Mail, X, CheckCircle, ArrowLeft, Check } from 'lucide-react';
+import { Eye, EyeOff, Loader2, Home, Mail, X, CheckCircle, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 // Clés localStorage
 const REMEMBER_EMAIL_KEY = 'parentaile_remember_email';
 const REMEMBERED_EMAIL_KEY = 'parentaile_saved_email';
 
-interface EspaceLoginProps {
-  onRegisterWithToken: (token: string) => void;
-}
-
-export const EspaceLogin: React.FC<EspaceLoginProps> = ({ onRegisterWithToken }) => {
+export const EspaceLogin: React.FC = () => {
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showTokenInput, setShowTokenInput] = useState(false);
-  const [tokenInput, setTokenInput] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
 
   // Forgot password states
@@ -74,7 +68,7 @@ export const EspaceLogin: React.FC<EspaceLoginProps> = ({ onRegisterWithToken })
       if (err.code === 'auth/user-not-found' ||
           err.code === 'auth/wrong-password' ||
           err.code === 'auth/invalid-credential') {
-        setError('Email ou mot de passe incorrect. Si vous n\'avez pas encore de compte, cliquez sur "J\'ai un code médecin".');
+        setError('Email ou mot de passe incorrect.');
       } else if (err.code === 'auth/invalid-email') {
         setError('Adresse email invalide');
       } else if (err.code === 'auth/too-many-requests') {
@@ -101,13 +95,6 @@ export const EspaceLogin: React.FC<EspaceLoginProps> = ({ onRegisterWithToken })
       setError('Erreur lors de la connexion avec Google');
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  const handleTokenSubmit = () => {
-    const token = tokenInput.trim().toLowerCase();
-    if (token) {
-      onRegisterWithToken(token);
     }
   };
 
@@ -266,39 +253,6 @@ export const EspaceLogin: React.FC<EspaceLoginProps> = ({ onRegisterWithToken })
             <img src="https://www.google.com/favicon.ico" alt="Google" className="w-4 h-4 mr-2" />
             Continuer avec Google
           </Button>
-
-          {/* Token registration */}
-          {!showTokenInput ? (
-            <Button
-              variant="outline"
-              className="w-full"
-              onClick={() => setShowTokenInput(true)}
-            >
-              <QrCode className="w-4 h-4 mr-2" />
-              J'ai un code médecin
-            </Button>
-          ) : (
-            <div className="space-y-3">
-              <p className="text-sm text-gray-600">
-                Saisissez le code fourni par votre médecin :
-              </p>
-              <div className="flex gap-2">
-                <Input
-                  type="text"
-                  value={tokenInput}
-                  onChange={(e) => setTokenInput(e.target.value)}
-                  placeholder="abc123xyz789"
-                  className="text-center"
-                />
-                <Button
-                  onClick={handleTokenSubmit}
-                  className="bg-orange-500 hover:bg-orange-600"
-                >
-                  OK
-                </Button>
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Back to home */}
