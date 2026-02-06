@@ -18,7 +18,7 @@ import {
   getNotificationIcon,
   getNotificationColor
 } from '../../lib/doctorNotifications';
-import { areNotificationsEnabled, playNotificationSound } from '../../lib/userPreferences';
+import { areNotificationsEnabled, playNotificationSound, setAppBadge } from '../../lib/userPreferences';
 
 interface DoctorNotificationsProps {
   tokenIds: string[];
@@ -58,6 +58,9 @@ export const DoctorNotifications = ({ tokenIds, maxVisible = 3 }: DoctorNotifica
         playNotificationSound();
       }
 
+      // Mettre à jour le badge de l'app (PWA)
+      setAppBadge(unreadCount);
+
       previousUnreadCountRef.current = unreadCount;
       isFirstLoadRef.current = false;
 
@@ -75,16 +78,26 @@ export const DoctorNotifications = ({ tokenIds, maxVisible = 3 }: DoctorNotifica
   const handleMarkAsRead = async (notification: DoctorNotification) => {
     const success = await markNotificationAsRead(notification.id);
     if (success) {
-      setNotifications(prev =>
-        prev.map(n => n.id === notification.id ? { ...n, read: true } : n)
+      const updatedNotifications = notifications.map(n =>
+        n.id === notification.id ? { ...n, read: true } : n
       );
+      setNotifications(updatedNotifications);
+
+      // Mettre à jour le badge
+      const newUnreadCount = updatedNotifications.filter(n => !n.read).length;
+      setAppBadge(newUnreadCount);
     }
   };
 
   const handleDismiss = async (notification: DoctorNotification) => {
     await handleMarkAsRead(notification);
     // Animation de suppression
-    setNotifications(prev => prev.filter(n => n.id !== notification.id));
+    const remainingNotifications = notifications.filter(n => n.id !== notification.id);
+    setNotifications(remainingNotifications);
+
+    // Mettre à jour le badge après suppression
+    const newUnreadCount = remainingNotifications.filter(n => !n.read).length;
+    setAppBadge(newUnreadCount);
   };
 
   const unreadNotifications = notifications.filter(n => !n.read);

@@ -28,8 +28,10 @@ import {
   DoctorNotification,
   getNotificationsForMessage,
   getNotificationIcon,
-  markNotificationAsRead
+  markNotificationAsRead,
+  getUnreadCount
 } from '../../lib/doctorNotifications';
+import { setAppBadge } from '../../lib/userPreferences';
 
 interface Child {
   tokenId: string;
@@ -203,8 +205,16 @@ export const MessageHistory = () => {
         setMessageNotifications(notifications);
 
         // Marquer comme lues
-        for (const notif of notifications.filter(n => !n.read)) {
+        const unreadNotifs = notifications.filter(n => !n.read);
+        for (const notif of unreadNotifs) {
           await markNotificationAsRead(notif.id);
+        }
+
+        // Mettre à jour le badge de l'app si des notifications ont été lues
+        if (unreadNotifs.length > 0 && children.length > 0) {
+          const tokenIds = children.map(c => c.tokenId);
+          const newUnreadCount = await getUnreadCount(tokenIds);
+          setAppBadge(newUnreadCount);
         }
       } catch (error) {
         console.error('Erreur chargement notifications:', error);
