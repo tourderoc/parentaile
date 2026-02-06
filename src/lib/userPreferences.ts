@@ -118,52 +118,6 @@ export function playNotificationSound(): void {
   }
 }
 
-// ============================================
-// BADGE DE L'APP (PWA)
-// ============================================
-
-/**
- * Vérifie si l'API Badge est supportée
- */
-export function isBadgeSupported(): boolean {
-  return 'setAppBadge' in navigator;
-}
-
-/**
- * Met à jour le badge de l'app avec le nombre de notifications non lues
- */
-export async function setAppBadge(count: number): Promise<void> {
-  if (!isBadgeSupported()) {
-    console.log('[UserPreferences] Badge API non supportée');
-    return;
-  }
-
-  try {
-    if (count > 0) {
-      await (navigator as any).setAppBadge(count);
-      console.log('[UserPreferences] Badge mis à jour:', count);
-    } else {
-      await (navigator as any).clearAppBadge();
-      console.log('[UserPreferences] Badge effacé');
-    }
-  } catch (error) {
-    console.warn('[UserPreferences] Erreur badge:', error);
-  }
-}
-
-/**
- * Efface le badge de l'app
- */
-export async function clearAppBadge(): Promise<void> {
-  if (!isBadgeSupported()) return;
-
-  try {
-    await (navigator as any).clearAppBadge();
-  } catch (error) {
-    console.warn('[UserPreferences] Erreur clearBadge:', error);
-  }
-}
-
 export default {
   getUserPreferences,
   setNotificationsEnabled,
@@ -171,7 +125,4 @@ export default {
   areNotificationsEnabled,
   isNotificationSoundEnabled,
   playNotificationSound,
-  isBadgeSupported,
-  setAppBadge,
-  clearAppBadge,
 };
