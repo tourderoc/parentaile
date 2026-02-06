@@ -18,16 +18,21 @@ serve(async (req) => {
       throw new Error('No text provided');
     }
 
-    const openai = new OpenAI({
-      apiKey: Deno.env.get('OPENAI_API_KEY'),
+    // Groq Cloud API (ultra rapide, gratuit)
+    const groq = new OpenAI({
+      apiKey: Deno.env.get('GROQ_API_KEY'),
+      baseURL: 'https://api.groq.com/openai/v1',
     });
 
-    const completion = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo",
+    const completion = await groq.chat.completions.create({
+      model: "llama-3.1-8b-instant",
       messages: [
         {
           role: "system",
-          content: "You are a helpful assistant that refines and improves parent messages while maintaining their original meaning and emotion. Make the text more clear and structured, but keep it natural and personal."
+          content: `Tu es un assistant qui aide les parents à reformuler leurs messages pour leur médecin.
+Améliore la clarté et la structure du texte tout en conservant le sens original et l'émotion.
+Garde un ton naturel, personnel et bienveillant.
+Réponds uniquement avec le texte reformulé, sans explications ni commentaires.`
         },
         {
           role: "user",
@@ -54,7 +59,7 @@ serve(async (req) => {
 
     return new Response(
       JSON.stringify({
-        error: 'Failed to refine text. Please try again.',
+        error: 'Erreur lors de la reformulation. Veuillez réessayer.',
       }),
       {
         status: 500,

@@ -15,8 +15,10 @@ import {
   ChevronDown,
   User,
   Baby,
-  Eraser
+  Eraser,
+  Info
 } from 'lucide-react';
+import { canUseRefinement, getRemainingUses, incrementUsage, isAdminUser } from '../../lib/rateLimiting';
 
 interface Child {
   tokenId: string;
@@ -227,6 +229,13 @@ export const MessageComposer: React.FC = () => {
       return;
     }
 
+    // Vérifier le rate limiting
+    const userEmail = auth.currentUser?.email;
+    if (!canUseRefinement(userEmail)) {
+      setError('Vous avez atteint la limite de 2 reformulations par jour. Revenez demain !');
+      return;
+    }
+
     setIsReformulating(true);
     setError(null);
 
@@ -243,8 +252,13 @@ export const MessageComposer: React.FC = () => {
       if (!response.ok) throw new Error('Erreur reformulation');
 
       const data = await response.json();
-      setReformulatedMessage(data.refined || data.text);
+      setReformulatedMessage(data.refinedText || data.refined || data.text);
       setShowReformulated(true);
+
+      // Incrémenter le compteur d'utilisation (sauf admin)
+      if (!isAdminUser(userEmail)) {
+        incrementUsage();
+      }
     } catch (err) {
       console.error('Erreur reformulation:', err);
       setError('Impossible de reformuler le message. Réessayez.');
@@ -511,14 +525,21 @@ export const MessageComposer: React.FC = () => {
                        <span className="text-[10px] uppercase font-bold tracking-widest">Réflexion...</span>
                     </div>
                  ) : (
-                    <button
-                      onClick={handleReformulate}
-                      disabled={message.length < 10}
-                      className="flex items-center gap-2 px-4 py-2 bg-orange-100 text-orange-600 rounded-xl hover:bg-orange-200 transition-all font-bold text-xs"
-                    >
-                      <Sparkles size={16} />
-                      Reformuler
-                    </button>
+                    <div className="flex flex-col items-end gap-1">
+                      <button
+                        onClick={handleReformulate}
+                        disabled={message.length < 10 || !canUseRefinement(auth.currentUser?.email)}
+                        className="flex items-center gap-2 px-4 py-2 bg-orange-100 text-orange-600 rounded-xl hover:bg-orange-200 transition-all font-bold text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <Sparkles size={16} />
+                        Reformuler
+                      </button>
+                      {!isAdminUser(auth.currentUser?.email) && (
+                        <span className="text-[9px] text-gray-400">
+                          {getRemainingUses(auth.currentUser?.email)}/2 restantes
+                        </span>
+                      )}
+                    </div>
                  )}
               </div>
             </div>
