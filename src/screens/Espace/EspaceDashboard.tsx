@@ -16,7 +16,8 @@ import {
 import { BottomNav } from '../../components/ui/BottomNav';
 import { motion } from 'framer-motion';
 import { DoctorNotifications } from '../../components/ui/DoctorNotifications';
-import { initializePushNotifications } from '../../lib/pushNotifications';
+import { initializePushNotifications, updateAppBadge } from '../../lib/pushNotifications';
+import { getUnreadCount } from '../../lib/doctorNotifications';
 
 interface Child {
   tokenId: string;
@@ -66,13 +67,20 @@ export const EspaceDashboard = () => {
     loadData();
   }, [navigate]);
 
-  // Initialiser les notifications push quand les enfants sont chargés
+  // Initialiser les notifications push et le badge de l'app
   useEffect(() => {
     if (children.length > 0 && !isLoading) {
       const tokenIds = children.map(c => c.tokenId);
       initializePushNotifications(tokenIds).then(success => {
         if (success) {
           console.log('[EspaceDashboard] Push notifications initialisées');
+        }
+      });
+
+      // Mettre à jour le badge de l'icône de l'app avec le nombre de non-lus
+      getUnreadCount(tokenIds).then(count => {
+        if (count > 0) {
+          updateAppBadge(count);
         }
       });
     }

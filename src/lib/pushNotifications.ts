@@ -196,6 +196,9 @@ export function onForegroundNotification(callback: NotificationCallback): () => 
         // Jouer le son de notification
         playNotificationSound();
 
+        // Mettre à jour le badge de l'icône de l'app (PWA)
+        updateAppBadge();
+
         // Appeler tous les callbacks enregistrés
         foregroundCallbacks.forEach(cb => cb(notificationPayload));
       });
@@ -241,11 +244,32 @@ export async function initializePushNotifications(tokenIds: string[]): Promise<b
   }
 }
 
+/**
+ * Met à jour le badge de l'icône de l'app (PWA)
+ * @param count - Nombre à afficher (0 pour un point, undefined pour incrémenter)
+ */
+export function updateAppBadge(count?: number): void {
+  if ('setAppBadge' in navigator) {
+    (navigator as any).setAppBadge(count).catch(() => {});
+  }
+}
+
+/**
+ * Efface le badge de l'icône de l'app
+ */
+export function clearAppBadge(): void {
+  if ('clearAppBadge' in navigator) {
+    (navigator as any).clearAppBadge().catch(() => {});
+  }
+}
+
 export default {
   isPushSupported,
   requestPermission,
   getFcmToken,
   registerFcmTokenForParent,
   onForegroundNotification,
-  initializePushNotifications
+  initializePushNotifications,
+  updateAppBadge,
+  clearAppBadge
 };

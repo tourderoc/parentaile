@@ -39,6 +39,11 @@ messaging.onBackgroundMessage((payload) => {
   };
 
   self.registration.showNotification(notificationTitle, notificationOptions);
+
+  // Mettre à jour le badge de l'icône de l'app
+  if (navigator.setAppBadge) {
+    navigator.setAppBadge().catch(() => {});
+  }
 });
 
 // Gestion du clic sur la notification
@@ -49,6 +54,11 @@ self.addEventListener('notificationclick', (event) => {
 
   if (event.action === 'dismiss') {
     return;
+  }
+
+  // Effacer le badge quand on clique sur la notification
+  if (navigator.clearAppBadge) {
+    navigator.clearAppBadge().catch(() => {});
   }
 
   // Ouvrir l'app sur le dashboard

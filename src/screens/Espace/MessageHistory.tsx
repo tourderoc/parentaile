@@ -30,6 +30,7 @@ import {
   getNotificationIcon,
   markNotificationAsRead
 } from '../../lib/doctorNotifications';
+import { clearAppBadge } from '../../lib/pushNotifications';
 
 interface Child {
   tokenId: string;
@@ -129,6 +130,11 @@ export const MessageHistory = () => {
 
     loadChildren();
   }, [navigate, searchParams]);
+
+  // Effacer le badge de l'icône quand on consulte les messages
+  useEffect(() => {
+    clearAppBadge();
+  }, []);
 
   useEffect(() => {
     const loadMessages = async () => {
