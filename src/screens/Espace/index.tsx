@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { auth, db } from '../../lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
-import { validateToken, checkTokenStatus, getTokenFromCurrentUrl } from '../../lib/tokenService';
+import { checkTokenStatus, getTokenFromCurrentUrl } from '../../lib/tokenService';
 import { TokenLogin } from './TokenLogin';
 import { EspaceLogin } from './EspaceLogin';
 import { EspaceRegister } from './EspaceRegister';
@@ -59,11 +59,11 @@ export const Espace = () => {
           return;
         }
 
-        // Deep Link: Token in URL
+        // Deep Link: Token in URL (lecture seule, le token sera brûlé à l'inscription)
         if (token) {
           setTokenId(token);
           setView('token-validation');
-          const result = await validateToken(token);
+          const result = await checkTokenStatus(token);
 
           if (result.valid) {
             setView('register-with-token');
