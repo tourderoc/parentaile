@@ -39,7 +39,6 @@ export const QRScanner: React.FC<QRScannerProps> = ({ onScan, onClose }) => {
             console.log('QR Code scanné:', decodedText);
 
             // Extraire le token du QR code
-            // Le QR peut contenir une URL ou juste le token
             let token = decodedText;
 
             // Si c'est une URL, extraire le token
@@ -53,12 +52,27 @@ export const QRScanner: React.FC<QRScannerProps> = ({ onScan, onClose }) => {
             }
 
             // Arrêter le scanner et retourner le token
-            html5QrCode.stop().then(() => {
+            if (html5QrCode.isScanning) {
+              html5QrCode.stop()
+                .then(() => {
+                  html5QrCode.clear();
+                  scannerRef.current = null; // Important : éviter le double stop dans le cleanup
+                  onScan(token.trim());
+                })
+                .catch((err) => {
+                  console.error('Erreur lors de l\'arrêt du scanner:', err);
+                  // Même en cas d'erreur, on essaie de continuer
+                  scannerRef.current = null;
+                  onScan(token.trim());
+                });
+            } else {
+              scannerRef.current = null;
               onScan(token.trim());
-            });
+            }
           },
-          () => {
+          (errorMessage) => {
             // Erreur de scan (frame sans QR) - ignorer
+            // Ne pas logger en production pour éviter le spam
           }
         );
 
@@ -81,7 +95,19 @@ export const QRScanner: React.FC<QRScannerProps> = ({ onScan, onClose }) => {
 
     return () => {
       if (scannerRef.current) {
-        scannerRef.current.stop().catch(() => {});
+        try {
+          if (scannerRef.current.isScanning) {
+            scannerRef.current.stop().then(() => {
+              scannerRef.current?.clear();
+            }).catch((err) => {
+              console.warn('Erreur cleanup scanner (non critique):', err);
+            });
+          } else {
+            scannerRef.current.clear();
+          }
+        } catch (e) {
+          console.warn('Erreur cleanup scanner (non critique):', e);
+        }
       }
     };
   }, [onScan]);
