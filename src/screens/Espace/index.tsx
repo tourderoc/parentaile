@@ -20,72 +20,81 @@ export const Espace = () => {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const checkAuthAndToken = async () => {
-      const unsubscribe = onAuthStateChanged(auth, async (user) => {
-        const token = searchParams.get('token') || getTokenFromCurrentUrl();
-        const mode = searchParams.get('mode');
+    let cancelled = false;
 
-        if (user) {
-          try {
-            // Check if profile exists
-            const accountRef = doc(db, 'accounts', user.uid);
-            const accountSnap = await getDoc(accountRef);
-            
-            if (!accountSnap.exists()) {
-              // User is authenticated but profile is missing -> must be registration Step 2
-              setView(token ? 'register-with-token' : 'register-free');
-              return;
-            }
-
-            // Profile exists -> vérifier le token si présent (lecture seule, sans le brûler)
-            if (token) {
-              const result = await checkTokenStatus(token);
-              if (result.valid) {
-                // Token valide → rediriger vers paramètres pour ajouter l'enfant
-                navigate(`/espace/parametres?token=${token}`);
-              } else {
-                // Token déjà utilisé ou invalide → afficher l'erreur
-                setTokenId(token);
-                setError(result.error || 'Code médecin invalide');
-                setView('error');
-              }
-            } else {
-              navigate('/espace/dashboard');
-            }
-          } catch (err) {
-            console.error('Auth verification error:', err);
-            setView('error');
-          }
-          return;
-        }
-
-        // Deep Link: Token in URL (lecture seule, le token sera brûlé à l'inscription)
-        if (token) {
-          setTokenId(token);
-          setView('token-validation');
-          const result = await checkTokenStatus(token);
-
-          if (result.valid) {
-            setView('register-with-token');
-          } else {
-            setError(result.error || 'Code médecin invalide');
-            setView('error');
-          }
-          return;
-        }
-
-        if (mode === 'register') {
-          setView('register-free');
-          return;
-        }
-
-        setView('login');
+    const init = async () => {
+      // Attendre que Firebase auth soit prêt (un seul appel, pas de double-fire)
+      await new Promise<void>((resolve) => {
+        const unsub = onAuthStateChanged(auth, () => {
+          unsub();
+          resolve();
+        });
       });
 
-      return () => unsubscribe();
+      if (cancelled) return;
+
+      const user = auth.currentUser;
+      const token = searchParams.get('token') || getTokenFromCurrentUrl();
+      const mode = searchParams.get('mode');
+
+      if (user) {
+        try {
+          const accountRef = doc(db, 'accounts', user.uid);
+          const accountSnap = await getDoc(accountRef);
+          if (cancelled) return;
+
+          if (!accountSnap.exists()) {
+            setView(token ? 'register-with-token' : 'register-free');
+            return;
+          }
+
+          // Profile exists -> vérifier le token si présent (lecture seule)
+          if (token) {
+            const result = await checkTokenStatus(token);
+            if (cancelled) return;
+            if (result.valid) {
+              navigate(`/espace/parametres?token=${token}`);
+            } else {
+              setTokenId(token);
+              setError(result.error || 'Code médecin invalide');
+              setView('error');
+            }
+          } else {
+            navigate('/espace/dashboard');
+          }
+        } catch (err) {
+          console.error('Auth verification error:', err);
+          if (!cancelled) setView('error');
+        }
+        return;
+      }
+
+      // Pas connecté + token dans l'URL
+      if (token) {
+        setTokenId(token);
+        setView('token-validation');
+        const result = await checkTokenStatus(token);
+        if (cancelled) return;
+
+        if (result.valid) {
+          setView('register-with-token');
+        } else {
+          setError(result.error || 'Code médecin invalide');
+          setView('error');
+        }
+        return;
+      }
+
+      if (mode === 'register') {
+        setView('register-free');
+        return;
+      }
+
+      setView('login');
     };
 
-    checkAuthAndToken();
+    init();
+    return () => { cancelled = true; };
   }, [navigate, searchParams]);
 
   const renderContent = () => {
