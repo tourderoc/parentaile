@@ -41,8 +41,8 @@ export const Espace = () => {
             if (token) {
               const result = await checkTokenStatus(token);
               if (result.valid) {
-                // Token valide → rediriger vers dashboard pour ajout enfant
-                navigate(`/espace/dashboard?token=${token}`);
+                // Token valide → rediriger vers paramètres pour ajouter l'enfant
+                navigate(`/espace/parametres?token=${token}`);
               } else {
                 // Token déjà utilisé ou invalide → afficher l'erreur
                 setTokenId(token);

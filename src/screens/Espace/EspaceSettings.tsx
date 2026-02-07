@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Swiper, SwiperSlide } from 'swiper/react';
 import type { SwiperClass } from 'swiper/react';
 import 'swiper/css';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { auth, db } from '../../lib/firebase';
 import { signOut, updateEmail, updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
 import {
@@ -57,6 +57,7 @@ interface Child {
 
 export const EspaceSettings = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState(0);
   const swiperRef = useRef<SwiperClass | null>(null);
 
@@ -97,6 +98,22 @@ export const EspaceSettings = () => {
     setNotificationsEnabledState(prefs.notificationsEnabled);
     setSoundEnabledState(prefs.notificationSoundEnabled);
   }, [navigate]);
+
+  // Si un token est dans l'URL (QR code scanné), ouvrir le formulaire d'ajout enfant
+  useEffect(() => {
+    const tokenFromUrl = searchParams.get('token');
+    if (tokenFromUrl && !isLoading) {
+      // Aller sur l'onglet "Enfants" (index 1)
+      setActiveTab(1);
+      swiperRef.current?.slideTo(1);
+      // Pré-remplir le token et ouvrir le formulaire
+      setNewToken(tokenFromUrl);
+      setShowAddChild(true);
+      setAddMode('manual');
+      // Nettoyer l'URL pour éviter de re-déclencher
+      setSearchParams({}, { replace: true });
+    }
+  }, [isLoading, searchParams, setSearchParams]);
 
   const loadData = async () => {
     const user = auth.currentUser;
