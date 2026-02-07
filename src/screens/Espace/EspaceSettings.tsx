@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Swiper, SwiperSlide } from 'swiper/react';
 import type { SwiperClass } from 'swiper/react';
 import 'swiper/css';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { auth, db } from '../../lib/firebase';
 import { signOut, updateEmail, updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
 import {
@@ -57,7 +57,6 @@ interface Child {
 
 export const EspaceSettings = () => {
   const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState(0);
   const swiperRef = useRef<SwiperClass | null>(null);
 
@@ -100,20 +99,24 @@ export const EspaceSettings = () => {
   }, [navigate]);
 
   // Si un token est dans l'URL (QR code scanné), ouvrir le formulaire d'ajout enfant
+  const tokenProcessedRef = useRef(false);
   useEffect(() => {
-    const tokenFromUrl = searchParams.get('token');
-    if (tokenFromUrl && !isLoading) {
+    if (tokenProcessedRef.current || isLoading) return;
+    const tokenFromUrl = new URLSearchParams(window.location.search).get('token');
+    if (tokenFromUrl) {
+      tokenProcessedRef.current = true;
+      // Nettoyer l'URL immédiatement (sans re-render React Router)
+      window.history.replaceState({}, '', '/espace/parametres');
       // Aller sur l'onglet "Enfants" (index 1)
       setActiveTab(1);
-      swiperRef.current?.slideTo(1);
       // Pré-remplir le token et ouvrir le formulaire
       setNewToken(tokenFromUrl);
       setShowAddChild(true);
       setAddMode('manual');
-      // Nettoyer l'URL pour éviter de re-déclencher
-      setSearchParams({}, { replace: true });
+      // Slide vers l'onglet Enfants après un court délai (Swiper prêt)
+      setTimeout(() => swiperRef.current?.slideTo(1), 100);
     }
-  }, [isLoading, searchParams, setSearchParams]);
+  }, [isLoading]);
 
   const loadData = async () => {
     const user = auth.currentUser;
