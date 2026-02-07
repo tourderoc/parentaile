@@ -197,7 +197,8 @@ export function onForegroundNotification(callback: NotificationCallback): () => 
         playNotificationSound();
 
         // Mettre à jour le badge de l'icône de l'app (PWA)
-        updateAppBadge();
+        const badgeCount = payload.data?.badgeCount ? parseInt(payload.data.badgeCount as string, 10) : undefined;
+        updateAppBadge(!isNaN(badgeCount!) ? badgeCount : undefined);
 
         // Appeler tous les callbacks enregistrés
         foregroundCallbacks.forEach(cb => cb(notificationPayload));
@@ -250,7 +251,9 @@ export async function initializePushNotifications(tokenIds: string[]): Promise<b
  */
 export function updateAppBadge(count?: number): void {
   if ('setAppBadge' in navigator) {
-    (navigator as any).setAppBadge(count).catch(() => {});
+    (navigator as any).setAppBadge(count).catch((error: any) => {
+      console.error('[PushNotifications] Erreur setAppBadge:', error);
+    });
   }
 }
 

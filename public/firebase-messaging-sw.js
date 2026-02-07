@@ -42,7 +42,17 @@ messaging.onBackgroundMessage((payload) => {
 
   // Mettre à jour le badge de l'icône de l'app
   if (navigator.setAppBadge) {
-    navigator.setAppBadge().catch(() => {});
+    const badgeCount = payload.data?.badgeCount ? parseInt(payload.data.badgeCount, 10) : undefined;
+    
+    if (!isNaN(badgeCount)) {
+      navigator.setAppBadge(badgeCount).catch((error) => {
+        console.error('[firebase-messaging-sw.js] Erreur setAppBadge avec count:', error);
+      });
+    } else {
+      navigator.setAppBadge().catch((error) => {
+        console.error('[firebase-messaging-sw.js] Erreur setAppBadge sans count:', error);
+      });
+    }
   }
 });
 
