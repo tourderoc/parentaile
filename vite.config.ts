@@ -4,7 +4,7 @@ import { defineConfig } from "vite";
 
 export default defineConfig({
   plugins: [react()],
-  base: "./",
+  base: "/",
   css: {
     postcss: {
       plugins: [tailwind()],
