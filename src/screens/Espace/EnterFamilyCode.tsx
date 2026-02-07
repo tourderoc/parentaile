@@ -98,8 +98,7 @@ export const EnterFamilyCode: React.FC<EnterFamilyCodeProps> = ({ onBack }) => {
         addedAt: serverTimestamp()
       });
 
-      // Marquer le token comme utilisé
-      await markTokenAsUsed(cleanToken);
+      // Token déjà marqué "used" dans validateToken (single-use)
 
       // Rediriger vers le dashboard (qui affichera maintenant l'enfant)
       navigate('/espace/dashboard');

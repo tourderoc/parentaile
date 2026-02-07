@@ -135,7 +135,7 @@ export const EspaceRegister: React.FC<EspaceRegisterProps> = ({ tokenId: initial
           nickname: childNickname.trim() || 'Mon enfant',
           addedAt: serverTimestamp()
         });
-        await markTokenAsUsed(finalToken);
+        // Token déjà marqué "used" dans validateToken (single-use)
         navigate(`/espace/messages?childId=${finalToken}`);
       } else {
         navigate('/espace/dashboard');

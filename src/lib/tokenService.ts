@@ -80,12 +80,25 @@ export async function validateToken(tokenId: string): Promise<TokenValidationRes
       };
     }
 
-    // Token valide (pending)
+    // Token valide (pending) → le marquer immédiatement comme "used" (single-use)
+    try {
+      await updateDoc(tokenRef, {
+        status: 'used',
+        usedAt: serverTimestamp()
+      });
+    } catch {
+      return {
+        valid: false,
+        error: 'Erreur lors de l\'activation du token. Réessayez.',
+        errorCode: 'FIREBASE_ERROR'
+      };
+    }
+
     return {
       valid: true,
       data: {
         createdAt: data.createdAt?.toDate?.() || new Date(),
-        status: status
+        status: 'used' as TokenStatus
       }
     };
 

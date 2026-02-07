@@ -203,7 +203,7 @@ export const EspaceSettings = () => {
         addedAt: serverTimestamp()
       });
 
-      await markTokenAsUsed(newToken.trim());
+      // Token déjà marqué "used" dans validateToken (single-use)
       await loadData();
 
       setShowAddChild(false);
