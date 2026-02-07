@@ -29,11 +29,79 @@ export interface TokenValidationResult {
 }
 
 // ============================================
-// VALIDATION DU TOKEN
+// VÉRIFICATION EN LECTURE SEULE
 // ============================================
 
 /**
- * Vérifie si un token est valide pour l'inscription
+ * Vérifie le statut d'un token SANS le modifier (lecture seule)
+ * Utilisé pour les utilisateurs déjà connectés qui scannent un QR code
+ */
+export async function checkTokenStatus(tokenId: string): Promise<TokenValidationResult> {
+  if (!tokenId || tokenId.length < 8) {
+    return {
+      valid: false,
+      error: 'Code invalide (format incorrect)',
+      errorCode: 'NOT_FOUND'
+    };
+  }
+
+  try {
+    const tokenRef = doc(db, 'tokens', tokenId);
+    const tokenSnap = await getDoc(tokenRef);
+
+    if (!tokenSnap.exists()) {
+      return {
+        valid: false,
+        error: 'Ce code n\'existe pas ou a expiré. Vérifiez le document remis par votre médecin.',
+        errorCode: 'NOT_FOUND'
+      };
+    }
+
+    const data = tokenSnap.data();
+    const status = data.status as TokenStatus;
+
+    if (status === 'used') {
+      return {
+        valid: false,
+        error: 'Ce code a déjà été utilisé. Si vous avez déjà ajouté cet enfant, il apparaît dans votre espace.',
+        errorCode: 'ALREADY_USED'
+      };
+    }
+
+    if (status === 'revoked') {
+      return {
+        valid: false,
+        error: 'Ce code a été révoqué par le cabinet médical.',
+        errorCode: 'REVOKED'
+      };
+    }
+
+    // Token pending → valide (mais on ne le marque PAS comme used)
+    return {
+      valid: true,
+      data: {
+        createdAt: data.createdAt?.toDate?.() || new Date(),
+        status: status
+      }
+    };
+
+  } catch (error) {
+    console.error('Erreur vérification token:', error);
+    return {
+      valid: false,
+      error: 'Erreur de connexion. Réessayez.',
+      errorCode: 'FIREBASE_ERROR'
+    };
+  }
+}
+
+// ============================================
+// VALIDATION DU TOKEN (avec activation)
+// ============================================
+
+/**
+ * Vérifie si un token est valide ET le marque comme "used" (single-use)
+ * Utilisé uniquement pour le flow d'activation (inscription/ajout enfant)
  * @param tokenId - L'ID du token à vérifier
  * @returns Résultat de la validation
  */
@@ -158,6 +226,7 @@ export function getTokenFromCurrentUrl(): string | null {
 }
 
 export default {
+  checkTokenStatus,
   validateToken,
   markTokenAsUsed,
   extractTokenFromUrl,

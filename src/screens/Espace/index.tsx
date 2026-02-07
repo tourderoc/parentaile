@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { auth, db } from '../../lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
-import { validateToken, getTokenFromCurrentUrl } from '../../lib/tokenService';
+import { validateToken, checkTokenStatus, getTokenFromCurrentUrl } from '../../lib/tokenService';
 import { TokenLogin } from './TokenLogin';
 import { EspaceLogin } from './EspaceLogin';
 import { EspaceRegister } from './EspaceRegister';
@@ -37,9 +37,18 @@ export const Espace = () => {
               return;
             }
 
-            // Profile exists -> safe to go to dashboard
+            // Profile exists -> vérifier le token si présent (lecture seule, sans le brûler)
             if (token) {
-              navigate(`/espace/dashboard?token=${token}`);
+              const result = await checkTokenStatus(token);
+              if (result.valid) {
+                // Token valide → rediriger vers dashboard pour ajout enfant
+                navigate(`/espace/dashboard?token=${token}`);
+              } else {
+                // Token déjà utilisé ou invalide → afficher l'erreur
+                setTokenId(token);
+                setError(result.error || 'Code médecin invalide');
+                setView('error');
+              }
             } else {
               navigate('/espace/dashboard');
             }
