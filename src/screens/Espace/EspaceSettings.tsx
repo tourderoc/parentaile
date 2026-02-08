@@ -49,7 +49,14 @@ import {
   playNotificationSound
 } from '../../lib/userPreferences';
 
+interface Child {
+  tokenId: string;
+  nickname: string;
+  addedAt: Date;
+}
+
 export const EspaceSettings = () => {
+  const navigate = useNavigate();
   const location = useLocation();
   const tabParam = new URLSearchParams(location.search).get('tab');
   const initialTab = tabParam === 'enfants' ? 1 : tabParam === 'notifs' ? 2 : 0;
