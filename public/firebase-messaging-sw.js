@@ -27,11 +27,13 @@ messaging.onBackgroundMessage((payload) => {
   const notificationTitle = payload.notification?.title || 'Parent\'aile';
   const notificationOptions = {
     body: payload.notification?.body || 'Nouveau message de votre médecin',
-    icon: '/logo192.png',
-    badge: '/logo192.png',
+    icon: '/icons/web-app-manifest-192x192.png',
+    badge: '/icons/favicon-96x96.png',
     tag: payload.data?.notificationId || 'default',
     data: payload.data,
     vibrate: [200, 100, 200],
+    renotify: true,
+    requireInteraction: true,
     actions: [
       { action: 'open', title: 'Voir' },
       { action: 'dismiss', title: 'Fermer' }
