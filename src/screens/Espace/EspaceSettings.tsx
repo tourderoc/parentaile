@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Swiper, SwiperSlide } from 'swiper/react';
 import type { SwiperClass } from 'swiper/react';
 import 'swiper/css';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { auth, db } from '../../lib/firebase';
 import { signOut, updateEmail, updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
 import {
@@ -57,7 +57,10 @@ interface Child {
 
 export const EspaceSettings = () => {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState(0);
+  const location = useLocation();
+  const tabParam = new URLSearchParams(location.search).get('tab');
+  const initialTab = tabParam === 'enfants' ? 1 : tabParam === 'notifs' ? 2 : 0;
+  const [activeTab, setActiveTab] = useState(initialTab);
   const swiperRef = useRef<SwiperClass | null>(null);
 
   const [children, setChildren] = useState<Child[]>([]);
@@ -96,6 +99,11 @@ export const EspaceSettings = () => {
     const prefs = getUserPreferences();
     setNotificationsEnabledState(prefs.notificationsEnabled);
     setSoundEnabledState(prefs.notificationSoundEnabled);
+
+    // Nettoyer l'URL si un param ?tab= était présent
+    if (tabParam) {
+      window.history.replaceState({}, '', '/espace/parametres');
+    }
   }, [navigate]);
 
   // Si un token est dans l'URL (QR code scanné), ouvrir le formulaire d'ajout enfant
@@ -450,8 +458,14 @@ export const EspaceSettings = () => {
 
       {/* Swiper Content */}
       <Swiper
-        onSwiper={(swiper) => { swiperRef.current = swiper; }}
+        onSwiper={(swiper) => {
+          swiperRef.current = swiper;
+          if (initialTab > 0) {
+            swiper.slideTo(initialTab, 0);
+          }
+        }}
         onSlideChange={(swiper) => setActiveTab(swiper.activeIndex)}
+        initialSlide={initialTab}
         slidesPerView={1}
         spaceBetween={0}
         className="flex-1 w-full"
@@ -547,12 +561,6 @@ export const EspaceSettings = () => {
                          <Baby size={32} />
                       </div>
                       <p className="text-gray-400 font-medium text-sm">Aucun enfant n'est <br/>encore associé à votre compte.</p>
-                      <button
-                        onClick={() => setShowAddChild(true)}
-                        className="h-12 px-6 bg-orange-500 text-white rounded-2xl font-bold shadow-premium"
-                      >
-                        Associer un enfant
-                      </button>
                    </div>
                  ) : (
                    children.map((child) => (
@@ -604,6 +612,20 @@ export const EspaceSettings = () => {
                      </motion.div>
                    ))
                  )}
+
+                 {/* Rectangle pointillé "Ajouter un enfant" toujours visible */}
+                 <button
+                   onClick={() => setShowAddChild(true)}
+                   className="w-full border-2 border-dashed border-gray-200 rounded-3xl p-5 flex items-center gap-4 hover:border-orange-300 hover:bg-orange-50/30 transition-all cursor-pointer group"
+                 >
+                   <div className="w-12 h-12 bg-gray-50 rounded-2xl flex items-center justify-center text-gray-300 group-hover:bg-orange-100 group-hover:text-orange-500 transition-colors">
+                     <Plus size={24} />
+                   </div>
+                   <div className="text-left">
+                     <p className="font-bold text-gray-400 group-hover:text-orange-600 transition-colors">Ajouter un enfant</p>
+                     <p className="text-[10px] font-bold text-gray-300 uppercase tracking-widest">Par code ou QR code</p>
+                   </div>
+                 </button>
               </div>
             </section>
           </div>

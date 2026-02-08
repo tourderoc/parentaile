@@ -199,7 +199,7 @@ export const EspaceDashboard = () => {
           <div className="flex items-center justify-between px-2">
             <h3 className="text-lg font-bold text-gray-800">Mes Enfants</h3>
             <button
-              onClick={() => navigate('/espace/parametres')}
+              onClick={() => navigate('/espace/parametres?tab=enfants')}
               className="text-orange-500 text-xs font-bold uppercase tracking-widest hover:underline"
             >
               Gérer
