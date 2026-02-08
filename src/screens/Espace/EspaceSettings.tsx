@@ -48,26 +48,11 @@ import {
   setNotificationSoundEnabled,
   playNotificationSound
 } from '../../lib/userPreferences';
-import { updateAppBadge } from '../../lib/pushNotifications';
+  // Notification preferences
+  const [notificationsEnabled, setNotificationsEnabledState] = useState(true);
+  const [soundEnabled, setSoundEnabledState] = useState(true);
 
-interface Child {
-  tokenId: string;
-  nickname: string;
-  addedAt: Date;
-}
-
-export const EspaceSettings = () => {
-  // ... (existing code)
-
-  // Helper pour le test de badge
-  const handleTestBadge = (count?: number) => {
-    if ('setAppBadge' in navigator) {
-      updateAppBadge(count);
-      alert(`Commande envoyée : ${count === undefined ? 'Point' : count}.\nMinimisez l'application pour voir l'icône.`);
-    } else {
-      alert("Votre navigateur/appareil ne supporte pas l'API Badge (navigator.setAppBadge).");
-    }
-  };
+  useEffect(() => {
 
   // ... (existing code, jumping to render)
 
