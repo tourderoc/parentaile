@@ -48,6 +48,7 @@ import {
   setNotificationSoundEnabled,
   playNotificationSound
 } from '../../lib/userPreferences';
+import { updateAppBadge } from '../../lib/pushNotifications';
 
 interface Child {
   tokenId: string;
@@ -56,6 +57,54 @@ interface Child {
 }
 
 export const EspaceSettings = () => {
+  // ... (existing code)
+
+  // Helper pour le test de badge
+  const handleTestBadge = (count?: number) => {
+    if ('setAppBadge' in navigator) {
+      updateAppBadge(count);
+      alert(`Commande envoyée : ${count === undefined ? 'Point' : count}.\nMinimisez l'application pour voir l'icône.`);
+    } else {
+      alert("Votre navigateur/appareil ne supporte pas l'API Badge (navigator.setAppBadge).");
+    }
+  };
+
+  // ... (existing code, jumping to render)
+
+               {/* Zone de test pour le badge PWA */}
+                <div className="glass rounded-[2rem] border-2 border-dashed border-gray-300 shadow-none overflow-hidden mb-4 bg-gray-50/50">
+                    <div className="p-6">
+                        <div className="flex items-center gap-4 mb-4">
+                            <div className="w-12 h-12 bg-gray-200 rounded-2xl flex items-center justify-center text-gray-500">
+                                <Bell size={24} />
+                            </div>
+                            <div>
+                                <h3 className="text-lg font-extrabold text-gray-800">Test Badges</h3>
+                                <p className="text-xs text-gray-400">Vérifier le support PWA</p>
+                            </div>
+                        </div>
+                        <div className="flex gap-2 flex-wrap">
+                            <button 
+                                onClick={() => handleTestBadge(5)}
+                                className="px-4 py-2 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-600 shadow-sm active:bg-gray-100"
+                            >
+                                Badge (5)
+                            </button>
+                            <button 
+                                onClick={() => handleTestBadge(undefined)}
+                                className="px-4 py-2 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-600 shadow-sm active:bg-gray-100"
+                            >
+                                Badge (•)
+                            </button>
+                            <button 
+                                onClick={() => handleTestBadge(0)}
+                                className="px-4 py-2 bg-white border border-red-100 rounded-xl text-xs font-bold text-red-500 shadow-sm hover:bg-red-50 active:bg-red-100"
+                            >
+                                Effacer
+                            </button>
+                        </div>
+                    </div>
+                </div>
   const navigate = useNavigate();
   const location = useLocation();
   const tabParam = new URLSearchParams(location.search).get('tab');
@@ -477,7 +526,6 @@ export const EspaceSettings = () => {
             <section className="space-y-4">
               <h2 className="text-xl font-extrabold text-gray-800 tracking-tight px-1">Mon Compte</h2>
               
-               {/* Zone de test pour le badge PWA */}
                 <div className="glass rounded-[2rem] border-2 border-dashed border-gray-300 shadow-none overflow-hidden mb-4 bg-gray-50/50">
                     <div className="p-6">
                         <div className="flex items-center gap-4 mb-4">
@@ -491,20 +539,20 @@ export const EspaceSettings = () => {
                         </div>
                         <div className="flex gap-2 flex-wrap">
                             <button 
-                                onClick={() => import('../../lib/pushNotifications').then(mod => mod.updateAppBadge(5))}
-                                className="px-4 py-2 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-600 shadow-sm"
+                                onClick={() => handleTestBadge(5)}
+                                className="px-4 py-2 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-600 shadow-sm active:bg-gray-100"
                             >
                                 Badge (5)
                             </button>
                             <button 
-                                onClick={() => import('../../lib/pushNotifications').then(mod => mod.updateAppBadge(undefined))}
-                                className="px-4 py-2 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-600 shadow-sm"
+                                onClick={() => handleTestBadge(undefined)}
+                                className="px-4 py-2 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-600 shadow-sm active:bg-gray-100"
                             >
                                 Badge (•)
                             </button>
                             <button 
-                                onClick={() => import('../../lib/pushNotifications').then(mod => mod.updateAppBadge(0))}
-                                className="px-4 py-2 bg-white border border-red-100 rounded-xl text-xs font-bold text-red-500 shadow-sm hover:bg-red-50"
+                                onClick={() => handleTestBadge(0)}
+                                className="px-4 py-2 bg-white border border-red-100 rounded-xl text-xs font-bold text-red-500 shadow-sm hover:bg-red-50 active:bg-red-100"
                             >
                                 Effacer
                             </button>
