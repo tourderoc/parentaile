@@ -48,16 +48,8 @@ import {
   setNotificationSoundEnabled,
   playNotificationSound
 } from '../../lib/userPreferences';
-  // Notification preferences
-  const [notificationsEnabled, setNotificationsEnabledState] = useState(true);
-  const [soundEnabled, setSoundEnabledState] = useState(true);
 
-  useEffect(() => {
-
-  // ... (existing code, jumping to render)
-
-
-  const navigate = useNavigate();
+export const EspaceSettings = () => {
   const location = useLocation();
   const tabParam = new URLSearchParams(location.search).get('tab');
   const initialTab = tabParam === 'enfants' ? 1 : tabParam === 'notifs' ? 2 : 0;
