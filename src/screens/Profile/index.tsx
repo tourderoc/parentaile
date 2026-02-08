@@ -296,6 +296,51 @@ export const Profile = () => {
             Mes informations personnelles
           </h1>
 
+            {/* Zone de test pour le badge PWA */}
+            <Card className="p-6 mb-6 border-dashed border-2 border-gray-200 bg-gray-50">
+                <div className="flex items-start gap-4">
+                    <div className="w-12 h-12 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
+                        <AlertCircle className="w-6 h-6 text-gray-500" />
+                    </div>
+                <div className="flex-1">
+                    <h3 className="text-xl font-semibold mb-2">Zone de Test (Badge)</h3>
+                    <p className="text-gray-600 mb-4 text-sm">
+                        Utilisez ces boutons pour vérifier si votre téléphone supporte les badges sur l'icône de l'application.
+                        <br/>
+                        1. Cliquez sur "Mettre badge (5)"
+                        <br/>
+                        2. Retournez sur l'écran d'accueil de votre téléphone sans fermer l'app.
+                    </p>
+                    <div className="flex gap-2 flex-wrap">
+                        <Button 
+                            variant="outline" 
+                            onClick={() => {
+                                import('../../lib/pushNotifications').then(mod => mod.updateAppBadge(5));
+                            }}
+                        >
+                            Mettre badge (5)
+                        </Button>
+                        <Button 
+                            variant="outline" 
+                            onClick={() => {
+                                import('../../lib/pushNotifications').then(mod => mod.updateAppBadge(undefined));
+                            }}
+                        >
+                            Mettre badge (Point)
+                        </Button>
+                        <Button 
+                            variant="destructive" 
+                            onClick={() => {
+                                import('../../lib/pushNotifications').then(mod => mod.updateAppBadge(0));
+                            }}
+                        >
+                            Effacer le badge
+                        </Button>
+                    </div>
+                </div>
+                </div>
+            </Card>
+
           <div className="space-y-6">
             {sections.map((section) => (
               <Card key={section.id} className="p-6">
