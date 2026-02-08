@@ -15,8 +15,7 @@ import {
   ChevronDown,
   User,
   Baby,
-  Eraser,
-  Info
+  Eraser
 } from 'lucide-react';
 import { canUseRefinement, getRemainingUses, incrementUsage, isAdminUser } from '../../lib/rateLimiting';
 
