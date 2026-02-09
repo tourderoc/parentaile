@@ -218,8 +218,14 @@ export const MessageHistory = () => {
         setMessageNotifications(notifications);
 
         // Marquer comme lues
-        for (const notif of notifications.filter(n => !n.read)) {
+        const unread = notifications.filter(n => !n.read);
+        for (const notif of unread) {
           await markNotificationAsRead(notif.id);
+        }
+
+        // Effacer le badge après avoir marqué les notifications comme lues
+        if (unread.length > 0) {
+          clearAppBadge();
         }
       } catch (error) {
         console.error('Erreur chargement notifications:', error);

@@ -20,6 +20,7 @@ import {
   getNotificationColor
 } from '../../lib/doctorNotifications';
 import { areNotificationsEnabled, playNotificationSound } from '../../lib/userPreferences';
+import { clearAppBadge } from '../../lib/pushNotifications';
 
 interface DoctorNotificationsProps {
   tokenIds: string[];
@@ -86,9 +87,13 @@ export const DoctorNotifications = ({ tokenIds, maxVisible = 3 }: DoctorNotifica
   // Clic sur ✓ ou sur la carte : marquer comme lu + ouvrir le message lié
   const handleOpenNotification = async (notification: DoctorNotification) => {
     await markNotificationAsRead(notification.id);
-    setNotifications(prev =>
-      prev.map(n => n.id === notification.id ? { ...n, read: true } : n)
-    );
+    const updated = notifications.map(n => n.id === notification.id ? { ...n, read: true } : n);
+    setNotifications(updated);
+
+    // Si plus aucune notification non lue, effacer le badge
+    if (updated.filter(n => !n.read).length === 0) {
+      clearAppBadge();
+    }
 
     // Naviguer vers les messages avec le bon enfant et message
     const params = new URLSearchParams();
@@ -103,7 +108,13 @@ export const DoctorNotifications = ({ tokenIds, maxVisible = 3 }: DoctorNotifica
     e.stopPropagation(); // Ne pas déclencher le clic sur la carte
     await handleMarkAsRead(notification);
     // Animation de suppression
-    setNotifications(prev => prev.filter(n => n.id !== notification.id));
+    const remaining = notifications.filter(n => n.id !== notification.id);
+    setNotifications(remaining);
+
+    // Si plus aucune notification non lue, effacer le badge
+    if (remaining.filter(n => !n.read).length === 0) {
+      clearAppBadge();
+    }
   };
 
   const unreadNotifications = notifications.filter(n => !n.read);

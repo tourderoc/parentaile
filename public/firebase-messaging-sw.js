@@ -45,8 +45,9 @@ messaging.onBackgroundMessage((payload) => {
   self.registration.showNotification(title, notificationOptions);
 
   // Mettre à jour le badge de l'icône de l'app
+  // Utiliser 1 par défaut (jamais undefined pour éviter un badge "flag" persistant)
   if (navigator.setAppBadge) {
-    const badgeCount = payload.data?.badgeCount ? parseInt(payload.data.badgeCount) : undefined;
+    const badgeCount = payload.data?.badgeCount ? parseInt(payload.data.badgeCount) : 1;
     navigator.setAppBadge(badgeCount).catch(() => {});
   }
 });

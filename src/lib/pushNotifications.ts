@@ -197,7 +197,8 @@ export function onForegroundNotification(callback: NotificationCallback): () => 
         playNotificationSound();
 
         // Mettre à jour le badge de l'icône de l'app (PWA)
-        const badgeCount = payload.data?.badgeCount ? parseInt(payload.data.badgeCount) : undefined;
+        // Utiliser le badgeCount envoyé par le serveur, ou 1 par défaut (jamais undefined)
+        const badgeCount = payload.data?.badgeCount ? parseInt(payload.data.badgeCount) : 1;
         updateAppBadge(badgeCount);
 
         // Appeler tous les callbacks enregistrés
