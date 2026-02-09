@@ -81,6 +81,8 @@ export const EspaceDashboard = () => {
       getUnreadCount(tokenIds).then(count => {
         if (count > 0) {
           updateAppBadge(count);
+        } else {
+          clearAppBadge();
         }
       });
     }

@@ -58,6 +58,10 @@ self.addEventListener('notificationclick', (event) => {
   event.notification.close();
 
   if (event.action === 'dismiss') {
+    // Effacer le badge même si on ferme simplement
+    if (navigator.clearAppBadge) {
+      navigator.clearAppBadge().catch(() => {});
+    }
     return;
   }
 
@@ -81,4 +85,12 @@ self.addEventListener('notificationclick', (event) => {
       }
     })
   );
+});
+
+// Effacer le badge quand on swipe/ferme la notification
+self.addEventListener('notificationclose', (event) => {
+  console.log('[firebase-messaging-sw.js] Notification fermée:', event);
+  if (navigator.clearAppBadge) {
+    navigator.clearAppBadge().catch(() => {});
+  }
 });
