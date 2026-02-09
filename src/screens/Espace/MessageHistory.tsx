@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { auth, db } from '../../lib/firebase';
-import { collection, getDocs, query, where, orderBy, deleteDoc, doc } from 'firebase/firestore';
+import { collection, getDocs, query, where, orderBy, deleteDoc, doc, onSnapshot } from 'firebase/firestore';
 import { BottomNav } from '../../components/ui/BottomNav';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -20,9 +20,7 @@ import {
   X,
   Mail,
   Trash2,
-  ExternalLink,
-  Bell,
-  Zap
+  Bell
 } from 'lucide-react';
 import {
   DoctorNotification,
@@ -137,71 +135,67 @@ export const MessageHistory = () => {
   }, []);
 
   useEffect(() => {
-    const loadMessages = async () => {
-      // Only proceed if children have been loaded
-      if (!childrenLoaded) return;
+    // Only proceed if children have been loaded
+    if (!childrenLoaded) return;
 
-      if (!selectedChild) {
-        setIsLoading(false);
-        return;
-      }
+    if (!selectedChild) {
+      setIsLoading(false);
+      return;
+    }
 
-      setIsLoading(true);
+    setIsLoading(true);
 
-      try {
-        console.log('🔍 Recherche messages pour tokenId:', selectedChild.tokenId);
+    console.log('🔍 Écoute des messages pour tokenId:', selectedChild.tokenId);
 
-        const messagesRef = collection(db, 'messages');
-        const q = query(
-          messagesRef,
-          where('tokenId', '==', selectedChild.tokenId),
-          orderBy('createdAt', 'desc')
-        );
-        const snapshot = await getDocs(q);
+    const messagesRef = collection(db, 'messages');
+    const q = query(
+      messagesRef,
+      where('tokenId', '==', selectedChild.tokenId),
+      orderBy('createdAt', 'desc')
+    );
 
-        console.log('📨 Messages trouvés:', snapshot.docs.length);
+    // Utiliser onSnapshot pour les mises à jour en temps réel (statuts, réponses)
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      console.log('📨 Messages mis à jour:', snapshot.docs.length);
 
-        const messagesData: Message[] = snapshot.docs.map(doc => {
-          const data = doc.data();
-          // Convertir les anciens statuts vers les nouveaux
-          let status: Message['status'] = 'pending';
-          if (data.status === 'treated' || data.status === 'read') {
-            status = 'treated';
-          } else if (data.replyContent) {
-            status = 'replied';
-          } else if (data.status === 'replied') {
-            status = 'replied';
-          }
-
-          return {
-            id: doc.id,
-            content: data.content,
-            status,
-            createdAt: data.createdAt?.toDate?.() || new Date(),
-            replyContent: data.replyContent,
-            replyDate: data.replyDate?.toDate?.(),
-            replyAuthor: data.replyAuthor || 'Dr.'
-          };
-        });
-
-        setMessages(messagesData);
-
-        // Si un messageId est dans l'URL, ouvrir automatiquement ce message
-        const messageIdFromUrl = searchParams.get('messageId');
-        if (messageIdFromUrl) {
-          const targetMessage = messagesData.find(m => m.id === messageIdFromUrl);
-          if (targetMessage) {
-            setSelectedMessage(targetMessage);
-          }
+      const messagesData: Message[] = snapshot.docs.map(doc => {
+        const data = doc.data();
+        let status: Message['status'] = 'pending';
+        
+        if (data.status === 'treated' || data.status === 'read') {
+          status = 'treated';
+        } else if (data.replyContent || data.status === 'replied') {
+          status = 'replied';
         }
-      } catch (err) {
-        console.error('Erreur chargement messages:', err);
-      } finally {
-        setIsLoading(false);
-      }
-    };
 
-    loadMessages();
+        return {
+          id: doc.id,
+          content: data.content,
+          status,
+          createdAt: data.createdAt?.toDate?.() || new Date(),
+          replyContent: data.replyContent,
+          replyDate: data.replyDate?.toDate?.(),
+          replyAuthor: data.replyAuthor || 'Dr.'
+        };
+      });
+
+      setMessages(messagesData);
+      setIsLoading(false);
+
+      // Si un messageId est dans l'URL (une seule fois), l'ouvrir
+      const messageIdFromUrl = searchParams.get('messageId');
+      if (messageIdFromUrl) {
+        const targetMessage = messagesData.find(m => m.id === messageIdFromUrl);
+        if (targetMessage) {
+          setSelectedMessage(targetMessage);
+        }
+      }
+    }, (error) => {
+      console.error('Erreur écoute messages:', error);
+      setIsLoading(false);
+    });
+
+    return () => unsubscribe();
   }, [selectedChild, childrenLoaded, searchParams]);
 
   // Charger les notifications quand un message est sélectionné

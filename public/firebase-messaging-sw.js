@@ -63,12 +63,18 @@ self.addEventListener('notificationclick', (event) => {
     if (navigator.clearAppBadge) {
       navigator.clearAppBadge().catch(() => {});
     }
+    if (navigator.setAppBadge) {
+      navigator.setAppBadge(0).catch(() => {});
+    }
     return;
   }
 
   // Effacer le badge quand on clique sur la notification
   if (navigator.clearAppBadge) {
     navigator.clearAppBadge().catch(() => {});
+  }
+  if (navigator.setAppBadge) {
+    navigator.setAppBadge(0).catch(() => {});
   }
 
   // Ouvrir l'app sur le dashboard
@@ -93,5 +99,8 @@ self.addEventListener('notificationclose', (event) => {
   console.log('[firebase-messaging-sw.js] Notification fermée:', event);
   if (navigator.clearAppBadge) {
     navigator.clearAppBadge().catch(() => {});
+  }
+  if (navigator.setAppBadge) {
+    navigator.setAppBadge(0).catch(() => {});
   }
 });
