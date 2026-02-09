@@ -38,19 +38,8 @@ export const WelcomeWithSplash: React.FC = () => {
     return () => unsubscribe();
   }, [navigate]);
 
-  // Si "Se souvenir de moi" est actif, afficher un écran de chargement minimal
-  // au lieu de l'animation Lottie (plus fluide)
-  if (checkingAuth && isRemembered) {
-    return (
-      <div className="fixed inset-0 z-[100] bg-gradient-to-b from-orange-50 via-white to-orange-100 flex items-center justify-center">
-        <div className="w-8 h-8 bg-orange-500 rounded-lg flex items-center justify-center shadow-lg shadow-orange-200 animate-pulse">
-          <span className="text-white font-bold text-lg">P</span>
-        </div>
-      </div>
-    );
-  }
-
-  // Sinon, afficher le splash Lottie normalement
+  // Afficher l'animation Lottie pendant la vérification auth
+  // (que "Se souvenir de moi" soit actif ou non)
   if (checkingAuth) {
     return <SplashScreen onComplete={() => {}} />;
   }

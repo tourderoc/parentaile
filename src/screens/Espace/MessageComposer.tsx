@@ -15,8 +15,7 @@ import {
   ChevronDown,
   User,
   Baby,
-  Eraser,
-  Info
+  Eraser
 } from 'lucide-react';
 import { canUseRefinement, getRemainingUses, incrementUsage, isAdminUser } from '../../lib/rateLimiting';
 
@@ -81,14 +80,29 @@ export const MessageComposer: React.FC = () => {
         setChildren(childrenData);
 
         // Sélection par défaut
+        // Sélection par défaut : URL > LocalStorage > Premier de liste
         const childFromUrl = searchParams.get('childId');
+        let childToSelect = null;
+
         if (childFromUrl) {
-          const found = childrenData.find(c => c.tokenId === childFromUrl);
-          if (found) setSelectedChild(found);
+          childToSelect = childrenData.find(c => c.tokenId === childFromUrl);
         }
-        // Toujours sélectionner le premier enfant par défaut s'il n'y a pas de sélection
-        if (!childFromUrl && childrenData.length > 0) {
-          setSelectedChild(childrenData[0]);
+        
+        // Si pas d'URL, vérifier le localStorage
+        if (!childToSelect) {
+            const lastSelectedId = localStorage.getItem('lastSelectedChildId');
+            if (lastSelectedId) {
+                childToSelect = childrenData.find(c => c.tokenId === lastSelectedId);
+            }
+        }
+
+        // Sinon, prendre le premier
+        if (!childToSelect && childrenData.length > 0) {
+            childToSelect = childrenData[0];
+        }
+
+        if (childToSelect) {
+            setSelectedChild(childToSelect);
         }
       } catch (err) {
         console.error('Erreur chargement enfants:', err);
@@ -388,6 +402,7 @@ export const MessageComposer: React.FC = () => {
                           key={child.tokenId}
                           onClick={() => {
                             setSelectedChild(child);
+                            localStorage.setItem('lastSelectedChildId', child.tokenId);
                             setShowChildSelector(false);
                           }}
                           className={`w-full p-4 flex items-center gap-3 hover:bg-orange-50 transition-colors ${

@@ -185,6 +185,15 @@ export const MessageHistory = () => {
         });
 
         setMessages(messagesData);
+
+        // Si un messageId est dans l'URL, ouvrir automatiquement ce message
+        const messageIdFromUrl = searchParams.get('messageId');
+        if (messageIdFromUrl) {
+          const targetMessage = messagesData.find(m => m.id === messageIdFromUrl);
+          if (targetMessage) {
+            setSelectedMessage(targetMessage);
+          }
+        }
       } catch (err) {
         console.error('Erreur chargement messages:', err);
       } finally {
@@ -193,7 +202,7 @@ export const MessageHistory = () => {
     };
 
     loadMessages();
-  }, [selectedChild, childrenLoaded]);
+  }, [selectedChild, childrenLoaded, searchParams]);
 
   // Charger les notifications quand un message est sélectionné
   useEffect(() => {

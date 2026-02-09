@@ -9,6 +9,7 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Bell, X, Check, ChevronDown, ChevronUp } from 'lucide-react';
 import {
@@ -26,6 +27,7 @@ interface DoctorNotificationsProps {
 }
 
 export const DoctorNotifications = ({ tokenIds, maxVisible = 3 }: DoctorNotificationsProps) => {
+  const navigate = useNavigate();
   const [notifications, setNotifications] = useState<DoctorNotification[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showAll, setShowAll] = useState(false);
@@ -81,7 +83,24 @@ export const DoctorNotifications = ({ tokenIds, maxVisible = 3 }: DoctorNotifica
     }
   };
 
-  const handleDismiss = async (notification: DoctorNotification) => {
+  // Clic sur ✓ ou sur la carte : marquer comme lu + ouvrir le message lié
+  const handleOpenNotification = async (notification: DoctorNotification) => {
+    await markNotificationAsRead(notification.id);
+    setNotifications(prev =>
+      prev.map(n => n.id === notification.id ? { ...n, read: true } : n)
+    );
+
+    // Naviguer vers les messages avec le bon enfant et message
+    const params = new URLSearchParams();
+    params.set('childId', notification.tokenId);
+    if (notification.replyToMessageId) {
+      params.set('messageId', notification.replyToMessageId);
+    }
+    navigate(`/espace/messages?${params.toString()}`);
+  };
+
+  const handleDismiss = async (notification: DoctorNotification, e: React.MouseEvent) => {
+    e.stopPropagation(); // Ne pas déclencher le clic sur la carte
     await handleMarkAsRead(notification);
     // Animation de suppression
     setNotifications(prev => prev.filter(n => n.id !== notification.id));
@@ -148,7 +167,8 @@ export const DoctorNotifications = ({ tokenIds, maxVisible = 3 }: DoctorNotifica
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95, x: -100 }}
-            className={`relative p-4 rounded-2xl border-2 ${getNotificationColor(notification.type)} shadow-sm`}
+            onClick={() => handleOpenNotification(notification)}
+            className={`relative p-4 rounded-2xl border-2 ${getNotificationColor(notification.type)} shadow-sm cursor-pointer hover:shadow-md transition-shadow`}
           >
             {/* Badge type */}
             <div className="absolute -top-2 -left-2 w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-md text-lg">
@@ -175,14 +195,14 @@ export const DoctorNotifications = ({ tokenIds, maxVisible = 3 }: DoctorNotifica
                 {/* Actions */}
                 <div className="flex gap-1">
                   <button
-                    onClick={() => handleMarkAsRead(notification)}
+                    onClick={(e) => { e.stopPropagation(); handleOpenNotification(notification); }}
                     className="p-1.5 rounded-full hover:bg-white/50 transition-colors"
-                    title="Marquer comme lu"
+                    title="Voir le message"
                   >
                     <Check className="w-4 h-4" />
                   </button>
                   <button
-                    onClick={() => handleDismiss(notification)}
+                    onClick={(e) => handleDismiss(notification, e)}
                     className="p-1.5 rounded-full hover:bg-white/50 transition-colors"
                     title="Fermer"
                   >

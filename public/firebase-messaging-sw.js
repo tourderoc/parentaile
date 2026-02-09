@@ -27,7 +27,6 @@ messaging.onBackgroundMessage((payload) => {
   // Pour les messages "data-only", les infos sont dans payload.data
   const title = payload.notification?.title || payload.data?.title || 'Parent\'aile';
   const body = payload.notification?.body || payload.data?.body || 'Nouveau message de votre médecin';
-
   const notificationOptions = {
     body: body,
     icon: '/icons/web-app-manifest-192x192.png',
@@ -35,6 +34,8 @@ messaging.onBackgroundMessage((payload) => {
     tag: payload.data?.notificationId || 'default',
     data: payload.data,
     vibrate: [200, 100, 200],
+    renotify: true,
+    requireInteraction: true,
     actions: [
       { action: 'open', title: 'Voir' },
       { action: 'dismiss', title: 'Fermer' }
