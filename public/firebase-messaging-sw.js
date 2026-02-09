@@ -24,11 +24,14 @@ const messaging = firebase.messaging();
 messaging.onBackgroundMessage((payload) => {
   console.log('[firebase-messaging-sw.js] Notification reçue en arrière-plan:', payload);
 
-  const notificationTitle = payload.notification?.title || 'Parent\'aile';
+  // Pour les messages "data-only", les infos sont dans payload.data
+  const title = payload.notification?.title || payload.data?.title || 'Parent\'aile';
+  const body = payload.notification?.body || payload.data?.body || 'Nouveau message de votre médecin';
+
   const notificationOptions = {
-    body: payload.notification?.body || 'Nouveau message de votre médecin',
-    icon: '/logo192.png',
-    badge: '/logo192.png',
+    body: body,
+    icon: '/icons/web-app-manifest-192x192.png',
+    badge: '/icons/favicon-96x96.png',
     tag: payload.data?.notificationId || 'default',
     data: payload.data,
     vibrate: [200, 100, 200],
@@ -38,11 +41,12 @@ messaging.onBackgroundMessage((payload) => {
     ]
   };
 
-  self.registration.showNotification(notificationTitle, notificationOptions);
+  self.registration.showNotification(title, notificationOptions);
 
   // Mettre à jour le badge de l'icône de l'app
   if (navigator.setAppBadge) {
-    navigator.setAppBadge().catch(() => {});
+    const badgeCount = payload.data?.badgeCount ? parseInt(payload.data.badgeCount) : undefined;
+    navigator.setAppBadge(badgeCount).catch(() => {});
   }
 });
 

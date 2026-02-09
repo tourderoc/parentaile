@@ -188,8 +188,8 @@ export function onForegroundNotification(callback: NotificationCallback): () => 
         }
 
         const notificationPayload: PushNotificationPayload = {
-          title: payload.notification?.title || 'Notification',
-          body: payload.notification?.body || '',
+          title: payload.notification?.title || payload.data?.title || 'Notification',
+          body: payload.notification?.body || payload.data?.body || '',
           data: payload.data as Record<string, string>
         };
 
@@ -197,7 +197,8 @@ export function onForegroundNotification(callback: NotificationCallback): () => 
         playNotificationSound();
 
         // Mettre à jour le badge de l'icône de l'app (PWA)
-        updateAppBadge();
+        const badgeCount = payload.data?.badgeCount ? parseInt(payload.data.badgeCount) : undefined;
+        updateAppBadge(badgeCount);
 
         // Appeler tous les callbacks enregistrés
         foregroundCallbacks.forEach(cb => cb(notificationPayload));
