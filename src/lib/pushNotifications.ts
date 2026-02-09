@@ -11,7 +11,7 @@
 import { getMessaging, getToken, onMessage, isSupported } from 'firebase/messaging';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from './firebase';
-import { initializeApp, getApps } from 'firebase/app';
+import { getApps } from 'firebase/app';
 import { areNotificationsEnabled, playNotificationSound } from './userPreferences';
 
 // Clé VAPID publique (Firebase Console > Cloud Messaging > Web Push certificates)
@@ -261,6 +261,10 @@ export function updateAppBadge(count?: number): void {
 export function clearAppBadge(): void {
   if ('clearAppBadge' in navigator) {
     (navigator as any).clearAppBadge().catch(() => {});
+  }
+  // Fallback: setAppBadge(0) clears it on some platforms
+  if ('setAppBadge' in navigator) {
+    (navigator as any).setAppBadge(0).catch(() => {});
   }
 }
 

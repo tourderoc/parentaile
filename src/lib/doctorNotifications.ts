@@ -148,10 +148,6 @@ export async function getNotificationsForTokens(tokenIds: string[]): Promise<Doc
   }
 }
 
-/**
- * Marque une notification comme lue
- * @param notificationId - L'ID de la notification
- */
 export async function markNotificationAsRead(notificationId: string): Promise<boolean> {
   try {
     const notificationRef = doc(db, 'notifications', notificationId);
@@ -160,6 +156,25 @@ export async function markNotificationAsRead(notificationId: string): Promise<bo
   } catch (error) {
     console.error('[DoctorNotifications] Erreur marquage lu:', error);
     return false;
+  }
+}
+
+/**
+ * Marque toutes les notifications comme lues pour un ensemble de tokens
+ * @param tokenIds - Liste des IDs de tokens
+ */
+export async function markAllAsReadForTokens(tokenIds: string[]): Promise<void> {
+  if (tokenIds.length === 0) return;
+  
+  try {
+    const notifications = await getNotificationsForTokens(tokenIds);
+    const unread = notifications.filter(n => !n.read);
+    
+    for (const notif of unread) {
+      await markNotificationAsRead(notif.id);
+    }
+  } catch (error) {
+    console.error('[DoctorNotifications] Erreur marquage global lu:', error);
   }
 }
 
@@ -279,6 +294,7 @@ export default {
   getNotificationsForTokens,
   getNotificationsForMessage,
   markNotificationAsRead,
+  markAllAsReadForTokens,
   getUnreadCount,
   getNotificationIcon,
   getNotificationColor

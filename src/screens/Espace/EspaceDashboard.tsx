@@ -16,8 +16,8 @@ import {
 import { BottomNav } from '../../components/ui/BottomNav';
 import { motion } from 'framer-motion';
 import { DoctorNotifications } from '../../components/ui/DoctorNotifications';
-import { initializePushNotifications, updateAppBadge } from '../../lib/pushNotifications';
-import { getUnreadCount } from '../../lib/doctorNotifications';
+import { initializePushNotifications, clearAppBadge } from '../../lib/pushNotifications';
+import { markAllAsReadForTokens } from '../../lib/doctorNotifications';
 
 interface Child {
   tokenId: string;
@@ -77,13 +77,9 @@ export const EspaceDashboard = () => {
         }
       });
 
-      // Mettre à jour le badge de l'icône de l'app avec le nombre de non-lus
-      getUnreadCount(tokenIds).then(count => {
-        if (count > 0) {
-          updateAppBadge(count);
-        } else {
-          clearAppBadge();
-        }
+      // Mettre à jour le badge et marquer tout comme lu pour être sûr qu'il disparaisse
+      markAllAsReadForTokens(tokenIds).then(() => {
+        clearAppBadge();
       });
     }
   }, [children, isLoading]);
