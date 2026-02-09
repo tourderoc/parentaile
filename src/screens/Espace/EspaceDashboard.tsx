@@ -32,6 +32,9 @@ export const EspaceDashboard = () => {
   const [pseudo, setPseudo] = useState<string>('');
 
   useEffect(() => {
+    // Effacer le badge immédiatement à l'entrée sur le dashboard
+    clearAppBadge();
+    
     const loadData = async () => {
       const user = auth.currentUser;
       if (!user) {
@@ -81,6 +84,8 @@ export const EspaceDashboard = () => {
       markAllAsReadForTokens(tokenIds).then(() => {
         clearAppBadge();
       });
+    } else if (!isLoading && children.length === 0) {
+      clearAppBadge();
     }
   }, [children, isLoading]);
 

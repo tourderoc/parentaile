@@ -170,9 +170,12 @@ export async function markAllAsReadForTokens(tokenIds: string[]): Promise<void> 
     const notifications = await getNotificationsForTokens(tokenIds);
     const unread = notifications.filter(n => !n.read);
     
-    for (const notif of unread) {
-      await markNotificationAsRead(notif.id);
-    }
+    if (unread.length === 0) return;
+
+    // Faire les mises à jour en parallèle pour plus de rapidité
+    await Promise.all(unread.map(notif => markNotificationAsRead(notif.id)));
+    
+    console.log(`[DoctorNotifications] ${unread.length} notifications marquées comme lues`);
   } catch (error) {
     console.error('[DoctorNotifications] Erreur marquage global lu:', error);
   }
