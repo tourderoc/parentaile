@@ -17,7 +17,6 @@ import {
   Baby,
   Eraser
 } from 'lucide-react';
-import { canUseRefinement, getRemainingUses, incrementUsage, isAdminUser } from '../../lib/rateLimiting';
 
 interface Child {
   tokenId: string;
@@ -33,10 +32,7 @@ export const MessageComposer: React.FC = () => {
   const [selectedChild, setSelectedChild] = useState<Child | null>(null);
   const [showChildSelector, setShowChildSelector] = useState(false);
   const [message, setMessage] = useState('');
-  const [reformulatedMessage, setReformulatedMessage] = useState('');
-  const [showReformulated, setShowReformulated] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
-  const [isReformulating, setIsReformulating] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [isSent, setIsSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -79,7 +75,6 @@ export const MessageComposer: React.FC = () => {
 
         setChildren(childrenData);
 
-        // Sélection par défaut
         // Sélection par défaut : URL > LocalStorage > Premier de liste
         const childFromUrl = searchParams.get('childId');
         let childToSelect = null;
@@ -88,7 +83,6 @@ export const MessageComposer: React.FC = () => {
           childToSelect = childrenData.find(c => c.tokenId === childFromUrl);
         }
         
-        // Si pas d'URL, vérifier le localStorage
         if (!childToSelect) {
             const lastSelectedId = localStorage.getItem('lastSelectedChildId');
             if (lastSelectedId) {
@@ -96,7 +90,6 @@ export const MessageComposer: React.FC = () => {
             }
         }
 
-        // Sinon, prendre le premier
         if (!childToSelect && childrenData.length > 0) {
             childToSelect = childrenData[0];
         }
@@ -120,34 +113,25 @@ export const MessageComposer: React.FC = () => {
     if (hasSupport) {
       const SpeechRecognition = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition;
       recognitionRef.current = new SpeechRecognition();
-
-      // On mobile, continuous mode doesn't work well - use single shot and restart
       recognitionRef.current.continuous = !isMobile;
       recognitionRef.current.interimResults = true;
       recognitionRef.current.lang = 'fr-FR';
 
       recognitionRef.current.onresult = (event: any) => {
         let interimTranscript = '';
-
         for (let i = event.resultIndex; i < event.results.length; i++) {
           const transcript = event.results[i][0].transcript;
           if (event.results[i].isFinal) {
-            // Only add final results to the accumulated text
             finalTranscriptRef.current += transcript + ' ';
           } else {
-            // Interim results are just for display preview
             interimTranscript += transcript;
           }
         }
-
-        // Update message with final text + current interim preview
         setMessage(finalTranscriptRef.current + interimTranscript);
       };
 
       recognitionRef.current.onerror = (event: any) => {
         console.error('Erreur reconnaissance vocale:', event.error);
-
-        // Don't stop on 'no-speech' or 'aborted' errors on mobile - just restart
         if (isMobile && (event.error === 'no-speech' || event.error === 'aborted')) {
           if (isRecordingRef.current) {
             setTimeout(() => {
@@ -158,13 +142,11 @@ export const MessageComposer: React.FC = () => {
           }
           return;
         }
-
         setIsRecording(false);
         isRecordingRef.current = false;
       };
 
       recognitionRef.current.onend = () => {
-        // On mobile, restart recognition if still recording
         if (isMobile && isRecordingRef.current) {
           setTimeout(() => {
             try {
@@ -176,10 +158,8 @@ export const MessageComposer: React.FC = () => {
           }, 100);
           return;
         }
-
         setIsRecording(false);
         isRecordingRef.current = false;
-        // Ensure we keep only the final transcript
         if (finalTranscriptRef.current) {
           setMessage(finalTranscriptRef.current.trim());
         }
@@ -206,14 +186,11 @@ export const MessageComposer: React.FC = () => {
       isRecordingRef.current = false;
       recognitionRef.current.stop();
       setIsRecording(false);
-      // Keep the final transcript in the message
       setMessage(finalTranscriptRef.current.trim());
     } else {
-      // On mobile, request microphone permission first
       if (isMobile) {
         try {
           const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-          // Stop the stream immediately - we just needed permission
           stream.getTracks().forEach(track => track.stop());
         } catch (err) {
           console.error('Permission micro refusée:', err);
@@ -221,10 +198,7 @@ export const MessageComposer: React.FC = () => {
           return;
         }
       }
-
-      // Initialize with current message content
       finalTranscriptRef.current = message ? message + ' ' : '';
-
       try {
         recognitionRef.current.start();
         isRecordingRef.current = true;
@@ -235,55 +209,6 @@ export const MessageComposer: React.FC = () => {
         setError('Impossible de démarrer la dictée vocale. Réessayez.');
       }
     }
-  };
-
-  const handleReformulate = async () => {
-    if (!message.trim() || message.length < 5) {
-      setError('Le message est trop court pour être reformulé.');
-      return;
-    }
-
-    // Vérifier le rate limiting
-    const userEmail = auth.currentUser?.email;
-    if (!canUseRefinement(userEmail)) {
-      setError('Vous avez atteint la limite de 2 reformulations par jour. Revenez demain !');
-      return;
-    }
-
-    setIsReformulating(true);
-    setError(null);
-
-    try {
-      const response = await fetch('/.netlify/functions/refineText', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          text: message,
-          mode: 'reformulate'
-        })
-      });
-
-      if (!response.ok) throw new Error('Erreur reformulation');
-
-      const data = await response.json();
-      setReformulatedMessage(data.refinedText || data.refined || data.text);
-      setShowReformulated(true);
-
-      // Incrémenter le compteur d'utilisation (sauf admin)
-      if (!isAdminUser(userEmail)) {
-        incrementUsage();
-      }
-    } catch (err) {
-      console.error('Erreur reformulation:', err);
-      setError('Impossible de reformuler le message. Réessayez.');
-    } finally {
-      setIsReformulating(false);
-    }
-  };
-
-  const useReformulated = () => {
-    setMessage(reformulatedMessage);
-    setShowReformulated(false);
   };
 
   const handleSend = async () => {
@@ -348,7 +273,6 @@ export const MessageComposer: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-[#FFFBF0] pb-32">
-      {/* Premium Header */}
       <div className="bg-white/80 backdrop-blur-md sticky top-0 z-40 border-b border-orange-100">
         <div className="max-w-md mx-auto px-6 py-4 flex items-center gap-4">
           <button
@@ -369,7 +293,6 @@ export const MessageComposer: React.FC = () => {
       </div>
 
       <main className="max-w-md mx-auto px-6 pt-6 space-y-6">
-        {/* Child Selector (if multi) */}
         {children.length > 1 && (
           <div className="space-y-2">
              <label className="text-[10px] font-bold text-gray-400 uppercase ml-1 tracking-widest font-sans">Enfant concerné</label>
@@ -425,7 +348,6 @@ export const MessageComposer: React.FC = () => {
           </div>
         )}
 
-        {/* Phrases rapides */}
         <div className="space-y-2">
           <button
             onClick={() => setShowQuickPhrases(!showQuickPhrases)}
@@ -463,7 +385,6 @@ export const MessageComposer: React.FC = () => {
           </AnimatePresence>
         </div>
 
-        {/* Message Area */}
         <div className="space-y-2 relative">
           <label className="text-[10px] font-bold text-gray-400 uppercase ml-1 tracking-widest">Votre Message</label>
           <div className={`glass rounded-[2rem] p-4 border-2 transition-all duration-300 shadow-glass min-h-[240px] flex flex-col ${isRecording ? 'border-red-400 bg-red-50/30' : 'border-white focus-within:border-orange-200 focus-within:bg-orange-50/10'}`}>
@@ -472,17 +393,15 @@ export const MessageComposer: React.FC = () => {
               value={message}
               onChange={(e) => {
                 setMessage(e.target.value);
-                // Sync finalTranscriptRef when user types manually
                 if (!isRecording) {
                   finalTranscriptRef.current = e.target.value;
                 }
               }}
               placeholder={isMobile ? "Écrivez votre message ici..." : "Écrivez ici ou utilisez la dictée vocale..."}
               className="flex-1 w-full bg-transparent resize-none focus:outline-none font-medium text-gray-700 placeholder:text-gray-300 leading-relaxed min-h-[160px] text-base"
-              style={{ fontSize: '16px' }} // Empêche le zoom auto sur iOS
+              style={{ fontSize: '16px' }}
             />
 
-            {/* Indicateur d'enregistrement */}
             {isRecording && (
               <motion.div
                 initial={{ opacity: 0 }}
@@ -494,7 +413,6 @@ export const MessageComposer: React.FC = () => {
               </motion.div>
             )}
 
-            {/* Compteur de caractères */}
             <div className="text-right text-[10px] text-gray-400 font-medium">
               {message.length} caractère{message.length > 1 ? 's' : ''}
             </div>
@@ -532,71 +450,10 @@ export const MessageComposer: React.FC = () => {
                   <Eraser size={20} />
                 </button>
               </div>
-
-              <div className="flex items-center gap-3">
-                 {isReformulating ? (
-                    <div className="flex items-center gap-2 text-orange-500">
-                       <Loader2 size={16} className="animate-spin" />
-                       <span className="text-[10px] uppercase font-bold tracking-widest">Réflexion...</span>
-                    </div>
-                 ) : (
-                    <div className="flex flex-col items-end gap-1">
-                      <button
-                        onClick={handleReformulate}
-                        disabled={message.length < 10 || !canUseRefinement(auth.currentUser?.email)}
-                        className="flex items-center gap-2 px-4 py-2 bg-orange-100 text-orange-600 rounded-xl hover:bg-orange-200 transition-all font-bold text-xs disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        <Sparkles size={16} />
-                        Reformuler
-                      </button>
-                      {!isAdminUser(auth.currentUser?.email) && (
-                        <span className="text-[9px] text-gray-400">
-                          {getRemainingUses(auth.currentUser?.email)}/2 restantes
-                        </span>
-                      )}
-                    </div>
-                 )}
-              </div>
             </div>
           </div>
         </div>
 
-        {/* AI Suggestion Card */}
-        <AnimatePresence>
-          {showReformulated && (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-indigo-600 rounded-[2rem] p-6 shadow-premium relative overflow-hidden"
-            >
-              <div className="absolute top-[-20%] right-[-10%] w-32 h-32 bg-white/10 rounded-full blur-2xl" />
-              <div className="relative z-10 space-y-4">
-                <div className="flex items-center gap-2">
-                  <Sparkles size={16} className="text-indigo-200" />
-                  <span className="text-indigo-100 text-[10px] font-bold uppercase tracking-widest">Suggestion de Parent'aile</span>
-                </div>
-                <p className="text-white font-medium leading-relaxed italic">"{reformulatedMessage}"</p>
-                <div className="flex gap-2 pt-2">
-                  <button
-                    onClick={useReformulated}
-                    className="flex-1 h-12 bg-white text-indigo-600 rounded-2xl font-bold text-sm shadow-lg hover:bg-indigo-50 transition-colors"
-                  >
-                    Utiliser cette version
-                  </button>
-                  <button
-                    onClick={() => setShowReformulated(false)}
-                    className="h-12 px-4 bg-indigo-500/50 text-white rounded-2xl font-bold text-sm hover:bg-indigo-500 transition-colors"
-                  >
-                    Garder l'original
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Error */}
         {error && (
           <motion.div
             initial={{ opacity: 0, x: 10 }}
@@ -607,7 +464,6 @@ export const MessageComposer: React.FC = () => {
           </motion.div>
         )}
 
-        {/* Send Button */}
         <div className="pt-4">
           <button
             onClick={handleSend}
@@ -635,4 +491,3 @@ export const MessageComposer: React.FC = () => {
 };
 
 export default MessageComposer;
-

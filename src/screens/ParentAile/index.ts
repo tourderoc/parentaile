@@ -1,1 +1,0 @@
-export { ParentAile } from "./ParentAile";
