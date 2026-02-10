@@ -129,7 +129,7 @@ export const EspaceDashboard = () => {
     setIsTestingPush(true);
     try {
       const tokenId = children[0].tokenId;
-      const response = await fetch('https://europe-west1-parentaile.cloudfunctions.net/testNotification', {
+      const response = await fetch('https://testnotification-ufpaxnd4pa-ew.a.run.app', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
