@@ -11,11 +11,7 @@ import {
   User,
   Baby,
   ChevronRight,
-  ShieldCheck,
-  BellRing,
-  CheckCircle2,
-  XCircle,
-  AlertTriangle
+  ShieldCheck
 } from 'lucide-react';
 import { BottomNav } from '../../components/ui/BottomNav';
 import { motion } from 'framer-motion';
@@ -34,8 +30,6 @@ export const EspaceDashboard = () => {
   const [children, setChildren] = useState<Child[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [pseudo, setPseudo] = useState<string>('');
-  const [pushStatus, setPushStatus] = useState<'granted' | 'denied' | 'default' | 'loading'>('loading');
-  const [isTestingPush, setIsTestingPush] = useState(false);
 
   useEffect(() => {
     // Effacer le badge immédiatement à l'entrée sur le dashboard
@@ -74,11 +68,6 @@ export const EspaceDashboard = () => {
     };
 
     loadData();
-
-    // Vérifier la permission au chargement
-    if ('Notification' in window) {
-      setPushStatus(Notification.permission);
-    }
   }, [navigate]);
 
   // Initialiser les notifications push et le badge de l'app
@@ -88,7 +77,6 @@ export const EspaceDashboard = () => {
       initializePushNotifications(tokenIds).then(success => {
         if (success) {
           console.log('[EspaceDashboard] Push notifications initialisées');
-          setPushStatus('granted');
         }
       });
 
@@ -116,38 +104,14 @@ export const EspaceDashboard = () => {
 
   const handleWriteMessage = () => {
     if (children.length === 0) {
+      // No children yet, guide to settings to add a code
       navigate('/espace/parametres');
     } else if (children.length === 1) {
+      // Exactly one child, go straight to composer for them
       navigate(`/espace/nouveau-message?childId=${children[0].tokenId}`);
     } else {
+      // Multiple children, go to composer where they can pick
       navigate('/espace/nouveau-message');
-    }
-  };
-
-  const handleTestPush = async () => {
-    if (children.length === 0) return;
-    setIsTestingPush(true);
-    try {
-      const tokenId = children[0].tokenId;
-      const response = await fetch('https://testnotification-ufpaxnd4pa-ew.a.run.app', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          tokenId,
-          title: '🛠️ Test Parent\'aile',
-          body: 'Si vous voyez ceci, votre configuration est correcte !'
-        })
-      });
-      if (response.ok) {
-        alert('Test envoyé ! Vérifiez vos notifications.');
-      } else {
-        alert('Échec de l\'envoi du test. Vérifiez la console.');
-      }
-    } catch (err) {
-      console.error(err);
-      alert('Erreur lors du test.');
-    } finally {
-      setIsTestingPush(false);
     }
   };
 
@@ -201,58 +165,6 @@ export const EspaceDashboard = () => {
             </div>
           </div>
         </motion.div>
-
-        {/* Diagnostic Push (Debug) */}
-        {children.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="bg-white/50 border border-orange-100 rounded-2xl p-4 space-y-3"
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <BellRing size={16} className="text-orange-500" />
-                <span className="text-sm font-bold text-gray-700">Notifications</span>
-              </div>
-              <div className="flex items-center gap-1">
-                {pushStatus === 'granted' ? (
-                  <div className="flex items-center gap-1 text-green-600 bg-green-50 px-2 py-0.5 rounded-full">
-                    <CheckCircle2 size={12} />
-                    <span className="text-[10px] font-bold uppercase">Activé</span>
-                  </div>
-                ) : pushStatus === 'denied' ? (
-                  <div className="flex items-center gap-1 text-red-600 bg-red-50 px-2 py-0.5 rounded-full">
-                    <XCircle size={12} />
-                    <span className="text-[10px] font-bold uppercase">Bloqué</span>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-1 text-orange-600 bg-orange-50 px-2 py-0.5 rounded-full">
-                    <AlertTriangle size={12} />
-                    <span className="text-[10px] font-bold uppercase">À configurer</span>
-                  </div>
-                )}
-              </div>
-            </div>
-            
-            {pushStatus !== 'granted' && (
-              <p className="text-[11px] text-gray-500 leading-relaxed">
-                Appuyez sur "Écrire au médecin" ou rafraîchissez pour autoriser les notifications.
-              </p>
-            )}
-
-            <button
-              onClick={handleTestPush}
-              disabled={isTestingPush || children.length === 0}
-              className="w-full py-2 bg-white border border-orange-200 rounded-xl text-[11px] font-bold text-orange-500 hover:bg-orange-50 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
-            >
-              {isTestingPush ? (
-                <Loader2 size={14} className="animate-spin" />
-              ) : (
-                'Tester la réception sur ce téléphone'
-              )}
-            </button>
-          </motion.div>
-        )}
 
         {/* Doctor Notifications */}
         {children.length > 0 && (
