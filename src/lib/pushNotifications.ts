@@ -201,6 +201,9 @@ export function onForegroundNotification(callback: NotificationCallback): () => 
         const badgeCount = payload.data?.badgeCount ? parseInt(payload.data.badgeCount) : 1;
         updateAppBadge(badgeCount);
 
+        // Afficher une notification système même en premier plan
+        showForegroundNotification(notificationPayload);
+
         // Appeler tous les callbacks enregistrés
         foregroundCallbacks.forEach(cb => cb(notificationPayload));
       });
@@ -243,6 +246,45 @@ export async function initializePushNotifications(tokenIds: string[]): Promise<b
   } catch (error) {
     console.error('[PushNotifications] Erreur initialisation:', error);
     return false;
+  }
+}
+
+/**
+ * Affiche une notification système quand l'app est en premier plan
+ * (En arrière-plan, c'est le service worker qui gère)
+ */
+function showForegroundNotification(payload: PushNotificationPayload): void {
+  if (Notification.permission !== 'granted') return;
+
+  try {
+    const notification = new Notification(payload.title, {
+      body: payload.body,
+      icon: '/icons/web-app-manifest-192x192.png',
+      badge: '/icons/favicon-96x96.png',
+      tag: payload.data?.notificationId || 'foreground',
+      renotify: true,
+    });
+
+    notification.onclick = () => {
+      window.focus();
+      notification.close();
+      // Naviguer vers le dashboard
+      if (window.location.pathname !== '/espace/dashboard') {
+        window.location.href = '/espace/dashboard';
+      }
+    };
+  } catch {
+    // Fallback pour les environnements qui ne supportent pas new Notification()
+    // (ex: certains navigateurs mobiles qui nécessitent ServiceWorker)
+    navigator.serviceWorker?.ready?.then(registration => {
+      registration.showNotification(payload.title, {
+        body: payload.body,
+        icon: '/icons/web-app-manifest-192x192.png',
+        badge: '/icons/favicon-96x96.png',
+        tag: payload.data?.notificationId || 'foreground',
+        renotify: true,
+      });
+    }).catch(() => {});
   }
 }
 
