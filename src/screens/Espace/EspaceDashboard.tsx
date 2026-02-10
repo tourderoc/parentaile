@@ -16,7 +16,7 @@ import {
 import { BottomNav } from '../../components/ui/BottomNav';
 import { motion } from 'framer-motion';
 import { DoctorNotifications } from '../../components/ui/DoctorNotifications';
-import { initializePushNotifications, clearAppBadge } from '../../lib/pushNotifications';
+import { initializePushNotifications, clearAppBadge, onForegroundNotification } from '../../lib/pushNotifications';
 import { markAllAsReadForTokens } from '../../lib/doctorNotifications';
 
 interface Child {
@@ -80,10 +80,18 @@ export const EspaceDashboard = () => {
         }
       });
 
+      // Écouter les notifications en premier plan (app ouverte)
+      // Cela déclenche l'affichage de la notification système + son + badge
+      const unsubscribe = onForegroundNotification((payload) => {
+        console.log('[EspaceDashboard] Notification premier plan reçue:', payload.title);
+      });
+
       // Mettre à jour le badge et marquer tout comme lu pour être sûr qu'il disparaisse
       markAllAsReadForTokens(tokenIds).then(() => {
         clearAppBadge();
       });
+
+      return () => unsubscribe();
     } else if (!isLoading && children.length === 0) {
       clearAppBadge();
     }
