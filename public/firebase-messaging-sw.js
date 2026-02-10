@@ -24,9 +24,22 @@ const messaging = firebase.messaging();
 messaging.onBackgroundMessage((payload) => {
   console.log('[firebase-messaging-sw.js] Notification reçue en arrière-plan:', payload);
 
-  // Pour les messages "data-only", les infos sont dans payload.data
-  const title = payload.notification?.title || payload.data?.title || 'Parent\'aile';
-  const body = payload.notification?.body || payload.data?.body || 'Nouveau message de votre médecin';
+  // Si FCM a déjà inclus un bloc "notification", le navigateur l'affiche souvent tout seul.
+  // On ne déclenche showNotification manuellement que si c'est un message "data-only"
+  // ou si on veut forcer nos options personnalisées (actions, etc.)
+  
+  if (payload.notification) {
+    console.log('[firebase-messaging-sw.js] Bloc notification présent, le navigateur s\'en occupe peut-être déjà.');
+    // On met quand même à jour le badge
+    if (navigator.setAppBadge) {
+      const badgeCount = payload.data?.badgeCount ? parseInt(payload.data.badgeCount) : 1;
+      navigator.setAppBadge(badgeCount).catch(() => {});
+    }
+    return;
+  }
+
+  const title = payload.data?.title || 'Parent\'aile';
+  const body = payload.data?.body || 'Nouveau message de votre médecin';
   const notificationOptions = {
     body: body,
     icon: '/icons/web-app-manifest-192x192.png',
@@ -45,7 +58,6 @@ messaging.onBackgroundMessage((payload) => {
   self.registration.showNotification(title, notificationOptions);
 
   // Mettre à jour le badge de l'icône de l'app
-  // Utiliser 1 par défaut (jamais undefined pour éviter un badge "flag" persistant)
   if (navigator.setAppBadge) {
     const badgeCount = payload.data?.badgeCount ? parseInt(payload.data.badgeCount) : 1;
     navigator.setAppBadge(badgeCount).catch(() => {});
