@@ -17,6 +17,7 @@ import {
   Baby,
   Eraser
 } from 'lucide-react';
+import { canUseRefinement, getRemainingUses, incrementUsage, isAdminUser } from '../../lib/rateLimiting';
 
 interface Child {
   tokenId: string;
@@ -32,7 +33,10 @@ export const MessageComposer: React.FC = () => {
   const [selectedChild, setSelectedChild] = useState<Child | null>(null);
   const [showChildSelector, setShowChildSelector] = useState(false);
   const [message, setMessage] = useState('');
+  const [reformulatedMessage, setReformulatedMessage] = useState('');
+  const [showReformulated, setShowReformulated] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
+  const [isReformulating, setIsReformulating] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [isSent, setIsSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -209,6 +213,55 @@ export const MessageComposer: React.FC = () => {
         setError('Impossible de démarrer la dictée vocale. Réessayez.');
       }
     }
+  };
+
+  const handleReformulate = async () => {
+    if (!message.trim() || message.length < 5) {
+      setError('Le message est trop court pour être reformulé.');
+      return;
+    }
+
+    // Vérifier le rate limiting
+    const userEmail = auth.currentUser?.email;
+    if (!canUseRefinement(userEmail)) {
+      setError('Vous avez atteint la limite de 2 reformulations par jour. Revenez demain !');
+      return;
+    }
+
+    setIsReformulating(true);
+    setError(null);
+
+    try {
+      const response = await fetch('/.netlify/functions/refineText', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: message,
+          mode: 'reformulate'
+        })
+      });
+
+      if (!response.ok) throw new Error('Erreur reformulation');
+
+      const data = await response.json();
+      setReformulatedMessage(data.refinedText || data.refined || data.text);
+      setShowReformulated(true);
+
+      // Incrémenter le compteur d'utilisation (sauf admin)
+      if (!isAdminUser(userEmail)) {
+        incrementUsage();
+      }
+    } catch (err) {
+      console.error('Erreur reformulation:', err);
+      setError('Impossible de reformuler le message. Réessayez.');
+    } finally {
+      setIsReformulating(false);
+    }
+  };
+
+  const useReformulated = () => {
+    setMessage(reformulatedMessage);
+    setShowReformulated(false);
   };
 
   const handleSend = async () => {
@@ -450,9 +503,69 @@ export const MessageComposer: React.FC = () => {
                   <Eraser size={20} />
                 </button>
               </div>
+
+              <div className="flex items-center gap-3">
+                 {isReformulating ? (
+                    <div className="flex items-center gap-2 text-orange-500">
+                       <Loader2 size={16} className="animate-spin" />
+                       <span className="text-[10px] uppercase font-bold tracking-widest">Réflexion...</span>
+                    </div>
+                 ) : (
+                    <div className="flex flex-col items-end gap-1">
+                      <button
+                        onClick={handleReformulate}
+                        disabled={message.length < 10 || !canUseRefinement(auth.currentUser?.email)}
+                        className="flex items-center gap-2 px-4 py-2 bg-orange-100 text-orange-600 rounded-xl hover:bg-orange-200 transition-all font-bold text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <Sparkles size={16} />
+                        Reformuler
+                      </button>
+                      {!isAdminUser(auth.currentUser?.email) && (
+                        <span className="text-[9px] text-gray-400">
+                          {getRemainingUses(auth.currentUser?.email)}/2 restantes
+                        </span>
+                      )}
+                    </div>
+                 )}
+              </div>
             </div>
           </div>
         </div>
+
+        {/* AI Suggestion Card */}
+        <AnimatePresence>
+          {showReformulated && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-indigo-600 rounded-[2rem] p-6 shadow-premium relative overflow-hidden"
+            >
+              <div className="absolute top-[-20%] right-[-10%] w-32 h-32 bg-white/10 rounded-full blur-2xl" />
+              <div className="relative z-10 space-y-4">
+                <div className="flex items-center gap-2">
+                  <Sparkles size={16} className="text-indigo-200" />
+                  <span className="text-indigo-100 text-[10px] font-bold uppercase tracking-widest">Suggestion de Parent'aile</span>
+                </div>
+                <p className="text-white font-medium leading-relaxed italic">"{reformulatedMessage}"</p>
+                <div className="flex gap-2 pt-2">
+                  <button
+                    onClick={useReformulated}
+                    className="flex-1 h-12 bg-white text-indigo-600 rounded-2xl font-bold text-sm shadow-lg hover:bg-indigo-50 transition-colors"
+                  >
+                    Utiliser cette version
+                  </button>
+                  <button
+                    onClick={() => setShowReformulated(false)}
+                    className="h-12 px-4 bg-indigo-500/50 text-white rounded-2xl font-bold text-sm hover:bg-indigo-500 transition-colors"
+                  >
+                    Garder l'original
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {error && (
           <motion.div
