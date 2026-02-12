@@ -112,11 +112,25 @@ export const MessageHistory = () => {
         setChildrenLoaded(true);
 
         const childFromUrl = searchParams.get('childId');
+        let childToSelect = null;
+
         if (childFromUrl) {
-          const found = childrenData.find(c => c.tokenId === childFromUrl);
-          if (found) setSelectedChild(found);
-        } else if (childrenData.length > 0) {
-          setSelectedChild(childrenData[0]);
+          childToSelect = childrenData.find(c => c.tokenId === childFromUrl);
+        }
+        
+        if (!childToSelect) {
+          const lastId = localStorage.getItem('lastSelectedChildId');
+          if (lastId) {
+            childToSelect = childrenData.find(c => c.tokenId === lastId);
+          }
+        }
+
+        if (!childToSelect && childrenData.length > 0) {
+          childToSelect = childrenData[0];
+        }
+
+        if (childToSelect) {
+          setSelectedChild(childToSelect);
         }
       } catch (err) {
         console.error('Erreur chargement enfants:', err);
@@ -331,6 +345,7 @@ export const MessageHistory = () => {
                         key={child.tokenId}
                         onClick={() => {
                           setSelectedChild(child);
+                          localStorage.setItem('lastSelectedChildId', child.tokenId);
                           setShowChildSelector(false);
                         }}
                         className={`w-full p-4 flex items-center gap-3 hover:bg-orange-50 transition-colors ${
