@@ -24,7 +24,7 @@ export const EspaceLogin: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [rememberMe, setRememberMe] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true);
 
   // Forgot password states
   const [showForgotPassword, setShowForgotPassword] = useState(false);

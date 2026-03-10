@@ -102,12 +102,6 @@ export const MessageHistory = () => {
           nickname: doc.data().nickname
         }));
 
-        // Redirect to settings if no children (tokens) - keep loading state during redirect
-        if (childrenData.length === 0) {
-          navigate('/espace/parametres', { replace: true });
-          return; // Keep isLoading true to avoid flash
-        }
-
         setChildren(childrenData);
         setChildrenLoaded(true);
 
@@ -134,9 +128,7 @@ export const MessageHistory = () => {
         }
       } catch (err) {
         console.error('Erreur chargement enfants:', err);
-        // On error, redirect to settings as well
-        navigate('/espace/parametres', { replace: true });
-        return;
+        setChildrenLoaded(true);
       }
     };
 
@@ -385,14 +377,21 @@ export const MessageHistory = () => {
              </div>
              <div>
                 <h3 className="text-xl font-bold text-gray-800">Aucun message</h3>
-                <p className="text-gray-400 text-sm mt-1">Échangez avec votre médecin <br/>pour commencer le suivi de {selectedChild?.nickname}.</p>
+                <p className="text-gray-400 text-sm mt-1">
+                  {children.length === 0
+                    ? 'Vos messages et notifications apparaitront ici.'
+                    : <>Echangez avec votre medecin <br/>pour commencer le suivi de {selectedChild?.nickname}.</>
+                  }
+                </p>
              </div>
-             <button
-                onClick={() => navigate(`/espace/nouveau-message${selectedChild ? `?childId=${selectedChild.tokenId}` : ''}`)}
-                className="px-8 h-14 bg-orange-500 text-white rounded-2xl font-bold shadow-premium hover:bg-orange-600 transition-all"
-             >
-                Envoyer un message
-             </button>
+             {children.length > 0 && (
+               <button
+                  onClick={() => navigate(`/espace/nouveau-message${selectedChild ? `?childId=${selectedChild.tokenId}` : ''}`)}
+                  className="px-8 h-14 bg-orange-500 text-white rounded-2xl font-bold shadow-premium hover:bg-orange-600 transition-all"
+               >
+                  Envoyer un message
+               </button>
+             )}
           </motion.div>
         ) : (
           <div className="space-y-3">

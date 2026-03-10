@@ -6,41 +6,28 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { auth, db } from '../../lib/firebase';
 import { signOut, updateEmail, updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
 import {
-  collection,
-  getDocs,
-  query,
-  orderBy,
   doc,
   updateDoc,
-  deleteDoc,
-  setDoc,
-  serverTimestamp,
   getDoc
 } from 'firebase/firestore';
-import { validateToken, markTokenAsUsed } from '../../lib/tokenService';
 import { BottomNav } from '../../components/ui/BottomNav';
-import { QRScanner } from '../../components/QRScanner';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft,
   User,
-  Plus,
   Pencil,
-  Trash2,
   LogOut,
   X,
   Check,
   Loader2,
-  QrCode,
-  Keyboard,
   ChevronRight,
-  Baby,
   Mail,
   Key,
   Eye,
   EyeOff,
   Bell,
-  Volume2
+  Volume2,
+  Smile
 } from 'lucide-react';
 import {
   getUserPreferences,
@@ -48,33 +35,31 @@ import {
   setNotificationSoundEnabled,
   playNotificationSound
 } from '../../lib/userPreferences';
-
-interface Child {
-  tokenId: string;
-  nickname: string;
-  addedAt: Date;
-}
+import { UserAvatar } from '../../components/ui/UserAvatar';
+import type { AvatarConfig } from '../../lib/avatarTypes';
+import {
+  DEFAULT_AVATAR,
+  BG_COLORS,
+  HAIR_COLORS,
+  HAIR_STYLES,
+  HAIR_STYLE_LABELS,
+  FACE_SHAPES,
+  FACE_SHAPE_LABELS,
+  STYLES,
+  STYLE_LABELS,
+  SKIN_COLORS
+} from '../../lib/avatarTypes';
 
 export const EspaceSettings = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const tabParam = new URLSearchParams(location.search).get('tab');
-  const initialTab = tabParam === 'enfants' ? 1 : tabParam === 'notifs' ? 2 : 0;
+  const initialTab = tabParam === 'avatar' ? 1 : tabParam === 'notifs' ? 2 : 0;
   const [activeTab, setActiveTab] = useState(initialTab);
   const swiperRef = useRef<SwiperClass | null>(null);
 
-  const [children, setChildren] = useState<Child[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [pseudo, setPseudo] = useState('');
-  const [editingChild, setEditingChild] = useState<string | null>(null);
-  const [editNickname, setEditNickname] = useState('');
-  const [showAddChild, setShowAddChild] = useState(false);
-  const [addMode, setAddMode] = useState<'choice' | 'manual' | 'scan'>('choice');
-  const [newToken, setNewToken] = useState('');
-  const [newNickname, setNewNickname] = useState('');
-  const [isValidating, setIsValidating] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
 
   // Edit account states
   const [editModal, setEditModal] = useState<'pseudo' | 'email' | 'password' | null>(null);
@@ -93,38 +78,23 @@ export const EspaceSettings = () => {
   const [notificationsEnabled, setNotificationsEnabledState] = useState(true);
   const [soundEnabled, setSoundEnabledState] = useState(true);
 
+  // Avatar
+  const [avatarConfig, setAvatarConfig] = useState<AvatarConfig>(DEFAULT_AVATAR);
+  const [avatarSaving, setAvatarSaving] = useState(false);
+  const [avatarSuccess, setAvatarSuccess] = useState<string | null>(null);
+  const [avatarStep, setAvatarStep] = useState(0);
+  const AVATAR_STEPS = ['Style', 'Peau', 'Fond', 'Visage', 'Cheveux', 'Couleur', 'Accessoires'];
+
   useEffect(() => {
     loadData();
-    // Charger les préférences de notifications
     const prefs = getUserPreferences();
     setNotificationsEnabledState(prefs.notificationsEnabled);
     setSoundEnabledState(prefs.notificationSoundEnabled);
 
-    // Nettoyer l'URL si un param ?tab= était présent
     if (tabParam) {
       window.history.replaceState({}, '', '/espace/parametres');
     }
   }, [navigate]);
-
-  // Si un token est dans l'URL (QR code scanné), ouvrir le formulaire d'ajout enfant
-  const tokenProcessedRef = useRef(false);
-  useEffect(() => {
-    if (tokenProcessedRef.current || isLoading) return;
-    const tokenFromUrl = new URLSearchParams(window.location.search).get('token');
-    if (tokenFromUrl) {
-      tokenProcessedRef.current = true;
-      // Nettoyer l'URL immédiatement (sans re-render React Router)
-      window.history.replaceState({}, '', '/espace/parametres');
-      // Aller sur l'onglet "Enfants" (index 1)
-      setActiveTab(1);
-      // Pré-remplir le token et ouvrir le formulaire
-      setNewToken(tokenFromUrl);
-      setShowAddChild(true);
-      setAddMode('manual');
-      // Slide vers l'onglet Enfants après un court délai (Swiper prêt)
-      setTimeout(() => swiperRef.current?.slideTo(1), 100);
-    }
-  }, [isLoading]);
 
   const loadData = async () => {
     const user = auth.currentUser;
@@ -134,116 +104,18 @@ export const EspaceSettings = () => {
     }
 
     try {
-      // Load pseudo
       const accountRef = doc(db, 'accounts', user.uid);
       const accountSnap = await getDoc(accountRef);
       if (accountSnap.exists()) {
         setPseudo(accountSnap.data().pseudo || '');
+        if (accountSnap.data().avatar) {
+          setAvatarConfig(accountSnap.data().avatar);
+        }
       }
-
-      // Load children
-      const childrenRef = collection(db, 'accounts', user.uid, 'children');
-      const q = query(childrenRef, orderBy('addedAt', 'desc'));
-      const snapshot = await getDocs(q);
-
-      const childrenData: Child[] = snapshot.docs.map(doc => ({
-        tokenId: doc.id,
-        nickname: doc.data().nickname,
-        addedAt: doc.data().addedAt?.toDate?.() || new Date()
-      }));
-
-      setChildren(childrenData);
     } catch (err) {
-      console.error('Erreur chargement données:', err);
+      console.error('Erreur chargement donnees:', err);
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  const handleSaveNickname = async (tokenId: string) => {
-    if (!editNickname.trim()) return;
-
-    const user = auth.currentUser;
-    if (!user) return;
-
-    try {
-      const childRef = doc(db, 'accounts', user.uid, 'children', tokenId);
-      await updateDoc(childRef, { nickname: editNickname.trim() });
-
-      setChildren(prev =>
-        prev.map(c =>
-          c.tokenId === tokenId ? { ...c, nickname: editNickname.trim() } : c
-        )
-      );
-      setEditingChild(null);
-      setEditNickname('');
-    } catch (err) {
-      console.error('Erreur:', err);
-    }
-  };
-
-  const handleDeleteChild = async (tokenId: string) => {
-    const user = auth.currentUser;
-    if (!user) return;
-
-    try {
-      const childRef = doc(db, 'accounts', user.uid, 'children', tokenId);
-      await deleteDoc(childRef);
-
-      setChildren(prev => prev.filter(c => c.tokenId !== tokenId));
-      setShowDeleteConfirm(null);
-    } catch (err) {
-      console.error('Erreur suppression:', err);
-    }
-  };
-
-  const handleAddChild = async () => {
-    if (!newToken.trim() || !newNickname.trim()) {
-      setError('Veuillez remplir tous les champs');
-      return;
-    }
-
-    setIsValidating(true);
-    setError(null);
-
-    try {
-      const result = await validateToken(newToken.trim());
-
-      if (!result.valid) {
-        setError(result.error || 'Token invalide');
-        setIsValidating(false);
-        return;
-      }
-
-      const existingChild = children.find(c => c.tokenId === newToken.trim());
-      if (existingChild) {
-        setError('Ce token est déjà associé');
-        setIsValidating(false);
-        return;
-      }
-
-      const user = auth.currentUser;
-      if (!user) throw new Error('Non connecté');
-
-      const childRef = doc(db, 'accounts', user.uid, 'children', newToken.trim());
-      await setDoc(childRef, {
-        nickname: newNickname.trim(),
-        addedAt: serverTimestamp()
-      });
-
-      // Token déjà marqué "used" dans validateToken (single-use)
-      await loadData();
-
-      setShowAddChild(false);
-      setAddMode('choice');
-      setNewToken('');
-      setNewNickname('');
-
-    } catch (err) {
-      console.error('Erreur:', err);
-      setError('Erreur inattendue. Réessayez.');
-    } finally {
-      setIsValidating(false);
     }
   };
 
@@ -252,25 +124,38 @@ export const EspaceSettings = () => {
     navigate('/welcome');
   };
 
-  // Gérer le toggle des notifications
   const handleNotificationsToggle = () => {
     const newValue = !notificationsEnabled;
     setNotificationsEnabledState(newValue);
     setNotificationsEnabled(newValue);
   };
 
-  // Gérer le toggle du son
   const handleSoundToggle = () => {
     const newValue = !soundEnabled;
     setSoundEnabledState(newValue);
     setNotificationSoundEnabled(newValue);
-    // Jouer un son de test si on active
     if (newValue) {
       setTimeout(() => playNotificationSound(), 100);
     }
   };
 
-  // Ouvrir modal d'édition
+  const handleSaveAvatar = async () => {
+    setAvatarSaving(true);
+    setAvatarSuccess(null);
+    try {
+      const user = auth.currentUser;
+      if (!user) throw new Error('Non connecte');
+      const accountRef = doc(db, 'accounts', user.uid);
+      await updateDoc(accountRef, { avatar: avatarConfig });
+      setAvatarSuccess('Avatar enregistre !');
+      setTimeout(() => setAvatarSuccess(null), 3000);
+    } catch (err) {
+      console.error('Erreur sauvegarde avatar:', err);
+    } finally {
+      setAvatarSaving(false);
+    }
+  };
+
   const openEditModal = (type: 'pseudo' | 'email' | 'password') => {
     setEditError(null);
     setEditSuccess(null);
@@ -286,10 +171,9 @@ export const EspaceSettings = () => {
     setEditModal(type);
   };
 
-  // Sauvegarder le pseudo
   const handleSavePseudo = async () => {
     if (!newPseudo.trim() || newPseudo.trim().length < 2) {
-      setEditError('Le pseudo doit contenir au moins 2 caractères');
+      setEditError('Le pseudo doit contenir au moins 2 caracteres');
       return;
     }
 
@@ -298,23 +182,22 @@ export const EspaceSettings = () => {
 
     try {
       const user = auth.currentUser;
-      if (!user) throw new Error('Non connecté');
+      if (!user) throw new Error('Non connecte');
 
       const accountRef = doc(db, 'accounts', user.uid);
       await updateDoc(accountRef, { pseudo: newPseudo.trim() });
 
       setPseudo(newPseudo.trim());
-      setEditSuccess('Pseudo mis à jour !');
+      setEditSuccess('Pseudo mis a jour !');
       setTimeout(() => setEditModal(null), 1500);
     } catch (err: any) {
       console.error('Erreur:', err);
-      setEditError('Erreur lors de la mise à jour');
+      setEditError('Erreur lors de la mise a jour');
     } finally {
       setIsSaving(false);
     }
   };
 
-  // Sauvegarder l'email
   const handleSaveEmail = async () => {
     if (!newEmail.trim() || !newEmail.includes('@')) {
       setEditError('Email invalide');
@@ -331,38 +214,33 @@ export const EspaceSettings = () => {
 
     try {
       const user = auth.currentUser;
-      if (!user || !user.email) throw new Error('Non connecté');
+      if (!user || !user.email) throw new Error('Non connecte');
 
-      // Ré-authentification requise pour changer l'email
       const credential = EmailAuthProvider.credential(user.email, currentPassword);
       await reauthenticateWithCredential(user, credential);
-
-      // Mettre à jour l'email
       await updateEmail(user, newEmail.trim());
 
-      // Mettre à jour Firestore
       const accountRef = doc(db, 'accounts', user.uid);
       await updateDoc(accountRef, { email: newEmail.trim() });
 
-      setEditSuccess('Email mis à jour !');
+      setEditSuccess('Email mis a jour !');
       setTimeout(() => setEditModal(null), 1500);
     } catch (err: any) {
       console.error('Erreur:', err);
       if (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
         setEditError('Mot de passe incorrect');
       } else if (err.code === 'auth/email-already-in-use') {
-        setEditError('Cet email est déjà utilisé');
+        setEditError('Cet email est deja utilise');
       } else if (err.code === 'auth/requires-recent-login') {
         setEditError('Veuillez vous reconnecter pour changer l\'email');
       } else {
-        setEditError('Erreur lors de la mise à jour');
+        setEditError('Erreur lors de la mise a jour');
       }
     } finally {
       setIsSaving(false);
     }
   };
 
-  // Sauvegarder le mot de passe
   const handleSavePassword = async () => {
     if (!currentPassword) {
       setEditError('Mot de passe actuel requis');
@@ -370,7 +248,7 @@ export const EspaceSettings = () => {
     }
 
     if (newPassword.length < 6) {
-      setEditError('Le nouveau mot de passe doit contenir au moins 6 caractères');
+      setEditError('Le nouveau mot de passe doit contenir au moins 6 caracteres');
       return;
     }
 
@@ -384,16 +262,13 @@ export const EspaceSettings = () => {
 
     try {
       const user = auth.currentUser;
-      if (!user || !user.email) throw new Error('Non connecté');
+      if (!user || !user.email) throw new Error('Non connecte');
 
-      // Ré-authentification requise pour changer le mot de passe
       const credential = EmailAuthProvider.credential(user.email, currentPassword);
       await reauthenticateWithCredential(user, credential);
-
-      // Mettre à jour le mot de passe
       await updatePassword(user, newPassword);
 
-      setEditSuccess('Mot de passe mis à jour !');
+      setEditSuccess('Mot de passe mis a jour !');
       setTimeout(() => setEditModal(null), 1500);
     } catch (err: any) {
       console.error('Erreur:', err);
@@ -402,7 +277,7 @@ export const EspaceSettings = () => {
       } else if (err.code === 'auth/requires-recent-login') {
         setEditError('Veuillez vous reconnecter pour changer le mot de passe');
       } else {
-        setEditError('Erreur lors de la mise à jour');
+        setEditError('Erreur lors de la mise a jour');
       }
     } finally {
       setIsSaving(false);
@@ -418,7 +293,7 @@ export const EspaceSettings = () => {
   }
 
   return (
-    <div className="h-screen bg-[#FFFBF0] flex flex-col overflow-hidden">
+    <div className="h-full bg-[#FFFBF0] flex flex-col overflow-hidden">
       {/* Header + Tab Bar */}
       <div className="bg-white/80 backdrop-blur-md sticky top-0 z-40 border-b border-orange-100">
         <div className="max-w-md mx-auto px-6 py-4 flex items-center gap-4">
@@ -428,13 +303,13 @@ export const EspaceSettings = () => {
           >
             <ArrowLeft size={20} />
           </button>
-          <h1 className="text-lg font-extrabold text-gray-800 tracking-tight">Paramètres</h1>
+          <h1 className="text-lg font-extrabold text-gray-800 tracking-tight">Parametres</h1>
         </div>
         {/* Tab Bar */}
         <div className="flex gap-1 px-6 pb-3 max-w-md mx-auto">
           {[
             { icon: User, label: 'Compte' },
-            { icon: Baby, label: 'Enfants' },
+            { icon: Smile, label: 'Avatar' },
             { icon: Bell, label: 'Notifs' },
           ].map((tab, index) => (
             <button
@@ -456,8 +331,9 @@ export const EspaceSettings = () => {
         </div>
       </div>
 
-      {/* Swiper Content */}
+      {/* Swiper Content (nested inside outer navigation Swiper) */}
       <Swiper
+        nested={true}
         onSwiper={(swiper) => {
           swiperRef.current = swiper;
           if (initialTab > 0) {
@@ -487,7 +363,7 @@ export const EspaceSettings = () => {
                    </div>
                    <div className="flex-1 text-left">
                       <p className="text-[10px] font-bold text-orange-400 uppercase tracking-widest">Pseudo Parent</p>
-                      <p className="text-lg font-extrabold text-gray-800">{pseudo || 'Non défini'}</p>
+                      <p className="text-lg font-extrabold text-gray-800">{pseudo || 'Non defini'}</p>
                    </div>
                    <Pencil size={18} className="text-gray-300 group-hover:text-orange-500 transition-colors" />
                 </button>
@@ -517,12 +393,12 @@ export const EspaceSettings = () => {
                    </div>
                    <div className="flex-1 text-left">
                       <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Mot de passe</p>
-                      <p className="text-gray-600 font-bold">••••••••</p>
+                      <p className="text-gray-600 font-bold">........</p>
                    </div>
                    <Pencil size={18} className="text-gray-300 group-hover:text-orange-500 transition-colors" />
                 </button>
 
-                {/* Déconnexion */}
+                {/* Deconnexion */}
                 <button
                    onClick={handleLogout}
                    className="w-full p-6 flex items-center justify-between hover:bg-red-50 transition-colors group"
@@ -531,7 +407,7 @@ export const EspaceSettings = () => {
                        <div className="w-12 h-12 bg-red-50 rounded-2xl flex items-center justify-center">
                           <LogOut size={24} />
                        </div>
-                       <span className="font-extrabold">Me déconnecter</span>
+                       <span className="font-extrabold">Me deconnecter</span>
                     </div>
                     <ChevronRight size={20} className="text-gray-300 group-hover:translate-x-1 transition-transform" />
                 </button>
@@ -540,94 +416,239 @@ export const EspaceSettings = () => {
           </div>
         </SwiperSlide>
 
-        {/* Slide 2: Mes Enfants */}
+        {/* Slide 2: Avatar */}
         <SwiperSlide>
-          <div className="max-w-md mx-auto px-6 pt-8 h-full overflow-y-auto pb-32">
-            <section className="space-y-4">
-              <div className="flex items-center justify-between px-1">
-                <h2 className="text-xl font-extrabold text-gray-800 tracking-tight">Mes Enfants</h2>
-                <button
-                   onClick={() => setShowAddChild(true)}
-                   className="p-2 bg-orange-100 text-orange-600 rounded-xl hover:bg-orange-200 transition-colors"
+          <div className="max-w-md mx-auto px-6 pt-4 h-full flex flex-col pb-32">
+            {/* Preview - always visible */}
+            <div className="flex flex-col items-center">
+              <UserAvatar config={avatarConfig} size={100} className="shadow-premium" />
+              {avatarSuccess && (
+                <motion.p
+                  initial={{ opacity: 0, y: 5 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="mt-2 text-xs font-bold text-green-600 flex items-center gap-1"
                 >
-                   <Plus size={20} />
-                </button>
+                  <Check size={14} />
+                  {avatarSuccess}
+                </motion.p>
+              )}
+            </div>
+
+            {/* Step dots */}
+            <div className="flex justify-center gap-2 mt-3 mb-3">
+              {AVATAR_STEPS.map((label, i) => (
+                <button
+                  key={label}
+                  onClick={() => setAvatarStep(i)}
+                  className={`h-2 rounded-full transition-all ${
+                    avatarStep === i ? 'w-6 bg-orange-500' : 'w-2 bg-gray-300'
+                  }`}
+                />
+              ))}
+            </div>
+
+            {/* Step content */}
+            <div className="flex-1 flex flex-col min-h-0">
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={avatarStep}
+                  initial={{ opacity: 0, x: 30 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -30 }}
+                  transition={{ duration: 0.2 }}
+                  className="glass rounded-2xl border-2 border-white shadow-glass p-5 space-y-4"
+                >
+                  <p className="text-[10px] font-bold text-orange-400 uppercase tracking-widest text-center">
+                    {AVATAR_STEPS[avatarStep]}
+                  </p>
+
+                  {/* Step 0: Style */}
+                  {avatarStep === 0 && (
+                    <div className="flex flex-col gap-3">
+                      {STYLES.map((s) => (
+                        <button
+                          key={s}
+                          onClick={() => {
+                            setAvatarConfig(prev => ({
+                              ...prev,
+                              style: s,
+                              beard: s === 'feminine' ? false : prev.beard,
+                            }));
+                          }}
+                          className={`w-full py-4 rounded-2xl text-base font-bold transition-all active:scale-[0.97] ${
+                            avatarConfig.style === s
+                              ? 'bg-orange-500 text-white shadow-md'
+                              : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                          }`}
+                        >
+                          {STYLE_LABELS[s]}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Step 1: Couleur de peau */}
+                  {avatarStep === 1 && (
+                    <div className="flex flex-wrap gap-4 justify-center py-2">
+                      {SKIN_COLORS.map(({ label, value }) => (
+                        <button
+                          key={value}
+                          onClick={() => setAvatarConfig(prev => ({ ...prev, skinColor: value }))}
+                          className="flex flex-col items-center gap-1.5 transition-all active:scale-90"
+                        >
+                          <div
+                            className={`w-12 h-12 rounded-full border-[3px] transition-all ${
+                              avatarConfig.skinColor === value ? 'border-orange-500 scale-110 shadow-md' : 'border-transparent'
+                            }`}
+                            style={{ backgroundColor: value }}
+                          />
+                          <span className="text-[10px] font-bold text-gray-400">{label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Step 2: Couleur de fond */}
+                  {avatarStep === 2 && (
+                    <div className="flex flex-wrap gap-4 justify-center py-2">
+                      {BG_COLORS.map((color) => (
+                        <button
+                          key={color}
+                          onClick={() => setAvatarConfig(prev => ({ ...prev, bgColor: color }))}
+                          className={`w-12 h-12 rounded-full border-[3px] transition-all active:scale-90 ${
+                            avatarConfig.bgColor === color ? 'border-orange-500 scale-110 shadow-md' : 'border-transparent'
+                          }`}
+                          style={{ backgroundColor: color }}
+                        />
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Step 3: Forme du visage */}
+                  {avatarStep === 3 && (
+                    <div className="flex gap-3 py-2">
+                      {FACE_SHAPES.map((shape) => (
+                        <button
+                          key={shape}
+                          onClick={() => setAvatarConfig(prev => ({ ...prev, faceShape: shape }))}
+                          className={`flex-1 py-4 rounded-2xl text-base font-bold transition-all active:scale-95 ${
+                            avatarConfig.faceShape === shape
+                              ? 'bg-orange-500 text-white shadow-md'
+                              : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                          }`}
+                        >
+                          {FACE_SHAPE_LABELS[shape]}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Step 4: Style de cheveux */}
+                  {avatarStep === 4 && (
+                    <div className="flex flex-wrap gap-2 justify-center py-2">
+                      {HAIR_STYLES.map((hs) => (
+                        <button
+                          key={hs}
+                          onClick={() => setAvatarConfig(prev => ({ ...prev, hairStyle: hs }))}
+                          className={`px-5 py-3 rounded-2xl text-sm font-bold transition-all active:scale-95 ${
+                            avatarConfig.hairStyle === hs
+                              ? 'bg-orange-500 text-white shadow-md'
+                              : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                          }`}
+                        >
+                          {HAIR_STYLE_LABELS[hs]}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Step 5: Couleur de cheveux */}
+                  {avatarStep === 5 && (
+                    <div className="flex flex-wrap gap-4 justify-center py-2">
+                      {HAIR_COLORS.map(({ label, value }) => (
+                        <button
+                          key={value}
+                          onClick={() => setAvatarConfig(prev => ({ ...prev, hairColor: value }))}
+                          className="flex flex-col items-center gap-1.5 transition-all active:scale-90"
+                        >
+                          <div
+                            className={`w-12 h-12 rounded-full border-[3px] transition-all ${
+                              avatarConfig.hairColor === value ? 'border-orange-500 scale-110 shadow-md' : 'border-transparent'
+                            }`}
+                            style={{ backgroundColor: value }}
+                          />
+                          <span className="text-[10px] font-bold text-gray-400">{label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Step 6: Accessoires */}
+                  {avatarStep === 6 && (
+                    <div className="flex flex-col gap-3 py-2">
+                      <button
+                        onClick={() => setAvatarConfig(prev => ({ ...prev, glasses: !prev.glasses }))}
+                        className={`w-full py-4 rounded-2xl text-base font-bold transition-all active:scale-95 ${
+                          avatarConfig.glasses
+                            ? 'bg-orange-500 text-white shadow-md'
+                            : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                        }`}
+                      >
+                        Lunettes
+                      </button>
+                      {avatarConfig.style !== 'feminine' && (
+                        <button
+                          onClick={() => setAvatarConfig(prev => ({ ...prev, beard: !prev.beard }))}
+                          className={`w-full py-4 rounded-2xl text-base font-bold transition-all active:scale-95 ${
+                            avatarConfig.beard
+                              ? 'bg-orange-500 text-white shadow-md'
+                              : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                          }`}
+                        >
+                          Barbe
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </motion.div>
+              </AnimatePresence>
+
+              {/* Navigation + Save */}
+              <div className="mt-3 flex gap-3">
+                {avatarStep > 0 && (
+                  <button
+                    onClick={() => setAvatarStep(prev => prev - 1)}
+                    className="w-14 h-12 bg-gray-100 rounded-2xl flex items-center justify-center text-gray-400 active:scale-95 transition-all"
+                  >
+                    <ArrowLeft size={20} />
+                  </button>
+                )}
+                {avatarStep < AVATAR_STEPS.length - 1 ? (
+                  <button
+                    onClick={() => setAvatarStep(prev => prev + 1)}
+                    className="flex-1 h-12 bg-orange-500 text-white rounded-2xl font-bold flex items-center justify-center gap-2 active:scale-[0.97] transition-all shadow-premium"
+                  >
+                    Suivant
+                    <ChevronRight size={18} />
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleSaveAvatar}
+                    disabled={avatarSaving}
+                    className="flex-1 h-12 bg-orange-500 hover:bg-orange-600 text-white rounded-2xl font-bold flex items-center justify-center gap-2 active:scale-[0.97] transition-all shadow-premium"
+                  >
+                    {avatarSaving ? (
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                    ) : (
+                      <>
+                        <Check size={18} />
+                        Enregistrer
+                      </>
+                    )}
+                  </button>
+                )}
               </div>
-
-              <div className="space-y-3">
-                 {children.length === 0 ? (
-                   <div className="glass p-8 text-center space-y-4 rounded-3xl border-2 border-white shadow-glass">
-                      <div className="w-16 h-16 bg-gray-50 rounded-[1.5rem] flex items-center justify-center text-gray-300 mx-auto">
-                         <Baby size={32} />
-                      </div>
-                      <p className="text-gray-400 font-medium text-sm">Aucun enfant n'est <br/>encore associé à votre compte.</p>
-                   </div>
-                 ) : (
-                   children.map((child) => (
-                     <motion.div
-                       key={child.tokenId}
-                       layout
-                       className="glass rounded-3xl p-5 border-2 border-white shadow-glass"
-                     >
-                       {editingChild === child.tokenId ? (
-                         <div className="flex items-center gap-3">
-                           <input
-                             type="text"
-                             value={editNickname}
-                             onChange={(e) => setEditNickname(e.target.value)}
-                             className="flex-1 h-12 bg-white rounded-xl border-2 border-orange-100 px-4 focus:outline-none focus:border-orange-500 font-bold text-gray-700"
-                             autoFocus
-                           />
-                           <button onClick={() => handleSaveNickname(child.tokenId)} className="w-12 h-12 bg-green-500 text-white rounded-xl flex items-center justify-center shadow-lg"><Check size={20}/></button>
-                           <button onClick={() => setEditingChild(null)} className="w-12 h-12 bg-gray-100 text-gray-400 rounded-xl flex items-center justify-center"><X size={20}/></button>
-                         </div>
-                       ) : (
-                         <div className="flex items-center gap-4">
-                            <div className="w-12 h-12 bg-blue-50 rounded-2xl flex items-center justify-center text-blue-500 shadow-sm">
-                               <Baby size={24} />
-                            </div>
-                            <div className="flex-1">
-                               <p className="font-extrabold text-gray-800 text-lg">{child.nickname}</p>
-                               <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Ajouté le {child.addedAt.toLocaleDateString()}</p>
-                            </div>
-                            <div className="flex gap-1.5">
-                               <button onClick={() => { setEditingChild(child.tokenId); setEditNickname(child.nickname); }} className="p-2.5 bg-gray-50 text-gray-400 hover:text-orange-500 rounded-xl transition-colors"><Pencil size={18}/></button>
-                               <button onClick={() => setShowDeleteConfirm(child.tokenId)} className="p-2.5 bg-gray-50 text-gray-400 hover:text-red-500 rounded-xl transition-colors"><Trash2 size={18}/></button>
-                            </div>
-                         </div>
-                       )}
-
-                       <AnimatePresence>
-                          {showDeleteConfirm === child.tokenId && (
-                            <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="pt-4 mt-4 border-t border-black/5 space-y-3">
-                               <p className="text-sm font-bold text-gray-800">Supprimer de votre compte ?</p>
-                               <p className="text-xs text-gray-400">Cette action est réversible en saisissant à nouveau le code famille.</p>
-                               <div className="flex gap-2 pt-1">
-                                  <button onClick={() => handleDeleteChild(child.tokenId)} className="flex-1 h-10 bg-red-500 text-white rounded-xl font-bold text-xs">Supprimer</button>
-                                  <button onClick={() => setShowDeleteConfirm(null)} className="flex-1 h-10 bg-gray-100 text-gray-400 rounded-xl font-bold text-xs">Annuler</button>
-                               </div>
-                            </motion.div>
-                          )}
-                       </AnimatePresence>
-                     </motion.div>
-                   ))
-                 )}
-
-                 {/* Rectangle pointillé "Ajouter un enfant" toujours visible */}
-                 <button
-                   onClick={() => setShowAddChild(true)}
-                   className="w-full border-2 border-dashed border-gray-200 rounded-3xl p-5 flex items-center gap-4 hover:border-orange-300 hover:bg-orange-50/30 transition-all cursor-pointer group"
-                 >
-                   <div className="w-12 h-12 bg-gray-50 rounded-2xl flex items-center justify-center text-gray-300 group-hover:bg-orange-100 group-hover:text-orange-500 transition-colors">
-                     <Plus size={24} />
-                   </div>
-                   <div className="text-left">
-                     <p className="font-bold text-gray-400 group-hover:text-orange-600 transition-colors">Ajouter un enfant</p>
-                     <p className="text-[10px] font-bold text-gray-300 uppercase tracking-widest">Par code ou QR code</p>
-                   </div>
-                 </button>
-              </div>
-            </section>
+            </div>
           </div>
         </SwiperSlide>
 
@@ -650,10 +671,9 @@ export const EspaceSettings = () => {
                    <div className="flex-1 text-left">
                       <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Notifications</p>
                       <p className="text-lg font-extrabold text-gray-800">
-                        {notificationsEnabled ? 'Activées' : 'Désactivées'}
+                        {notificationsEnabled ? 'Activees' : 'Desactivees'}
                       </p>
                    </div>
-                   {/* Toggle Switch */}
                    <div className={`w-14 h-8 rounded-full p-1 transition-colors ${
                      notificationsEnabled ? 'bg-orange-500' : 'bg-gray-300'
                    }`}>
@@ -679,10 +699,9 @@ export const EspaceSettings = () => {
                    <div className="flex-1 text-left">
                       <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Son</p>
                       <p className="text-lg font-extrabold text-gray-800">
-                        {soundEnabled ? 'Activé' : 'Désactivé'}
+                        {soundEnabled ? 'Active' : 'Desactive'}
                       </p>
                    </div>
-                   {/* Toggle Switch */}
                    <div className={`w-14 h-8 rounded-full p-1 transition-colors ${
                      soundEnabled && notificationsEnabled ? 'bg-blue-500' : 'bg-gray-300'
                    }`}>
@@ -693,99 +712,12 @@ export const EspaceSettings = () => {
                 </button>
               </div>
               <p className="text-xs text-gray-400 text-center px-4">
-                Recevez des alertes lorsque votre médecin vous envoie un message
+                Recevez des alertes lorsque votre medecin vous envoie un message
               </p>
             </section>
           </div>
         </SwiperSlide>
       </Swiper>
-
-      {/* Modal Ajouter */}
-      <AnimatePresence>
-        {showAddChild && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-[100] flex items-end sm:items-center justify-center px-4"
-            onClick={() => setShowAddChild(false)}
-          >
-            <motion.div
-              initial={{ y: 100, scale: 0.9 }}
-              animate={{ y: 0, scale: 1 }}
-              exit={{ y: 100, scale: 0.9 }}
-              onClick={(e: React.MouseEvent) => e.stopPropagation()}
-              className="bg-white rounded-[2.5rem] w-full max-w-md p-8 shadow-premium pb-32 sm:pb-8 mb-0 sm:mb-0"
-            >
-              <div className="flex items-center justify-between mb-8">
-                 <h3 className="text-2xl font-extrabold text-gray-800 tracking-tight">Ajouter un enfant</h3>
-                 <button onClick={() => setShowAddChild(false)} className="p-2 bg-gray-100 rounded-xl text-gray-400"><X size={20}/></button>
-              </div>
-
-              {addMode === 'choice' ? (
-                <div className="space-y-4">
-                   <button onClick={() => setAddMode('manual')} className="w-full h-24 bg-orange-500 rounded-[2rem] flex items-center gap-6 px-6 shadow-premium group transition-all">
-                      <div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center text-white"><Keyboard size={28}/></div>
-                      <div className="text-left">
-                         <p className="text-white font-extrabold text-lg">Saisir le code</p>
-                         <p className="text-white/60 text-xs">Entrez manuellement le token</p>
-                      </div>
-                   </button>
-                   <button
-                      onClick={() => {
-                        setShowAddChild(false);
-                        setAddMode('scan');
-                      }}
-                      className="w-full h-24 bg-gray-50 border-2 border-gray-100 rounded-[2rem] flex items-center gap-6 px-6 hover:bg-gray-100 hover:border-gray-200 transition-all group"
-                   >
-                      <div className="w-14 h-14 bg-blue-100 rounded-2xl flex items-center justify-center text-blue-500 group-hover:bg-blue-200 transition-colors"><QrCode size={28}/></div>
-                      <div className="text-left">
-                         <p className="text-gray-800 font-extrabold text-lg">Scanner le QR</p>
-                         <p className="text-gray-400 text-xs">Utilisez la caméra</p>
-                      </div>
-                   </button>
-                </div>
-              ) : (
-                <div className="space-y-6">
-                   <div className="space-y-4">
-                      <div className="space-y-1.5">
-                         <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Code Famille</label>
-                         <input
-                            value={newToken}
-                            onChange={(e) => setNewToken(e.target.value)}
-                            placeholder="Ex: abc-123-xyz"
-                            className="w-full h-14 bg-gray-50 rounded-2xl border-2 border-gray-100 px-5 focus:outline-none focus:border-orange-500 font-bold"
-                         />
-                      </div>
-                      <div className="space-y-1.5">
-                         <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Surnom de l'enfant</label>
-                         <input
-                            value={newNickname}
-                            onChange={(e) => setNewNickname(e.target.value)}
-                            placeholder="Ex: Théo"
-                            className="w-full h-14 bg-gray-50 rounded-2xl border-2 border-gray-100 px-5 focus:outline-none focus:border-orange-500 font-bold"
-                         />
-                      </div>
-                   </div>
-
-                   {error && <p className="text-red-500 text-xs font-bold text-center">{error}</p>}
-
-                   <div className="flex gap-3">
-                      <button onClick={() => setAddMode('choice')} className="h-14 px-6 bg-gray-100 text-gray-500 rounded-2xl font-bold">Retour</button>
-                      <button
-                        onClick={handleAddChild}
-                        disabled={isValidating}
-                        className="flex-1 h-14 bg-orange-500 text-white rounded-2xl font-bold shadow-premium flex items-center justify-center"
-                      >
-                        {isValidating ? <Loader2 className="animate-spin" /> : 'Confirmer'}
-                      </button>
-                   </div>
-                </div>
-              )}
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       {/* Modal Edit Account */}
       <AnimatePresence>
@@ -815,7 +747,6 @@ export const EspaceSettings = () => {
                 </button>
               </div>
 
-              {/* Success message */}
               {editSuccess && (
                 <div className="mb-4 p-4 bg-green-50 text-green-600 rounded-2xl text-sm font-bold flex items-center gap-2">
                   <Check size={18} />
@@ -823,7 +754,6 @@ export const EspaceSettings = () => {
                 </div>
               )}
 
-              {/* Error message */}
               {editError && (
                 <div className="mb-4 p-4 bg-red-50 text-red-600 rounded-2xl text-sm font-bold">
                   {editError}
@@ -831,7 +761,6 @@ export const EspaceSettings = () => {
               )}
 
               <div className="space-y-4">
-                {/* Pseudo form */}
                 {editModal === 'pseudo' && (
                   <>
                     <div className="space-y-1.5">
@@ -841,7 +770,7 @@ export const EspaceSettings = () => {
                       <input
                         value={newPseudo}
                         onChange={(e) => setNewPseudo(e.target.value)}
-                        placeholder="Ex: Maman de Théo"
+                        placeholder="Ex: Maman de Theo"
                         maxLength={20}
                         className="w-full h-14 bg-gray-50 rounded-2xl border-2 border-gray-100 px-5 focus:outline-none focus:border-orange-500 font-bold"
                         autoFocus
@@ -858,7 +787,6 @@ export const EspaceSettings = () => {
                   </>
                 )}
 
-                {/* Email form */}
                 {editModal === 'email' && (
                   <>
                     <div className="space-y-1.5">
@@ -883,7 +811,7 @@ export const EspaceSettings = () => {
                           type={showCurrentPassword ? 'text' : 'password'}
                           value={currentPassword}
                           onChange={(e) => setCurrentPassword(e.target.value)}
-                          placeholder="••••••••"
+                          placeholder="........"
                           className="w-full h-14 bg-gray-50 rounded-2xl border-2 border-gray-100 px-5 pr-12 focus:outline-none focus:border-orange-500 font-bold"
                         />
                         <button
@@ -905,7 +833,6 @@ export const EspaceSettings = () => {
                   </>
                 )}
 
-                {/* Password form */}
                 {editModal === 'password' && (
                   <>
                     <div className="space-y-1.5">
@@ -917,7 +844,7 @@ export const EspaceSettings = () => {
                           type={showCurrentPassword ? 'text' : 'password'}
                           value={currentPassword}
                           onChange={(e) => setCurrentPassword(e.target.value)}
-                          placeholder="••••••••"
+                          placeholder="........"
                           className="w-full h-14 bg-gray-50 rounded-2xl border-2 border-gray-100 px-5 pr-12 focus:outline-none focus:border-orange-500 font-bold"
                           autoFocus
                         />
@@ -939,7 +866,7 @@ export const EspaceSettings = () => {
                           type={showNewPassword ? 'text' : 'password'}
                           value={newPassword}
                           onChange={(e) => setNewPassword(e.target.value)}
-                          placeholder="••••••••"
+                          placeholder="........"
                           className="w-full h-14 bg-gray-50 rounded-2xl border-2 border-gray-100 px-5 pr-12 focus:outline-none focus:border-orange-500 font-bold"
                         />
                         <button
@@ -959,7 +886,7 @@ export const EspaceSettings = () => {
                         type={showNewPassword ? 'text' : 'password'}
                         value={confirmPassword}
                         onChange={(e) => setConfirmPassword(e.target.value)}
-                        placeholder="••••••••"
+                        placeholder="........"
                         className="w-full h-14 bg-gray-50 rounded-2xl border-2 border-gray-100 px-5 focus:outline-none focus:border-orange-500 font-bold"
                       />
                     </div>
@@ -979,25 +906,8 @@ export const EspaceSettings = () => {
       </AnimatePresence>
 
       <BottomNav />
-
-      {/* QR Scanner (plein écran) */}
-      <AnimatePresence>
-        {addMode === 'scan' && (
-          <QRScanner
-            onScan={(scannedToken) => {
-              setNewToken(scannedToken);
-              setAddMode('manual');
-              setShowAddChild(true);
-            }}
-            onClose={() => {
-              setAddMode('choice');
-            }}
-          />
-        )}
-      </AnimatePresence>
     </div>
   );
 };
 
 export default EspaceSettings;
-

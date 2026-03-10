@@ -1,0 +1,121 @@
+import { useRef, useState, useCallback, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { Swiper, SwiperSlide } from 'swiper/react';
+import type { SwiperClass } from 'swiper/react';
+import 'swiper/css';
+import { SlideAccueil } from './slides/SlideAccueil';
+import { SlideContact } from './slides/SlideContact';
+import { SlideMessages } from './slides/SlideMessages';
+import { SlideForum } from './slides/SlideForum';
+import { SlideParametres } from './slides/SlideParametres';
+import { BottomNavSwiper } from '../../components/ui/BottomNavSwiper';
+import { SwiperModeContext } from '../../lib/swiperContext';
+
+const sectionToSlide: Record<string, number> = {
+  'dashboard': 0,
+  'app': 0,
+  'nouveau-message': 1,
+  'messages': 2,
+  'forum': 3,
+  'parametres': 4,
+};
+
+const slideToSection: Record<number, string> = {
+  0: 'dashboard',
+  1: 'nouveau-message',
+  2: 'messages',
+  3: 'forum',
+  4: 'parametres',
+};
+
+export const EspaceMain = () => {
+  const { section } = useParams<{ section: string }>();
+  const navigate = useNavigate();
+  const swiperRef = useRef<SwiperClass | null>(null);
+  const [activeSlide, setActiveSlide] = useState(() =>
+    sectionToSlide[section || 'dashboard'] ?? 0
+  );
+
+  // Ref to track section for use in callbacks without stale closures
+  const sectionRef = useRef(section);
+  sectionRef.current = section;
+
+  // Ref to skip URL→Swiper sync when Swiper already triggered the URL change
+  const skipUrlSync = useRef(false);
+
+  // URL → Swiper sync (when navigate() is called from inside a component)
+  useEffect(() => {
+    if (skipUrlSync.current) {
+      skipUrlSync.current = false;
+      return;
+    }
+    const target = sectionToSlide[section || 'dashboard'] ?? 0;
+    if (swiperRef.current && swiperRef.current.activeIndex !== target) {
+      swiperRef.current.slideTo(target);
+    }
+  }, [section]);
+
+  // Swiper → URL sync (when user swipes or clicks BottomNav)
+  const handleSlideChange = useCallback((swiper: SwiperClass) => {
+    const idx = swiper.activeIndex;
+    setActiveSlide(idx);
+    const newSection = slideToSection[idx];
+    if (newSection && sectionRef.current !== newSection) {
+      skipUrlSync.current = true;
+      navigate(`/espace/${newSection}`, { replace: true });
+    }
+  }, [navigate]);
+
+  const handleNavigate = useCallback((index: number) => {
+    swiperRef.current?.slideTo(index);
+  }, []);
+
+  return (
+    <SwiperModeContext.Provider value={{ isSwiperMode: true, navigateToSlide: handleNavigate }}>
+      <div className="h-screen flex flex-col bg-[#FFFBF0]">
+        <Swiper
+          onSwiper={(swiper) => { swiperRef.current = swiper; }}
+          onSlideChange={handleSlideChange}
+          initialSlide={sectionToSlide[section || 'dashboard'] ?? 0}
+          slidesPerView={1}
+          spaceBetween={0}
+          className="flex-1 w-full"
+        >
+          <SwiperSlide>
+            <div className="h-full overflow-y-auto">
+              <SlideAccueil />
+            </div>
+          </SwiperSlide>
+          <SwiperSlide>
+            <div className="h-full overflow-y-auto">
+              <SlideContact />
+            </div>
+          </SwiperSlide>
+          <SwiperSlide>
+            <div className="h-full overflow-y-auto">
+              <SlideMessages />
+            </div>
+          </SwiperSlide>
+          <SwiperSlide>
+            <div className="h-full overflow-y-auto">
+              <SlideForum />
+            </div>
+          </SwiperSlide>
+          <SwiperSlide>
+            <div className="h-full overflow-hidden">
+              <SlideParametres />
+            </div>
+          </SwiperSlide>
+        </Swiper>
+        {activeSlide > 0 && (
+          <BottomNavSwiper
+            activeIndex={activeSlide}
+            onNavigate={handleNavigate}
+          />
+        )}
+      </div>
+    </SwiperModeContext.Provider>
+  );
+};
+
+export default EspaceMain;

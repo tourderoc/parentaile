@@ -9,10 +9,7 @@ import { CartPage } from './screens/Shop/CartPage';
 import { ShippingPage } from './screens/Shop/ShippingPage';
 import { ComingSoon } from './screens/Shop/ComingSoon';
 import { Espace } from './screens/Espace';
-import { EspaceDashboard } from './screens/Espace/EspaceDashboard';
-import { MessageComposer } from './screens/Espace/MessageComposer';
-import { MessageHistory } from './screens/Espace/MessageHistory';
-import { EspaceSettings } from './screens/Espace/EspaceSettings';
+import { EspaceMain } from './screens/Espace/EspaceMain';
 import { WelcomeWithSplash } from './screens/Welcome/WelcomeWithSplash';
 
 const Layout = () => {
@@ -36,11 +33,7 @@ const Layout = () => {
 
       {/* ========== ESPACE PATIENT ========== */}
       <Route path="/espace" element={<Espace />} />
-      <Route path="/espace/dashboard" element={<EspaceDashboard />} />
-      <Route path="/espace/nouveau-message" element={<MessageComposer />} />
-      <Route path="/espace/messages" element={<MessageHistory />} />
-      <Route path="/espace/parametres" element={<EspaceSettings />} />
-      <Route path="/espace/*" element={<Espace />} />
+      <Route path="/espace/:section" element={<EspaceMain />} />
     </Routes>
   );
 };

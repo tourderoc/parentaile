@@ -8,11 +8,10 @@ import {
   signInWithEmailAndPassword,
   signOut
 } from 'firebase/auth';
-import { doc, setDoc, collection, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
-import { Eye, EyeOff, Loader2, CheckCircle, User, ArrowRight, ArrowLeft, Mail, Baby, Key } from 'lucide-react';
-import { markTokenAsUsed, validateToken } from '../../lib/tokenService';
+import { Eye, EyeOff, Loader2, CheckCircle, User, ArrowRight, ArrowLeft, Mail } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface EspaceRegisterProps {
@@ -22,7 +21,7 @@ interface EspaceRegisterProps {
 
 type Step = 'auth' | 'profile';
 
-export const EspaceRegister: React.FC<EspaceRegisterProps> = ({ tokenId: initialTokenId, onLoginInstead }) => {
+export const EspaceRegister: React.FC<EspaceRegisterProps> = ({ onLoginInstead }) => {
   const navigate = useNavigate();
   const [step, setStep] = useState<Step>(auth.currentUser ? 'profile' : 'auth');
   const [isLoading, setIsLoading] = useState(false);
@@ -42,16 +41,6 @@ export const EspaceRegister: React.FC<EspaceRegisterProps> = ({ tokenId: initial
 
   // Profile states
   const [parentPseudo, setParentPseudo] = useState('');
-  const [childToken, setChildToken] = useState(initialTokenId || '');
-  const [childNickname, setChildNickname] = useState('');
-  const [showTokenField, setShowTokenField] = useState(!!initialTokenId);
-  const [isTokenValidating, setIsTokenValidating] = useState(false);
-
-  useEffect(() => {
-    if (initialTokenId) {
-      setChildToken(initialTokenId);
-    }
-  }, [initialTokenId]);
 
   const handleEmailRegister = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -103,23 +92,7 @@ export const EspaceRegister: React.FC<EspaceRegisterProps> = ({ tokenId: initial
       const user = auth.currentUser;
       if (!user) throw new Error('Utilisateur non connecté');
 
-      let finalToken = childToken.trim();
-      let isTokenValid = false;
-
-      // 1. Validate token if provided
-      if (finalToken) {
-        setIsTokenValidating(true);
-        const result = await validateToken(finalToken);
-        setIsTokenValidating(false);
-        if (!result.valid) {
-          setError(result.error || 'Code médecin invalide');
-          setIsLoading(false);
-          return;
-        }
-        isTokenValid = true;
-      }
-
-      // 2. Save Parent Account Info
+      // Save Parent Account Info
       const accountRef = doc(db, 'accounts', user.uid);
       await setDoc(accountRef, {
         email: user.email,
@@ -128,18 +101,7 @@ export const EspaceRegister: React.FC<EspaceRegisterProps> = ({ tokenId: initial
         lastActivity: serverTimestamp()
       }, { merge: true });
 
-      // 3. Link Token (Child) if valid
-      if (isTokenValid) {
-        const childRef = doc(collection(db, 'accounts', user.uid, 'children'), finalToken);
-        await setDoc(childRef, {
-          nickname: childNickname.trim() || 'Mon enfant',
-          addedAt: serverTimestamp()
-        });
-        // Token déjà marqué "used" dans validateToken (single-use)
-        navigate(`/espace/messages?childId=${finalToken}`);
-      } else {
-        navigate('/espace/dashboard');
-      }
+      navigate('/espace/dashboard');
 
     } catch (err: any) {
       console.error('Registration completion error:', err);
@@ -312,80 +274,13 @@ export const EspaceRegister: React.FC<EspaceRegisterProps> = ({ tokenId: initial
                   </div>
                 </div>
 
-                {/* Child ID (Optional - Toggle) */}
-                <div className="space-y-4">
-                  {!showTokenField ? (
-                    <button
-                      type="button"
-                      onClick={() => setShowTokenField(true)}
-                      className="w-full py-4 border-2 border-dashed border-gray-200 rounded-3xl text-gray-400 font-bold hover:border-orange-300 hover:text-orange-500 transition-all flex items-center justify-center gap-2 group bg-white/40"
-                    >
-                      <Key className="w-4 h-4 group-hover:rotate-12 transition-transform" />
-                      J'ai un code médecin
-                    </button>
-                  ) : (
-                    <motion.div
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className="space-y-2"
-                    >
-                      <div className="flex justify-between items-center ml-1">
-                        <label className="text-sm font-bold text-gray-600">Code médecin</label>
-                        <button 
-                          type="button"
-                          onClick={() => { setShowTokenField(false); setChildToken('') }}
-                          className="text-[10px] text-gray-400 font-bold uppercase underline hover:text-orange-500"
-                        >
-                          Annuler
-                        </button>
-                      </div>
-                      <div className="relative">
-                        <Key className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                        <Input
-                          type="text"
-                          value={childToken}
-                          onChange={(e) => setChildToken(e.target.value)}
-                          placeholder="XXXX-XXXX"
-                          className="h-14 pl-12 rounded-2xl border-2 focus:ring-orange-500 font-bold"
-                          maxLength={20}
-                          autoFocus
-                        />
-                      </div>
-                    </motion.div>
-                  )}
-                </div>
-
-                {/* Child Nickname (shown if token is entered) */}
-                <AnimatePresence>
-                  {childToken.trim().length > 0 && (
-                    <motion.div
-                      initial={{ opacity: 0, height: 0, y: -20 }}
-                      animate={{ opacity: 1, height: 'auto', y: 0 }}
-                      exit={{ opacity: 0, height: 0, y: -20 }}
-                      className="space-y-2"
-                    >
-                      <label className="text-sm font-bold text-gray-600 ml-1">Surnom de l'enfant</label>
-                      <div className="relative">
-                        <Baby className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                        <Input
-                          type="text"
-                          value={childNickname}
-                          onChange={(e) => setChildNickname(e.target.value)}
-                          placeholder="Ex: Théo, Ma puce..."
-                          className="h-14 pl-12 rounded-2xl border-2 focus:ring-orange-500 font-bold"
-                        />
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-
                 <div className="flex flex-col gap-4 mt-8">
                   <Button
                     type="submit"
                     className="w-full h-14 bg-orange-500 hover:bg-orange-600 rounded-2xl shadow-premium text-lg font-bold"
                     disabled={isLoading || parentPseudo.trim().length < 2}
                   >
-                    {isLoading || isTokenValidating ? (
+                    {isLoading ? (
                       <Loader2 className="w-5 h-5 animate-spin" />
                     ) : (
                       <>

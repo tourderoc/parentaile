@@ -1,22 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
-import { MessageSquare, User, Settings } from 'lucide-react';
+import { Home, MessageSquarePlus, Inbox, Mic, Settings } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { auth, db } from '../../lib/firebase';
 import { collection, query, where, orderBy, getDocs, onSnapshot } from 'firebase/firestore';
-import { useSwiperMode } from '../../lib/swiperContext';
 
-export const BottomNav: React.FC = () => {
-  const { isSwiperMode } = useSwiperMode();
-  const navigate = useNavigate();
-  const location = useLocation();
+interface BottomNavSwiperProps {
+  activeIndex: number;
+  onNavigate: (index: number) => void;
+}
+
+export const BottomNavSwiper: React.FC<BottomNavSwiperProps> = ({ activeIndex, onNavigate }) => {
   const [unreadCount, setUnreadCount] = useState(0);
 
-  // Écouter les messages avec réponse non consultés
   useEffect(() => {
-    // Skip listeners in swiper mode (BottomNavSwiper handles badges)
-    if (isSwiperMode) return;
-
     const user = auth.currentUser;
     if (!user) return;
 
@@ -24,14 +20,12 @@ export const BottomNav: React.FC = () => {
 
     const setupListeners = async () => {
       try {
-        // Récupérer les enfants du parent
         const childrenRef = collection(db, 'accounts', user.uid, 'children');
         const childrenSnap = await getDocs(query(childrenRef, orderBy('addedAt', 'desc')));
         const tokenIds = childrenSnap.docs.map(d => d.id);
 
         if (tokenIds.length === 0) return;
 
-        // Écouter les notifications non lues (temps réel)
         const chunks: string[][] = [];
         for (let i = 0; i < tokenIds.length; i += 10) {
           chunks.push(tokenIds.slice(i, i + 10));
@@ -47,9 +41,7 @@ export const BottomNav: React.FC = () => {
 
           const unsub = onSnapshot(q, (snapshot) => {
             setUnreadCount(snapshot.docs.length);
-          }, () => {
-            // Silently ignore errors
-          });
+          }, () => {});
 
           unsubscribes.push(unsub);
         }
@@ -63,50 +55,32 @@ export const BottomNav: React.FC = () => {
     return () => {
       unsubscribes.forEach(unsub => unsub());
     };
-  }, [isSwiperMode]);
-
-  // Hide when in swiper mode (BottomNavSwiper handles navigation)
-  if (isSwiperMode) return null;
+  }, []);
 
   const navItems = [
-    {
-      id: 'messages',
-      label: 'Messages',
-      icon: MessageSquare,
-      path: '/espace/messages',
-    },
-    {
-      id: 'contact',
-      label: 'Contact',
-      icon: User,
-      path: '/espace/dashboard',
-    },
-    {
-      id: 'settings',
-      label: 'Paramètres',
-      icon: Settings,
-      path: '/espace/parametres',
-    },
+    { id: 'accueil', label: 'Accueil', icon: Home },
+    { id: 'contact', label: 'Contact', icon: MessageSquarePlus },
+    { id: 'messages', label: 'Messages', icon: Inbox },
+    { id: 'forum', label: 'Forum', icon: Mic },
+    { id: 'settings', label: 'Param.', icon: Settings },
   ];
-
-  const isActive = (path: string) => location.pathname === path;
 
   return (
     <div className="fixed bottom-0 left-0 right-0 z-50 px-4 pb-4">
-      <nav className="max-w-md mx-auto glass shadow-premium rounded-3xl p-2 flex justify-around items-center">
-        {navItems.map((item) => {
-          const active = isActive(item.path);
+      <nav className="max-w-md mx-auto glass shadow-premium rounded-3xl p-1.5 flex justify-around items-center">
+        {navItems.map((item, index) => {
+          const active = activeIndex === index;
           const showBadge = item.id === 'messages' && unreadCount > 0;
 
           return (
             <button
               key={item.id}
-              onClick={() => navigate(item.path)}
-              className="relative flex flex-col items-center gap-1 p-2 min-w-[80px] transition-colors"
+              onClick={() => onNavigate(index)}
+              className="relative flex flex-col items-center gap-0.5 p-1.5 min-w-[56px] transition-colors"
             >
               {active && (
                 <motion.div
-                  layoutId="active-pill"
+                  layoutId="active-pill-swiper"
                   className="absolute inset-0 bg-orange-100 rounded-2xl -z-10"
                   initial={false}
                   transition={{ type: 'spring', stiffness: 500, damping: 30 }}
@@ -114,19 +88,19 @@ export const BottomNav: React.FC = () => {
               )}
               <div className="relative">
                 <item.icon
-                  size={24}
+                  size={20}
                   className={`transition-colors duration-300 ${
                     active ? 'text-orange-500' : 'text-gray-400'
                   }`}
                 />
                 {showBadge && (
-                  <span className="absolute -top-1.5 -right-2.5 min-w-[18px] h-[18px] bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1 shadow-sm animate-pulse">
+                  <span className="absolute -top-1.5 -right-2.5 min-w-[16px] h-[16px] bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center px-0.5 shadow-sm animate-pulse">
                     {unreadCount > 9 ? '9+' : unreadCount}
                   </span>
                 )}
               </div>
               <span
-                className={`text-[10px] font-bold uppercase tracking-wider transition-colors duration-300 ${
+                className={`text-[8px] font-bold uppercase tracking-wider transition-colors duration-300 ${
                   active ? 'text-orange-600' : 'text-gray-400'
                 }`}
               >
@@ -140,4 +114,4 @@ export const BottomNav: React.FC = () => {
   );
 };
 
-export default BottomNav;
+export default BottomNavSwiper;
