@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Home, MessageSquarePlus, Inbox, Mic, Settings } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Home, MessageSquarePlus, Inbox, Users, Settings } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { auth, db } from '../../lib/firebase';
+import { onAuthStateChanged, User } from 'firebase/auth';
 import { collection, query, where, orderBy, getDocs, onSnapshot } from 'firebase/firestore';
 
 interface BottomNavSwiperProps {
@@ -11,16 +13,24 @@ interface BottomNavSwiperProps {
 
 export const BottomNavSwiper: React.FC<BottomNavSwiperProps> = ({ activeIndex, onNavigate }) => {
   const [unreadCount, setUnreadCount] = useState(0);
+  const [currentUser, setCurrentUser] = useState<User | null>(auth.currentUser);
+  const navigate = useNavigate();
 
   useEffect(() => {
-    const user = auth.currentUser;
-    if (!user) return;
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setCurrentUser(user);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (!currentUser) return;
 
     let unsubscribes: (() => void)[] = [];
 
     const setupListeners = async () => {
       try {
-        const childrenRef = collection(db, 'accounts', user.uid, 'children');
+        const childrenRef = collection(db, 'accounts', currentUser.uid, 'children');
         const childrenSnap = await getDocs(query(childrenRef, orderBy('addedAt', 'desc')));
         const tokenIds = childrenSnap.docs.map(d => d.id);
 
@@ -59,9 +69,9 @@ export const BottomNavSwiper: React.FC<BottomNavSwiperProps> = ({ activeIndex, o
 
   const navItems = [
     { id: 'accueil', label: 'Accueil', icon: Home },
-    { id: 'contact', label: 'Contact', icon: MessageSquarePlus },
+    { id: 'forum', label: 'Groupes', icon: Users },
     { id: 'messages', label: 'Messages', icon: Inbox },
-    { id: 'forum', label: 'Forum', icon: Mic },
+    { id: 'contact', label: 'Contact', icon: MessageSquarePlus },
     { id: 'settings', label: 'Param.', icon: Settings },
   ];
 
@@ -75,7 +85,14 @@ export const BottomNavSwiper: React.FC<BottomNavSwiperProps> = ({ activeIndex, o
           return (
             <button
               key={item.id}
-              onClick={() => onNavigate(index)}
+              onClick={() => {
+                const requiresAuth = ['messages', 'contact', 'settings'].includes(item.id);
+                if (requiresAuth && !currentUser) {
+                  navigate('/espace?mode=login');
+                } else {
+                  onNavigate(index);
+                }
+              }}
               className="relative flex flex-col items-center gap-0.5 p-1.5 min-w-[56px] transition-colors"
             >
               {active && (

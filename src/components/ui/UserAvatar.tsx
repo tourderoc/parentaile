@@ -48,9 +48,13 @@ export const UserAvatar: React.FC<UserAvatarProps> = ({ config, size = 48, class
     );
   }
 
-  const { style = 'neutral', skinColor = '#FDDCB5', bgColor, faceShape, hairStyle, hairColor, glasses, beard } = config;
+  const { style = 'neutral', skinColor = '#FDDCB5', bgColor, faceShape, hairStyle, hairColor, glasses, beard, mustache } = config;
   const isFeminine = style === 'feminine';
   const isMasculine = style === 'masculine';
+
+  const normalizedGlasses = glasses === true ? 'round' : glasses === false ? 'none' : (glasses as string || 'none');
+  const normalizedBeard = beard === true ? 'short' : beard === false ? 'none' : (beard as string || 'none');
+  const normalizedMustache = mustache !== undefined ? mustache : (beard === true);
 
   // Face dimensions
   const faceRx = faceShape === 'oval' ? 22 : 24;
@@ -75,6 +79,35 @@ export const UserAvatar: React.FC<UserAvatarProps> = ({ config, size = 48, class
   const clothingBase = adjustColor(clothingColor, 0.15);
 
   const defsId = `${bgColor.replace('#', '')}-${skinColor.replace('#', '')}-${style}-${hairColor.replace('#', '')}`;
+
+  // Face shapes drawing
+  const renderFace = () => {
+    switch (faceShape) {
+      case 'square':
+        return (
+          <>
+            <path d="M 28 35 Q 26 50 30 65 Q 40 70 50 72 Q 60 70 70 65 Q 74 50 72 35 Z" fill={shadowColor} filter={`url(#softShadow-${defsId})`} />
+            <path d="M 28 34 Q 26 49 30 64 Q 40 69 50 71 Q 60 69 70 64 Q 74 49 72 34 Z" fill={skinColor} />
+          </>
+        );
+      case 'pointed':
+        return (
+          <>
+            <path d="M 27 35 Q 26 55 45 68 Q 50 72 55 68 Q 74 55 73 35 Z" fill={shadowColor} filter={`url(#softShadow-${defsId})`} />
+            <path d="M 27 34 Q 26 54 45 67 Q 50 71 55 67 Q 74 54 73 34 Z" fill={skinColor} />
+          </>
+        );
+      case 'oval':
+      case 'round':
+      default:
+        return (
+          <>
+            <ellipse cx="50" cy="48" rx={faceRx} ry={faceRy} fill={shadowColor} filter={`url(#softShadow-${defsId})`} />
+            <ellipse cx="50" cy="47" rx={faceRx} ry={faceRy} fill={skinColor} />
+          </>
+        );
+    }
+  };
 
   return (
     <svg width={size} height={size} viewBox="0 0 100 100" className={className} style={{ borderRadius: size * 0.3 }}>
@@ -133,10 +166,8 @@ export const UserAvatar: React.FC<UserAvatarProps> = ({ config, size = 48, class
         </g>
       )}
 
-      {/* Face Base Shadow (for 3D effect of the head over the neck) */}
-      <ellipse cx="50" cy="48" rx={faceRx} ry={faceRy} fill={shadowColor} filter={`url(#softShadow-${defsId})`} />
-      {/* Face */}
-      <ellipse cx="50" cy="47" rx={faceRx} ry={faceRy} fill={skinColor} />
+      {/* Face (Handles Base Shadow and Main Face based on Shape) */}
+      {renderFace()}
 
       {/* Blush for feminine/neutral */}
       {(isFeminine || !isMasculine) && (
@@ -182,11 +213,11 @@ export const UserAvatar: React.FC<UserAvatarProps> = ({ config, size = 48, class
       {/* Inner mouth subtle detail */}
       <path d="M44 58.5 Q50 61 56 58.5" stroke={adjustColor(mouthColor, 0.2)} strokeWidth="1" fill="none" strokeLinecap="round" opacity="0.7" />
 
-      {/* Beard - only for masculine/neutral */}
-      {beard && !isFeminine && renderBeard(hairColor)}
+      {/* Beard & Mustache - only for masculine/neutral */}
+      {!isFeminine && (normalizedBeard !== 'none' || normalizedMustache) && renderBeard(normalizedBeard, hairColor, normalizedMustache)}
 
       {/* Glasses */}
-      {glasses && renderGlasses()}
+      {normalizedGlasses !== 'none' && renderGlasses(normalizedGlasses)}
     </svg>
   );
 };
@@ -250,44 +281,111 @@ function renderHair(style: AvatarConfig['hairStyle'], color: string) {
   }
 }
 
-function renderBeard(color: string) {
+function renderBeard(style: string, color: string, hasMustache: boolean) {
   return (
     <g>
-      <path
-        d="M33 55 Q33 65 38 69 Q44 76 50 78 Q56 76 62 69 Q67 65 67 55 Q62 66 50 69 Q38 66 33 55"
-        fill={color}
-        opacity="0.95"
-      />
+      {style === 'stubble' && (
+        <g opacity="0.4" fill={color}>
+          <path d="M35 55 Q40 68 50 71 Q60 68 65 55" stroke={color} strokeWidth="2.5" strokeDasharray="1 3" fill="none" />
+          <path d="M38 58 Q45 68 50 70 Q55 68 62 58" stroke={color} strokeWidth="2" strokeDasharray="1 4" fill="none" />
+          <path d="M42 63 Q45 66 50 67 Q55 66 58 63" stroke={color} strokeWidth="1.5" strokeDasharray="1 4" fill="none" />
+        </g>
+      )}
+      {style === 'short' && (
+        <path
+          d="M33 55 Q33 65 38 69 Q44 76 50 78 Q56 76 62 69 Q67 65 67 55 Q62 66 50 69 Q38 66 33 55"
+          fill={color}
+          opacity="0.95"
+        />
+      )}
+      {style === 'medium' && (
+        <path
+           d="M33 55 Q33 70 38 75 Q44 85 50 87 Q56 85 62 75 Q67 70 67 55 Q62 66 50 69 Q38 66 33 55"
+           fill={color}
+           opacity="0.95"
+        />
+      )}
+      {style === 'long' && (
+        <path
+           d="M33 55 Q33 70 38 80 Q44 95 50 98 Q56 95 62 80 Q67 70 67 55 Q62 66 50 69 Q38 66 33 55"
+           fill={color}
+           opacity="0.95"
+        />
+      )}
+      
       {/* Mustache */}
-      <path
-        d="M38 56 Q45 52 50 55 Q55 52 62 56 Q55 58 50 56 Q45 58 38 56"
-        fill={color}
-      />
+      {hasMustache && (
+        <path
+          d="M38 56 Q45 52 50 55 Q55 52 62 56 Q55 58 50 56 Q45 58 38 56"
+          fill={color}
+        />
+      )}
     </g>
   );
 }
 
-function renderGlasses() {
+function renderGlasses(style: string) {
+  if (style === 'none') return null;
+  const isAviator = style === 'aviator';
+  const armColor = isAviator ? '#B8860B' : '#3A3A3A';
+  const armWidth = isAviator ? '1.5' : '2.5';
+
   return (
     <g>
-      {/* Frame base shadow */}
-      <circle cx="38" cy="45" r="9" stroke="#000" strokeWidth="2.5" fill="none" opacity="0.2" />
-      <circle cx="62" cy="45" r="9" stroke="#000" strokeWidth="2.5" fill="none" opacity="0.2" />
-      
-      {/* Frame */}
-      <circle cx="38" cy="44" r="9" stroke="#3A3A3A" strokeWidth="2.5" fill="none" />
-      <circle cx="62" cy="44" r="9" stroke="#3A3A3A" strokeWidth="2.5" fill="none" />
-      
+      {style === 'round' && (
+        <>
+          <circle cx="38" cy="45" r="9" stroke="#000" strokeWidth="2.5" fill="none" opacity="0.2" />
+          <circle cx="62" cy="45" r="9" stroke="#000" strokeWidth="2.5" fill="none" opacity="0.2" />
+          <circle cx="38" cy="44" r="9" stroke="#3A3A3A" strokeWidth="2.5" fill="none" />
+          <circle cx="62" cy="44" r="9" stroke="#3A3A3A" strokeWidth="2.5" fill="none" />
+          <path d="M31 40 L36 36" stroke="#FFF" strokeWidth="1.5" strokeLinecap="round" opacity="0.7" />
+          <path d="M55 40 L60 36" stroke="#FFF" strokeWidth="1.5" strokeLinecap="round" opacity="0.7" />
+        </>
+      )}
+
+      {style === 'square' && (
+        <>
+          <rect x="28" y="37" width="20" height="15" rx="3" stroke="#000" strokeWidth="2.5" fill="none" opacity="0.2" />
+          <rect x="52" y="37" width="20" height="15" rx="3" stroke="#000" strokeWidth="2.5" fill="none" opacity="0.2" />
+          <rect x="28" y="36" width="20" height="15" rx="3" stroke="#3A3A3A" strokeWidth="2.5" fill="none" />
+          <rect x="52" y="36" width="20" height="15" rx="3" stroke="#3A3A3A" strokeWidth="2.5" fill="none" />
+          <path d="M30 40 L36 36" stroke="#FFF" strokeWidth="1.5" strokeLinecap="round" opacity="0.7" />
+          <path d="M54 40 L60 36" stroke="#FFF" strokeWidth="1.5" strokeLinecap="round" opacity="0.7" />
+        </>
+      )}
+
+      {style === 'cateye' && (
+        <>
+          <path d="M 28 42 Q 28 34 38 34 Q 48 34 48 42 Q 48 50 38 50 Q 28 50 28 42 Z M 28 34 L 25 32" stroke="#000" strokeWidth="3" fill="none" opacity="0.2" />
+          <path d="M 52 42 Q 52 34 62 34 Q 72 34 72 42 Q 72 50 62 50 Q 52 50 52 42 Z M 72 34 L 75 32" stroke="#000" strokeWidth="3" fill="none" opacity="0.2" />
+          <path d="M 28 41 Q 28 33 38 33 Q 48 33 48 41 Q 48 49 38 49 Q 28 49 28 41 Z" fill="none" stroke="#2A2A2A" strokeWidth="3" />
+          <path d="M 52 41 Q 52 33 62 33 Q 72 33 72 41 Q 72 49 62 49 Q 52 49 52 41 Z" fill="none" stroke="#2A2A2A" strokeWidth="3" />
+          <path d="M 28 34 Q 25 31 24 30 L 28 31 Z" fill="#2A2A2A" />
+          <path d="M 72 34 Q 75 31 76 30 L 72 31 Z" fill="#2A2A2A" />
+          <path d="M30 40 L36 36" stroke="#FFF" strokeWidth="1.5" strokeLinecap="round" opacity="0.7" />
+          <path d="M54 40 L60 36" stroke="#FFF" strokeWidth="1.5" strokeLinecap="round" opacity="0.7" />
+        </>
+      )}
+
+      {style === 'aviator' && (
+        <>
+          <path d="M 27 42 Q 27 35 38 35 Q 49 35 49 42 Q 49 52 38 52 Q 27 52 27 42 Z" stroke="#000" strokeWidth="1.5" fill="none" opacity="0.2" />
+          <path d="M 51 42 Q 51 35 62 35 Q 73 35 73 42 Q 73 52 62 52 Q 51 52 51 42 Z" stroke="#000" strokeWidth="1.5" fill="none" opacity="0.2" />
+          <path d="M 40 33 Q 50 31 60 33" stroke="#000" strokeWidth="1.5" fill="none" opacity="0.2" />
+          <path d="M 27 41 Q 27 34 38 34 Q 49 34 49 41 Q 49 51 38 51 Q 27 51 27 41 Z" fill="#80B9FF" fillOpacity="0.2" stroke="#B8860B" strokeWidth="1.5" />
+          <path d="M 51 41 Q 51 34 62 34 Q 73 34 73 41 Q 73 51 62 51 Q 51 51 51 41 Z" fill="#80B9FF" fillOpacity="0.2" stroke="#B8860B" strokeWidth="1.5" />
+          <path d="M 40 32 Q 50 30 60 32" stroke="#B8860B" strokeWidth="1.5" fill="none" />
+          <path d="M30 40 L36 36" stroke="#FFF" strokeWidth="1.5" strokeLinecap="round" opacity="0.7" />
+          <path d="M54 40 L60 36" stroke="#FFF" strokeWidth="1.5" strokeLinecap="round" opacity="0.7" />
+        </>
+      )}
+
       {/* Bridge */}
-      <path d="M47 43 Q50 41 53 43" stroke="#3A3A3A" strokeWidth="2.5" fill="none" />
+      <path d="M47 43 Q50 41 53 43" stroke={armColor} strokeWidth={armWidth} fill="none" />
       
       {/* Arms */}
-      <line x1="29" y1="42" x2="22" y2="40" stroke="#3A3A3A" strokeWidth="2.5" strokeLinecap="round" />
-      <line x1="71" y1="42" x2="78" y2="40" stroke="#3A3A3A" strokeWidth="2.5" strokeLinecap="round" />
-      
-      {/* Glass Reflection */}
-      <path d="M31 40 L36 36" stroke="#FFF" strokeWidth="1.5" strokeLinecap="round" opacity="0.7" />
-      <path d="M55 40 L60 36" stroke="#FFF" strokeWidth="1.5" strokeLinecap="round" opacity="0.7" />
+      <line x1={style === 'cateye' ? '28' : '29'} y1="41" x2="22" y2="39" stroke={armColor} strokeWidth={armWidth} strokeLinecap="round" />
+      <line x1={style === 'cateye' ? '72' : '71'} y1="41" x2="78" y2="39" stroke={armColor} strokeWidth={armWidth} strokeLinecap="round" />
     </g>
   );
 }

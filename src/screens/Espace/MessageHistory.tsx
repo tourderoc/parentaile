@@ -88,7 +88,8 @@ export const MessageHistory = () => {
     const loadChildren = async () => {
       const user = auth.currentUser;
       if (!user) {
-        navigate('/espace');
+        setChildrenLoaded(true);
+        setIsLoading(false);
         return;
       }
 
@@ -282,6 +283,19 @@ export const MessageHistory = () => {
 
   return (
     <div className="min-h-screen bg-[#FFFBF0] pb-32">
+      {!auth.currentUser ? (
+        <div className="h-full flex flex-col items-center justify-center px-6 text-center pt-32">
+          <div className="w-20 h-20 bg-orange-100 rounded-3xl flex items-center justify-center text-orange-500 mb-6 shadow-inner">
+            <User size={40} />
+          </div>
+          <h2 className="text-2xl font-extrabold text-gray-800 mb-2">Espace Privé</h2>
+          <p className="text-gray-500 mb-8 font-medium">Connectez-vous pour accéder à vos messages personnels.</p>
+          <button onClick={() => navigate('/espace?mode=login')} className="w-full h-14 bg-orange-500 text-white rounded-2xl font-bold shadow-premium active:scale-95 transition-transform">
+            Se connecter
+          </button>
+        </div>
+      ) : (
+      <>
       {/* Premium Header */}
       <div className="bg-white/80 backdrop-blur-md sticky top-0 z-40 border-b border-orange-100">
         <div className="max-w-md mx-auto px-6 py-4 flex items-center justify-between">
@@ -730,6 +744,8 @@ export const MessageHistory = () => {
       </AnimatePresence>
 
       <BottomNav />
+      </>
+      )}
     </div>
   );
 };

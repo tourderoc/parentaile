@@ -58,7 +58,7 @@ export const SlideContact = () => {
   const loadChildren = async () => {
     const user = auth.currentUser;
     if (!user) {
-      navigate('/espace');
+      setIsLoading(false);
       return;
     }
 
@@ -171,6 +171,22 @@ export const SlideContact = () => {
     return (
       <div className="h-full bg-[#FFFBF0] flex items-center justify-center">
         <Loader2 className="w-12 h-12 animate-spin text-orange-500" />
+      </div>
+    );
+  }
+
+  // ========== NOT AUTHENTICATED: Show auth prompt ==========
+  if (!auth.currentUser) {
+    return (
+      <div className="h-full bg-[#FFFBF0] flex flex-col items-center justify-center p-6 text-center">
+        <div className="w-20 h-20 bg-orange-100 rounded-3xl flex items-center justify-center text-orange-500 mb-6 shadow-inner">
+          <Users size={40} />
+        </div>
+        <h2 className="text-2xl font-extrabold text-gray-800 mb-2">Espace Privé</h2>
+        <p className="text-gray-500 mb-8 font-medium">Une session est requise pour ajouter et gérer vos enfants.</p>
+        <button onClick={() => navigate('/espace?mode=login')} className="w-full h-14 bg-orange-500 text-white rounded-2xl font-bold shadow-premium active:scale-95 transition-transform">
+          Se connecter
+        </button>
       </div>
     );
   }

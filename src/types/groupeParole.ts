@@ -1,0 +1,55 @@
+export type ThemeGroupe =
+  | 'ecole'
+  | 'comportement'
+  | 'emotions'
+  | 'developpement';
+
+export interface ParticipantGroupe {
+  uid: string;
+  pseudo: string;
+  inscritVocal: boolean;
+  dateInscription: Date;
+}
+
+export interface MessageGroupe {
+  id: string;
+  auteurUid: string;
+  auteurPseudo: string;
+  contenu: string;
+  dateEnvoi: Date;
+}
+
+export interface GroupeParole {
+  id: string;
+  titre: string;
+  theme: ThemeGroupe;
+  createurUid: string;
+  createurPseudo: string;
+  dateCreation: Date;
+  dateVocal: Date;
+  dateExpiration: Date;
+  participantsMax: number;
+  participants: ParticipantGroupe[];
+  messages: MessageGroupe[];
+}
+
+export const THEME_LABELS: Record<ThemeGroupe, string> = {
+  ecole: 'École et apprentissages',
+  comportement: 'Comportement et règles',
+  emotions: 'Émotions et relations',
+  developpement: 'Développement et difficultés',
+};
+
+export const THEME_COLORS: Record<ThemeGroupe, { bg: string; text: string; light: string }> = {
+  ecole: { bg: 'bg-blue-500', text: 'text-blue-600', light: 'bg-blue-50' },
+  comportement: { bg: 'bg-purple-500', text: 'text-purple-600', light: 'bg-purple-50' },
+  emotions: { bg: 'bg-pink-500', text: 'text-pink-600', light: 'bg-pink-50' },
+  developpement: { bg: 'bg-emerald-500', text: 'text-emerald-600', light: 'bg-emerald-50' },
+};
+
+export const THEME_SHORT_LABELS: Record<ThemeGroupe, string> = {
+  ecole: 'École',
+  comportement: 'Comportement',
+  emotions: 'Émotions',
+  developpement: 'Développement',
+};

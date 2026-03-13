@@ -14,17 +14,18 @@ import { SwiperModeContext } from '../../lib/swiperContext';
 const sectionToSlide: Record<string, number> = {
   'dashboard': 0,
   'app': 0,
-  'nouveau-message': 1,
+  'forum': 1,       // compat
+  'groupes': 1,
   'messages': 2,
-  'forum': 3,
+  'nouveau-message': 3,
   'parametres': 4,
 };
 
 const slideToSection: Record<number, string> = {
   0: 'dashboard',
-  1: 'nouveau-message',
+  1: 'groupes',
   2: 'messages',
-  3: 'forum',
+  3: 'nouveau-message', // Contact slide
   4: 'parametres',
 };
 
@@ -88,7 +89,7 @@ export const EspaceMain = () => {
           </SwiperSlide>
           <SwiperSlide>
             <div className="h-full overflow-y-auto">
-              <SlideContact />
+              <SlideForum />
             </div>
           </SwiperSlide>
           <SwiperSlide>
@@ -98,7 +99,7 @@ export const EspaceMain = () => {
           </SwiperSlide>
           <SwiperSlide>
             <div className="h-full overflow-y-auto">
-              <SlideForum />
+              <SlideContact />
             </div>
           </SwiperSlide>
           <SwiperSlide>

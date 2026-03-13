@@ -2,11 +2,12 @@ export interface AvatarConfig {
   style: 'masculine' | 'feminine' | 'neutral';
   skinColor: string;
   bgColor: string;
-  faceShape: 'round' | 'oval';
+  faceShape: 'round' | 'oval' | 'square' | 'pointed';
   hairStyle: 'short' | 'long' | 'curly' | 'bald' | 'mid';
   hairColor: string;
-  glasses: boolean;
-  beard: boolean;
+  glasses: boolean | 'none' | 'round' | 'square' | 'cateye' | 'aviator';
+  beard: boolean | 'none' | 'stubble' | 'short' | 'medium' | 'long';
+  mustache?: boolean;
 }
 
 export const DEFAULT_AVATAR: AvatarConfig = {
@@ -16,8 +17,9 @@ export const DEFAULT_AVATAR: AvatarConfig = {
   faceShape: 'round',
   hairStyle: 'short',
   hairColor: '#4A3728',
-  glasses: false,
-  beard: false,
+  glasses: 'none',
+  beard: 'none',
+  mustache: false,
 };
 
 export const SKIN_COLORS = [
@@ -62,9 +64,29 @@ export const HAIR_STYLE_LABELS: Record<AvatarConfig['hairStyle'], string> = {
   mid: 'Mi-longs',
 };
 
-export const FACE_SHAPES = ['round', 'oval'] as const;
+export const FACE_SHAPES = ['round', 'oval', 'square', 'pointed'] as const;
 
 export const FACE_SHAPE_LABELS: Record<AvatarConfig['faceShape'], string> = {
   round: 'Rond',
   oval: 'Ovale',
+  square: 'Carré',
+  pointed: 'Pointu',
+};
+
+export const GLASSES_STYLES = ['none', 'round', 'square', 'cateye', 'aviator'] as const;
+export const GLASSES_LABELS: Record<string, string> = {
+  none: 'Aucune',
+  round: 'Rondes',
+  square: 'Carrées',
+  cateye: 'Oeil de Chat',
+  aviator: 'Aviateur'
+};
+
+export const BEARD_STYLES = ['none', 'stubble', 'short', 'medium', 'long'] as const;
+export const BEARD_LABELS: Record<string, string> = {
+  none: 'Aucune',
+  stubble: '3 Jours',
+  short: 'Courte',
+  medium: 'Moyenne',
+  long: 'Longue'
 };

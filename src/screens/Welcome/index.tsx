@@ -33,11 +33,15 @@ export const Welcome: React.FC = () => {
           transition={{ delay: 0.2 }}
           className="text-center"
         >
-          <h1 className="text-4xl md:text-5xl font-extrabold text-orange-500 mb-4 tracking-tight">
+          <h1 className="text-4xl md:text-5xl font-extrabold text-orange-500 mb-2 tracking-tight drop-shadow-sm">
             Parent'aile
           </h1>
-          <p className="text-gray-500 text-lg md:text-xl font-medium leading-relaxed">
-            Communiquez simplement avec<br />votre cabinet médical
+          <p className="text-gray-600 text-sm md:text-base font-medium leading-relaxed max-w-xs mx-auto mt-3">
+            Communiquez avec votre cabinet
+            <br />
+            et échangez avec d’autres parents
+            <br />
+            dans un espace simple et bienveillant.
           </p>
         </motion.div>
       </div>
@@ -71,19 +75,19 @@ export const Welcome: React.FC = () => {
           </motion.button>
         </div>
 
-        <motion.p
+        <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 1 }}
           className="text-center pt-2"
         >
-          <a
-            href="/"
+          <button
+            onClick={() => navigate('/espace/dashboard')}
             className="text-gray-400 text-xs font-semibold hover:text-orange-500 transition-colors uppercase tracking-widest"
           >
             Site Internet →
-          </a>
-        </motion.p>
+          </button>
+        </motion.div>
       </div>
 
       <div className="pb-4">

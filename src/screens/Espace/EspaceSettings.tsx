@@ -47,7 +47,11 @@ import {
   FACE_SHAPE_LABELS,
   STYLES,
   STYLE_LABELS,
-  SKIN_COLORS
+  SKIN_COLORS,
+  GLASSES_STYLES,
+  GLASSES_LABELS,
+  BEARD_STYLES,
+  BEARD_LABELS
 } from '../../lib/avatarTypes';
 
 export const EspaceSettings = () => {
@@ -99,7 +103,7 @@ export const EspaceSettings = () => {
   const loadData = async () => {
     const user = auth.currentUser;
     if (!user) {
-      navigate('/espace');
+      setIsLoading(false);
       return;
     }
 
@@ -292,6 +296,21 @@ export const EspaceSettings = () => {
     );
   }
 
+  if (!auth.currentUser) {
+    return (
+      <div className="min-h-screen bg-[#FFFBF0] flex flex-col items-center justify-center p-6 text-center pb-32">
+        <div className="w-20 h-20 bg-orange-100 rounded-3xl flex items-center justify-center text-orange-500 mb-6 shadow-inner">
+          <User size={40} />
+        </div>
+        <h2 className="text-2xl font-extrabold text-gray-800 mb-2">Paramètres du compte</h2>
+        <p className="text-gray-500 mb-8 font-medium">Connectez-vous pour configurer votre profil, sécurité, et notifications.</p>
+        <button onClick={() => navigate('/espace?mode=login')} className="w-full h-14 bg-orange-500 text-white rounded-2xl font-bold shadow-premium active:scale-95 transition-transform">
+          Se connecter
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="h-full bg-[#FFFBF0] flex flex-col overflow-hidden">
       {/* Header + Tab Bar */}
@@ -418,7 +437,7 @@ export const EspaceSettings = () => {
 
         {/* Slide 2: Avatar */}
         <SwiperSlide>
-          <div className="max-w-md mx-auto px-6 pt-4 h-full flex flex-col pb-32">
+          <div className="max-w-md mx-auto px-6 pt-4 h-full flex flex-col pb-48">
             {/* Preview - always visible */}
             <div className="flex flex-col items-center">
               <UserAvatar config={avatarConfig} size={100} className="shadow-premium" />
@@ -456,7 +475,7 @@ export const EspaceSettings = () => {
                   animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0, x: -30 }}
                   transition={{ duration: 0.2 }}
-                  className="glass rounded-2xl border-2 border-white shadow-glass p-5 space-y-4"
+                  className="glass rounded-2xl border-2 border-white shadow-glass p-5 space-y-4 mb-3"
                 >
                   <p className="text-[10px] font-bold text-orange-400 uppercase tracking-widest text-center">
                     {AVATAR_STEPS[avatarStep]}
@@ -584,37 +603,92 @@ export const EspaceSettings = () => {
                   )}
 
                   {/* Step 6: Accessoires */}
-                  {avatarStep === 6 && (
-                    <div className="flex flex-col gap-3 py-2">
-                      <button
-                        onClick={() => setAvatarConfig(prev => ({ ...prev, glasses: !prev.glasses }))}
-                        className={`w-full py-4 rounded-2xl text-base font-bold transition-all active:scale-95 ${
-                          avatarConfig.glasses
-                            ? 'bg-orange-500 text-white shadow-md'
-                            : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                        }`}
-                      >
-                        Lunettes
-                      </button>
-                      {avatarConfig.style !== 'feminine' && (
-                        <button
-                          onClick={() => setAvatarConfig(prev => ({ ...prev, beard: !prev.beard }))}
-                          className={`w-full py-4 rounded-2xl text-base font-bold transition-all active:scale-95 ${
-                            avatarConfig.beard
-                              ? 'bg-orange-500 text-white shadow-md'
-                              : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                          }`}
-                        >
-                          Barbe
-                        </button>
-                      )}
-                    </div>
-                  )}
+                  {avatarStep === 6 && (() => {
+                    const isMustacheActive = avatarConfig.mustache !== undefined 
+                      ? avatarConfig.mustache 
+                      : (avatarConfig.beard === true);
+
+                    return (
+                      <div className="flex flex-col gap-3 py-1">
+                        {/* Lunettes */}
+                        <div className="space-y-2">
+                          <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest text-center">Monture des Lunettes</p>
+                          <div className="flex flex-wrap justify-center gap-1.5">
+                            {GLASSES_STYLES.map((style) => {
+                              const normalized = avatarConfig.glasses === true ? 'round' : (avatarConfig.glasses || 'none');
+                              const isActive = normalized === style;
+                              return (
+                                <button
+                                  key={style}
+                                  onClick={() => setAvatarConfig(prev => ({ ...prev, glasses: style }))}
+                                  className={`px-3 py-1.5 rounded-xl text-[11px] font-bold transition-all active:scale-95 ${
+                                    isActive
+                                      ? 'bg-orange-500 text-white shadow-md'
+                                      : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                                  }`}
+                                >
+                                  {GLASSES_LABELS[style]}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* Pilosité */}
+                        {avatarConfig.style !== 'feminine' && (
+                          <>
+                            <div className="w-full h-px bg-gray-100 my-1" />
+                            <div className="space-y-2">
+                              <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest text-center">Pilosité Faciale</p>
+                              
+                              <div className="flex flex-wrap justify-center gap-1.5 mb-2">
+                                {BEARD_STYLES.map((style) => {
+                                  const normalized = avatarConfig.beard === true ? 'short' : (avatarConfig.beard || 'none');
+                                  const isActive = normalized === style;
+                                  return (
+                                    <button
+                                      key={style}
+                                      onClick={() => setAvatarConfig(prev => ({ ...prev, beard: style }))}
+                                      className={`px-3 py-1.5 rounded-xl text-[11px] font-bold transition-all active:scale-95 ${
+                                        isActive
+                                          ? 'bg-orange-500 text-white shadow-md'
+                                          : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                                      }`}
+                                    >
+                                      {BEARD_LABELS[style]}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+
+                              <button
+                                onClick={() => setAvatarConfig(prev => ({ ...prev, mustache: !isMustacheActive }))}
+                                className={`w-full py-2 flex items-center justify-between px-4 rounded-xl text-[12px] font-bold transition-all active:scale-95 ${
+                                  isMustacheActive
+                                    ? 'bg-orange-100 text-orange-600 border-2 border-orange-200'
+                                    : 'bg-gray-100 text-gray-500 border-2 border-transparent hover:bg-gray-200'
+                                }`}
+                              >
+                                <span>Ajouter une Moustache</span>
+                                <div className={`w-8 h-4.5 rounded-full p-0.5 transition-colors ${
+                                  isMustacheActive ? 'bg-orange-500' : 'bg-gray-300'
+                                }`}>
+                                  <div className={`w-3.5 h-3.5 bg-white rounded-full shadow-sm transition-transform ${
+                                    isMustacheActive ? 'translate-x-3.5' : 'translate-x-0'
+                                  }`} />
+                                </div>
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </motion.div>
               </AnimatePresence>
 
-              {/* Navigation + Save */}
-              <div className="mt-3 flex gap-3">
+              {/* Navigation + Save (Pinned) */}
+              <div className="flex gap-3 mt-auto shrink-0 pb-32">
                 {avatarStep > 0 && (
                   <button
                     onClick={() => setAvatarStep(prev => prev - 1)}
