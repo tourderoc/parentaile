@@ -233,6 +233,8 @@ export const SlideAccueil = () => {
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.3 }}
         className="flex-1 flex flex-col justify-center relative z-10 mt-3 min-h-0"
+        onTouchStart={e => e.stopPropagation()}
+        onTouchMove={e => e.stopPropagation()}
       >
         <Swiper
           nested={true}

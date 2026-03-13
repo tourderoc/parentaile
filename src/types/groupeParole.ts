@@ -2,7 +2,8 @@ export type ThemeGroupe =
   | 'ecole'
   | 'comportement'
   | 'emotions'
-  | 'developpement';
+  | 'developpement'
+  | 'autre';
 
 export interface ParticipantGroupe {
   uid: string;
@@ -38,6 +39,7 @@ export const THEME_LABELS: Record<ThemeGroupe, string> = {
   comportement: 'Comportement et règles',
   emotions: 'Émotions et relations',
   developpement: 'Développement et difficultés',
+  autre: 'Autre sujet',
 };
 
 export const THEME_COLORS: Record<ThemeGroupe, { bg: string; text: string; light: string }> = {
@@ -45,6 +47,7 @@ export const THEME_COLORS: Record<ThemeGroupe, { bg: string; text: string; light
   comportement: { bg: 'bg-purple-500', text: 'text-purple-600', light: 'bg-purple-50' },
   emotions: { bg: 'bg-pink-500', text: 'text-pink-600', light: 'bg-pink-50' },
   developpement: { bg: 'bg-emerald-500', text: 'text-emerald-600', light: 'bg-emerald-50' },
+  autre: { bg: 'bg-amber-500', text: 'text-amber-600', light: 'bg-amber-50' },
 };
 
 export const THEME_SHORT_LABELS: Record<ThemeGroupe, string> = {
@@ -52,4 +55,5 @@ export const THEME_SHORT_LABELS: Record<ThemeGroupe, string> = {
   comportement: 'Comportement',
   emotions: 'Émotions',
   developpement: 'Développement',
+  autre: 'Autre',
 };

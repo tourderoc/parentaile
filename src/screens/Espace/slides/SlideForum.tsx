@@ -1,6 +1,8 @@
 import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { Users, Mic, Clock, Plus, MessageCircle, Filter } from 'lucide-react';
+import { Swiper, SwiperSlide } from 'swiper/react';
+import 'swiper/css';
 import type { GroupeParole, ThemeGroupe } from '../../../types/groupeParole';
 import { THEME_LABELS, THEME_COLORS, THEME_SHORT_LABELS } from '../../../types/groupeParole';
 
@@ -157,7 +159,7 @@ const GroupeCard: React.FC<{
       initial={{ opacity: 0, scale: 0.92 }}
       animate={{ opacity: 1, scale: 1 }}
       transition={{ delay: 0.1 + index * 0.06 }}
-      className="flex-shrink-0 w-[280px] snap-center"
+      className="w-full"
     >
       <div className="glass rounded-3xl border border-white/60 shadow-glass overflow-hidden h-full flex flex-col">
         {/* Bandeau thème */}
@@ -274,6 +276,7 @@ export const SlideForum = () => {
     { key: 'comportement', label: 'Comportement' },
     { key: 'emotions', label: 'Émotions' },
     { key: 'developpement', label: 'Développement' },
+    { key: 'autre', label: 'Autre' },
   ];
 
   return (
@@ -330,17 +333,29 @@ export const SlideForum = () => {
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.15 }}
-          className="flex gap-2 overflow-x-auto no-scrollbar pb-1"
+          className="-mx-6"
+          onTouchStart={e => e.stopPropagation()}
+          onTouchMove={e => e.stopPropagation()}
         >
-          {themes.map(t => (
-            <ThemeChip
-              key={t.key}
-              theme={t.key}
-              label={t.label}
-              active={selectedTheme === t.key}
-              onClick={() => setSelectedTheme(t.key)}
-            />
-          ))}
+          <Swiper
+            nested={true}
+            slidesPerView="auto"
+            spaceBetween={8}
+            slidesOffsetBefore={24}
+            slidesOffsetAfter={24}
+            className="w-full pb-1"
+          >
+            {themes.map(t => (
+              <SwiperSlide key={t.key} style={{ width: 'auto' }}>
+                <ThemeChip
+                  theme={t.key}
+                  label={t.label}
+                  active={selectedTheme === t.key}
+                  onClick={() => setSelectedTheme(t.key)}
+                />
+              </SwiperSlide>
+            ))}
+          </Swiper>
         </motion.div>
 
         {/* Carrousel de groupes */}
@@ -350,10 +365,30 @@ export const SlideForum = () => {
           transition={{ delay: 0.2 }}
         >
           {groupesFiltres.length > 0 ? (
-            <div className="flex gap-4 overflow-x-auto no-scrollbar snap-x snap-mandatory pb-2 -mx-6 px-6">
-              {groupesFiltres.map((groupe, i) => (
-                <GroupeCard key={groupe.id} groupe={groupe} index={i} />
-              ))}
+            <div className="-mx-6" onTouchStart={e => e.stopPropagation()} onTouchMove={e => e.stopPropagation()}>
+              <Swiper
+                nested={true}
+                slidesPerView={1.15}
+                spaceBetween={12}
+                centeredSlides={true}
+                className="w-full py-2"
+              >
+                {groupesFiltres.map((groupe, i) => (
+                  <SwiperSlide key={groupe.id}>
+                    {({ isActive }) => (
+                      <div
+                        className="transition-transform duration-300 ease-out"
+                        style={{
+                          transform: isActive ? 'scale(1)' : 'scale(0.92)',
+                          opacity: isActive ? 1 : 0.7,
+                        }}
+                      >
+                        <GroupeCard groupe={groupe} index={i} />
+                      </div>
+                    )}
+                  </SwiperSlide>
+                ))}
+              </Swiper>
             </div>
           ) : (
             <div className="glass rounded-3xl border border-white/60 shadow-glass p-8 text-center">
@@ -368,23 +403,6 @@ export const SlideForum = () => {
               </p>
             </div>
           )}
-        </motion.div>
-
-        {/* Mention rassurante */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-          className="flex items-start gap-3 bg-orange-50/60 rounded-2xl px-4 py-3.5 border border-orange-100/50"
-        >
-          <div className="w-8 h-8 bg-white rounded-xl flex items-center justify-center flex-shrink-0 shadow-sm">
-            <MessageCircle size={16} className="text-orange-400" />
-          </div>
-          <p className="text-[11px] text-gray-500 font-medium leading-relaxed">
-            Vous pouvez participer à l'écrit <span className="font-bold text-gray-600">avant</span> ou{' '}
-            <span className="font-bold text-gray-600">après</span> le groupe vocal.
-            Chaque groupe reste actif pendant 7 jours.
-          </p>
         </motion.div>
 
         {/* Carte créer un groupe */}
@@ -404,6 +422,23 @@ export const SlideForum = () => {
               </p>
             </div>
           </button>
+        </motion.div>
+
+        {/* Mention rassurante */}
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.4 }}
+          className="flex items-start gap-3 bg-orange-50/60 rounded-2xl px-4 py-3.5 border border-orange-100/50"
+        >
+          <div className="w-8 h-8 bg-white rounded-xl flex items-center justify-center flex-shrink-0 shadow-sm">
+            <MessageCircle size={16} className="text-orange-400" />
+          </div>
+          <p className="text-[11px] text-gray-500 font-medium leading-relaxed">
+            Vous pouvez participer à l'écrit <span className="font-bold text-gray-600">avant</span> ou{' '}
+            <span className="font-bold text-gray-600">après</span> le groupe vocal.
+            Chaque groupe reste actif pendant 7 jours.
+          </p>
         </motion.div>
       </main>
     </div>
