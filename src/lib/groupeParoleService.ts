@@ -4,8 +4,11 @@ import {
   addDoc,
   serverTimestamp,
   Timestamp,
+  query,
+  orderBy,
+  onSnapshot,
 } from 'firebase/firestore';
-import type { ThemeGroupe, StructureEtape } from '../types/groupeParole';
+import type { GroupeParole, ThemeGroupe, StructureEtape } from '../types/groupeParole';
 
 export interface CreateGroupeData {
   titre: string;
@@ -52,4 +55,52 @@ export async function createGroupeParole(data: CreateGroupeData): Promise<string
 
   const docRef = await addDoc(collection(db, 'groupes'), groupeDoc);
   return docRef.id;
+}
+
+/**
+ * Écoute en temps réel les groupes de parole non expirés.
+ * Retourne une fonction unsubscribe pour arrêter l'écoute.
+ */
+export function onGroupesParole(
+  callback: (groupes: GroupeParole[]) => void
+): () => void {
+  const q = query(
+    collection(db, 'groupes'),
+    orderBy('dateCreation', 'desc')
+  );
+
+  return onSnapshot(q, (snapshot) => {
+    const now = new Date();
+    const groupes: GroupeParole[] = snapshot.docs
+      .map((doc) => {
+        const d = doc.data();
+        return {
+          id: doc.id,
+          titre: d.titre || '',
+          description: d.description || '',
+          theme: d.theme || 'autre',
+          createurUid: d.createurUid || '',
+          createurPseudo: d.createurPseudo || '',
+          dateCreation: d.dateCreation?.toDate?.() || new Date(),
+          dateVocal: d.dateVocal?.toDate?.() || new Date(),
+          dateExpiration: d.dateExpiration?.toDate?.() || new Date(),
+          participantsMax: d.participantsMax || 5,
+          structureType: d.structureType || 'libre',
+          structure: d.structure,
+          participants: (d.participants || []).map((p: any) => ({
+            uid: p.uid,
+            pseudo: p.pseudo,
+            inscritVocal: p.inscritVocal ?? false,
+            dateInscription: p.dateInscription?.toDate?.() || new Date(),
+          })),
+          messages: [],
+        } as GroupeParole;
+      })
+      .filter((g) => g.dateExpiration > now);
+
+    callback(groupes);
+  }, (error) => {
+    console.error('Erreur chargement groupes:', error);
+    callback([]);
+  });
 }
