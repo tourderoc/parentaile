@@ -20,9 +20,22 @@ export interface MessageGroupe {
   dateEnvoi: Date;
 }
 
+export interface StructureEtape {
+  label: string;
+  dureeMinutes: number;
+}
+
+export const STRUCTURE_DEFAUT: StructureEtape[] = [
+  { label: 'Présentations', dureeMinutes: 5 },
+  { label: 'Partage du vécu', dureeMinutes: 15 },
+  { label: 'Tour de parole', dureeMinutes: 15 },
+  { label: 'Discussion libre', dureeMinutes: 10 },
+];
+
 export interface GroupeParole {
   id: string;
   titre: string;
+  description: string;
   theme: ThemeGroupe;
   createurUid: string;
   createurPseudo: string;
@@ -30,6 +43,8 @@ export interface GroupeParole {
   dateVocal: Date;
   dateExpiration: Date;
   participantsMax: number;
+  structureType: 'libre' | 'structuree';
+  structure?: StructureEtape[];
   participants: ParticipantGroupe[];
   messages: MessageGroupe[];
 }

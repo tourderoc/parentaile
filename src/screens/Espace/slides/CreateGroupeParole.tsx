@@ -1,0 +1,800 @@
+import { useState, useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+  ArrowLeft,
+  Mic,
+  MicOff,
+  Sparkles,
+  Send,
+  Loader2,
+  Check,
+  Eraser,
+  Calendar,
+  Clock,
+  Users,
+  BookOpen,
+  Heart,
+  Brain,
+  GraduationCap,
+  HelpCircle,
+  Minus,
+  Plus,
+  RotateCcw,
+} from 'lucide-react';
+import { auth, db } from '../../../lib/firebase';
+import { doc, getDoc } from 'firebase/firestore';
+import { canUseRefinement, getRemainingUses, incrementUsage, isAdminUser } from '../../../lib/rateLimiting';
+import { createGroupeParole } from '../../../lib/groupeParoleService';
+import type { ThemeGroupe, StructureEtape } from '../../../types/groupeParole';
+import { THEME_LABELS, THEME_COLORS, THEME_SHORT_LABELS, STRUCTURE_DEFAUT } from '../../../types/groupeParole';
+
+interface CreateGroupeParoleProps {
+  onBack: () => void;
+}
+
+const THEME_ICONS: Record<ThemeGroupe, React.ElementType> = {
+  ecole: GraduationCap,
+  comportement: BookOpen,
+  emotions: Heart,
+  developpement: Brain,
+  autre: HelpCircle,
+};
+
+export const CreateGroupeParole: React.FC<CreateGroupeParoleProps> = ({ onBack }) => {
+  // Form state
+  const [description, setDescription] = useState('');
+  const [selectedTheme, setSelectedTheme] = useState<ThemeGroupe | null>(null);
+  const [titre, setTitre] = useState('');
+  const [dateVocal, setDateVocal] = useState('');
+  const [heureVocal, setHeureVocal] = useState('20:30');
+  const [structureType, setStructureType] = useState<'libre' | 'structuree'>('libre');
+  const [structure, setStructure] = useState<StructureEtape[]>(
+    STRUCTURE_DEFAUT.map(s => ({ ...s }))
+  );
+
+  // Voice
+  const [isRecording, setIsRecording] = useState(false);
+  const [voiceSupported, setVoiceSupported] = useState(true);
+  const recognitionRef = useRef<any>(null);
+  const finalTranscriptRef = useRef<string>('');
+  const isRecordingRef = useRef<boolean>(false);
+  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+  // Reformulation
+  const [isReformulating, setIsReformulating] = useState(false);
+  const [reformulatedText, setReformulatedText] = useState('');
+  const [showReformulated, setShowReformulated] = useState(false);
+
+  // Title suggestion
+  const [isSuggestingTitle, setIsSuggestingTitle] = useState(false);
+
+  // Submit
+  const [isPublishing, setIsPublishing] = useState(false);
+  const [isPublished, setIsPublished] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // --- Init voice recognition (pattern from MessageComposer) ---
+  useEffect(() => {
+    const hasSupport = 'webkitSpeechRecognition' in window || 'SpeechRecognition' in window;
+    setVoiceSupported(hasSupport);
+
+    if (hasSupport) {
+      const SpeechRecognition = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition;
+      recognitionRef.current = new SpeechRecognition();
+      recognitionRef.current.continuous = !isMobile;
+      recognitionRef.current.interimResults = true;
+      recognitionRef.current.lang = 'fr-FR';
+
+      recognitionRef.current.onresult = (event: any) => {
+        let interimTranscript = '';
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const transcript = event.results[i][0].transcript;
+          if (event.results[i].isFinal) {
+            finalTranscriptRef.current += transcript + ' ';
+          } else {
+            interimTranscript += transcript;
+          }
+        }
+        setDescription(finalTranscriptRef.current + interimTranscript);
+      };
+
+      recognitionRef.current.onerror = (event: any) => {
+        if (isMobile && (event.error === 'no-speech' || event.error === 'aborted')) {
+          if (isRecordingRef.current) {
+            setTimeout(() => {
+              try { recognitionRef.current?.start(); } catch {}
+            }, 100);
+          }
+          return;
+        }
+        setIsRecording(false);
+        isRecordingRef.current = false;
+      };
+
+      recognitionRef.current.onend = () => {
+        if (isMobile && isRecordingRef.current) {
+          setTimeout(() => {
+            try { recognitionRef.current?.start(); } catch {
+              setIsRecording(false);
+              isRecordingRef.current = false;
+            }
+          }, 100);
+          return;
+        }
+        setIsRecording(false);
+        isRecordingRef.current = false;
+        if (finalTranscriptRef.current) {
+          setDescription(finalTranscriptRef.current.trim());
+        }
+      };
+    }
+
+    return () => {
+      isRecordingRef.current = false;
+      try { recognitionRef.current?.stop(); } catch {}
+    };
+  }, [isMobile]);
+
+  const toggleRecording = async () => {
+    if (!recognitionRef.current) {
+      setError('La dictée vocale n\'est pas disponible sur ce navigateur');
+      return;
+    }
+
+    if (isRecording) {
+      isRecordingRef.current = false;
+      recognitionRef.current.stop();
+      setIsRecording(false);
+      setDescription(finalTranscriptRef.current.trim());
+    } else {
+      if (isMobile) {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          stream.getTracks().forEach(track => track.stop());
+        } catch {
+          setError('Veuillez autoriser l\'accès au microphone');
+          return;
+        }
+      }
+      finalTranscriptRef.current = description ? description + ' ' : '';
+      try {
+        recognitionRef.current.start();
+        isRecordingRef.current = true;
+        setIsRecording(true);
+        setError(null);
+      } catch {
+        setError('Impossible de démarrer la dictée vocale. Réessayez.');
+      }
+    }
+  };
+
+  // --- Reformulation (pattern from MessageComposer) ---
+  const handleReformulate = async () => {
+    if (!description.trim() || description.length < 10) {
+      setError('Le texte est trop court pour être reformulé.');
+      return;
+    }
+
+    const userEmail = auth.currentUser?.email;
+    if (!canUseRefinement(userEmail)) {
+      setError('Vous avez atteint la limite de 2 reformulations par jour.');
+      return;
+    }
+
+    setIsReformulating(true);
+    setError(null);
+
+    try {
+      const response = await fetch('/.netlify/functions/refineText', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: description, mode: 'reformulate' }),
+      });
+
+      if (!response.ok) throw new Error('Erreur reformulation');
+
+      const data = await response.json();
+      setReformulatedText(data.refinedText || data.refined || data.text);
+      setShowReformulated(true);
+
+      if (!isAdminUser(userEmail)) {
+        incrementUsage();
+      }
+    } catch {
+      setError('Impossible de reformuler. Réessayez.');
+    } finally {
+      setIsReformulating(false);
+    }
+  };
+
+  const useReformulated = () => {
+    setDescription(reformulatedText);
+    setShowReformulated(false);
+  };
+
+  // --- Title suggestion ---
+  const handleSuggestTitle = async () => {
+    if (!description.trim() || description.length < 10 || !selectedTheme) {
+      setError('Remplissez d\'abord la description et le thème.');
+      return;
+    }
+
+    setIsSuggestingTitle(true);
+    setError(null);
+
+    try {
+      const response = await fetch('/.netlify/functions/suggestGroupTitle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          description,
+          theme: THEME_LABELS[selectedTheme],
+        }),
+      });
+
+      if (!response.ok) throw new Error('Erreur suggestion');
+
+      const data = await response.json();
+      setTitre(data.title || '');
+    } catch {
+      setError('Impossible de suggérer un titre. Vous pouvez l\'écrire vous-même.');
+    } finally {
+      setIsSuggestingTitle(false);
+    }
+  };
+
+  // --- Validation ---
+  const getMinDate = () => {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    return tomorrow.toISOString().split('T')[0];
+  };
+
+  const isFormValid = () => {
+    return (
+      description.trim().length >= 20 &&
+      selectedTheme !== null &&
+      titre.trim().length >= 5 &&
+      titre.trim().length <= 80 &&
+      dateVocal !== '' &&
+      heureVocal !== ''
+    );
+  };
+
+  // --- Structure helpers ---
+  const updateStructureEtape = (index: number, field: keyof StructureEtape, value: string | number) => {
+    setStructure(prev => prev.map((s, i) => i === index ? { ...s, [field]: value } : s));
+  };
+
+  const totalMinutes = structure.reduce((sum, s) => sum + s.dureeMinutes, 0);
+
+  // --- Submit ---
+  const handlePublish = async () => {
+    if (!isFormValid()) {
+      setError('Veuillez remplir tous les champs obligatoires.');
+      return;
+    }
+
+    const user = auth.currentUser;
+    if (!user) {
+      setError('Vous devez être connecté pour créer un groupe.');
+      return;
+    }
+
+    setIsPublishing(true);
+    setError(null);
+
+    try {
+      // Get user pseudo
+      const accountDoc = await getDoc(doc(db, 'accounts', user.uid));
+      const pseudo = accountDoc.exists() ? (accountDoc.data().pseudo || 'Parent') : 'Parent';
+
+      const dateTime = new Date(`${dateVocal}T${heureVocal}:00`);
+
+      await createGroupeParole({
+        titre: titre.trim(),
+        description: description.trim(),
+        theme: selectedTheme!,
+        createurUid: user.uid,
+        createurPseudo: pseudo,
+        dateVocal: dateTime,
+        structureType,
+        ...(structureType === 'structuree' ? { structure } : {}),
+      });
+
+      setIsPublished(true);
+      setTimeout(() => onBack(), 2500);
+    } catch (err) {
+      console.error('Erreur création groupe:', err);
+      setError('Impossible de créer le groupe. Réessayez.');
+      setIsPublishing(false);
+    }
+  };
+
+  // --- Success screen ---
+  if (isPublished) {
+    return (
+      <div className="h-full bg-[#FFFBF0] flex items-center justify-center p-6">
+        <motion.div
+          initial={{ scale: 0.8, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          className="text-center space-y-6"
+        >
+          <div className="w-24 h-24 bg-green-100 rounded-[2rem] flex items-center justify-center mx-auto shadow-premium transform rotate-6">
+            <Check className="w-12 h-12 text-green-500" />
+          </div>
+          <div>
+            <h2 className="text-3xl font-extrabold text-gray-800 tracking-tight">Groupe créé !</h2>
+            <p className="text-gray-500 mt-2 font-medium">Votre groupe de parole est maintenant visible.</p>
+          </div>
+          <p className="text-xs font-bold text-gray-400 uppercase tracking-widest pt-4">Retour aux groupes...</p>
+        </motion.div>
+      </div>
+    );
+  }
+
+  // --- Main form ---
+  return (
+    <div className="h-full bg-[#FFFBF0] overflow-y-auto pb-32">
+      {/* Header sticky */}
+      <div className="bg-white/80 backdrop-blur-md sticky top-0 z-40 border-b border-orange-100">
+        <div className="max-w-md mx-auto px-6 py-4 flex items-center gap-4">
+          <button
+            onClick={onBack}
+            className="p-2 hover:bg-orange-50 rounded-xl transition-colors text-gray-400"
+          >
+            <ArrowLeft size={20} />
+          </button>
+          <div>
+            <h1 className="text-lg font-extrabold text-gray-800 tracking-tight">Créer un groupe</h1>
+            <p className="text-[11px] text-gray-400 font-medium mt-0.5">Partagez une situation avec d'autres parents</p>
+          </div>
+        </div>
+      </div>
+
+      <main className="max-w-md mx-auto px-6 pt-6 space-y-8">
+        {/* ====== SECTION 1 : Description ====== */}
+        <motion.section
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="space-y-3"
+        >
+          <div>
+            <label className="text-[10px] font-bold text-gray-400 uppercase ml-1 tracking-widest">Décrivez votre situation</label>
+            <p className="text-[11px] text-gray-400 font-medium ml-1 mt-0.5">
+              Pas besoin d'être parfait, écrivez comme vous le ressentez.
+            </p>
+          </div>
+
+          <div className={`glass rounded-[2rem] p-4 border-2 transition-all duration-300 shadow-glass min-h-[200px] flex flex-col ${isRecording ? 'border-red-400 bg-red-50/30' : 'border-white focus-within:border-orange-200 focus-within:bg-orange-50/10'}`}>
+            <textarea
+              ref={textareaRef}
+              value={description}
+              onChange={(e) => {
+                setDescription(e.target.value);
+                if (!isRecording) finalTranscriptRef.current = e.target.value;
+              }}
+              placeholder="Mon enfant traverse une période difficile avec..."
+              className="flex-1 w-full bg-transparent resize-none focus:outline-none font-medium text-gray-700 placeholder:text-gray-300 leading-relaxed min-h-[140px] text-base"
+              style={{ fontSize: '16px' }}
+            />
+
+            {isRecording && (
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-2 py-2 text-red-500">
+                <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+                <span className="text-xs font-bold">Enregistrement en cours...</span>
+              </motion.div>
+            )}
+
+            <div className="text-right text-[10px] text-gray-400 font-medium">
+              {description.length} caractère{description.length > 1 ? 's' : ''}
+              {description.length > 0 && description.length < 20 && (
+                <span className="text-orange-400 ml-2">min. 20</span>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between pt-3 border-t border-black/5">
+              <div className="flex gap-2">
+                {voiceSupported ? (
+                  <button
+                    onClick={toggleRecording}
+                    className={`p-3 rounded-xl transition-all ${isRecording ? 'bg-red-500 text-white shadow-lg animate-pulse' : 'bg-gray-100 text-gray-400 hover:text-orange-500 hover:bg-orange-50'}`}
+                  >
+                    {isRecording ? <MicOff size={20} /> : <Mic size={20} />}
+                  </button>
+                ) : (
+                  <div className="p-3 rounded-xl bg-gray-100 text-gray-300 cursor-not-allowed" title="Non disponible">
+                    <Mic size={20} />
+                  </div>
+                )}
+                <button
+                  onClick={() => { setDescription(''); finalTranscriptRef.current = ''; textareaRef.current?.focus(); }}
+                  className="p-3 bg-gray-100 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
+                >
+                  <Eraser size={20} />
+                </button>
+              </div>
+
+              <div className="flex flex-col items-end gap-1">
+                {isReformulating ? (
+                  <div className="flex items-center gap-2 text-orange-500">
+                    <Loader2 size={16} className="animate-spin" />
+                    <span className="text-[10px] uppercase font-bold tracking-widest">Réflexion...</span>
+                  </div>
+                ) : (
+                  <>
+                    <button
+                      onClick={handleReformulate}
+                      disabled={description.length < 10 || !canUseRefinement(auth.currentUser?.email)}
+                      className="flex items-center gap-2 px-4 py-2 bg-orange-100 text-orange-600 rounded-xl hover:bg-orange-200 transition-all font-bold text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <Sparkles size={16} />
+                      Reformuler
+                    </button>
+                    {!isAdminUser(auth.currentUser?.email) && (
+                      <span className="text-[9px] text-gray-400">
+                        {getRemainingUses(auth.currentUser?.email)}/2 restantes
+                      </span>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* AI Suggestion Card */}
+          <AnimatePresence>
+            {showReformulated && (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                className="bg-indigo-600 rounded-[2rem] p-6 shadow-premium relative overflow-hidden"
+              >
+                <div className="absolute top-[-20%] right-[-10%] w-32 h-32 bg-white/10 rounded-full blur-2xl" />
+                <div className="relative z-10 space-y-4">
+                  <div className="flex items-center gap-2">
+                    <Sparkles size={16} className="text-indigo-200" />
+                    <span className="text-indigo-100 text-[10px] font-bold uppercase tracking-widest">Suggestion</span>
+                  </div>
+                  <p className="text-white font-medium leading-relaxed italic">"{reformulatedText}"</p>
+                  <div className="flex gap-2 pt-2">
+                    <button onClick={useReformulated} className="flex-1 h-12 bg-white text-indigo-600 rounded-2xl font-bold text-sm shadow-lg hover:bg-indigo-50 transition-colors">
+                      Utiliser cette version
+                    </button>
+                    <button onClick={() => setShowReformulated(false)} className="h-12 px-4 bg-indigo-500/50 text-white rounded-2xl font-bold text-sm hover:bg-indigo-500 transition-colors">
+                      Garder l'original
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </motion.section>
+
+        {/* ====== SECTION 2 : Thème ====== */}
+        <motion.section
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.15 }}
+          className="space-y-3"
+        >
+          <label className="text-[10px] font-bold text-gray-400 uppercase ml-1 tracking-widest">Quel est le thème ?</label>
+
+          <div className="grid grid-cols-2 gap-3">
+            {(Object.keys(THEME_LABELS) as ThemeGroupe[]).map((theme) => {
+              const colors = THEME_COLORS[theme];
+              const Icon = THEME_ICONS[theme];
+              const isSelected = selectedTheme === theme;
+
+              return (
+                <button
+                  key={theme}
+                  onClick={() => setSelectedTheme(theme)}
+                  className={`
+                    relative p-4 rounded-2xl transition-all text-left flex items-center gap-3
+                    ${isSelected
+                      ? `${colors.light} border-2 ${colors.text} shadow-sm`
+                      : 'bg-white/50 border-2 border-gray-100/60 hover:bg-white/70'
+                    }
+                  `}
+                >
+                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${isSelected ? colors.bg : 'bg-gray-100'}`}>
+                    <Icon size={18} className={isSelected ? 'text-white' : 'text-gray-400'} />
+                  </div>
+                  <span className={`text-xs font-bold leading-tight ${isSelected ? 'text-gray-800' : 'text-gray-500'}`}>
+                    {THEME_SHORT_LABELS[theme]}
+                  </span>
+                  {isSelected && (
+                    <motion.div
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      className="absolute top-2 right-2"
+                    >
+                      <div className={`w-5 h-5 ${colors.bg} rounded-full flex items-center justify-center`}>
+                        <Check size={12} className="text-white" />
+                      </div>
+                    </motion.div>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </motion.section>
+
+        {/* ====== SECTION 3 : Titre ====== */}
+        <motion.section
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+          className="space-y-3"
+        >
+          <label className="text-[10px] font-bold text-gray-400 uppercase ml-1 tracking-widest">Donnez un titre à votre groupe</label>
+
+          <div className="glass rounded-2xl border-2 border-white focus-within:border-orange-200 shadow-glass overflow-hidden">
+            <input
+              type="text"
+              value={titre}
+              onChange={(e) => setTitre(e.target.value.slice(0, 80))}
+              placeholder={selectedTheme
+                ? `Ex: ${selectedTheme === 'ecole' ? 'Mon enfant refuse l\'école' : selectedTheme === 'comportement' ? 'Gérer les crises de colère' : selectedTheme === 'emotions' ? 'Aider mon enfant à s\'exprimer' : selectedTheme === 'developpement' ? 'Retard de langage, que faire ?' : 'Partage d\'expérience entre parents'}`
+                : 'Titre de votre groupe...'
+              }
+              className="w-full px-4 py-4 bg-transparent focus:outline-none font-bold text-gray-700 placeholder:text-gray-300 text-sm"
+              style={{ fontSize: '16px' }}
+            />
+          </div>
+
+          <div className="flex items-center justify-between px-1">
+            <span className="text-[10px] text-gray-400 font-medium">
+              {titre.length}/80 caractères
+              {titre.length > 0 && titre.length < 5 && <span className="text-orange-400 ml-2">min. 5</span>}
+            </span>
+
+            <button
+              onClick={handleSuggestTitle}
+              disabled={isSuggestingTitle || description.length < 10 || !selectedTheme}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold text-orange-500 hover:text-orange-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              {isSuggestingTitle ? (
+                <Loader2 size={12} className="animate-spin" />
+              ) : (
+                <Sparkles size={12} />
+              )}
+              Suggérer un titre
+            </button>
+          </div>
+        </motion.section>
+
+        {/* ====== SECTION 4 : Date/Heure ====== */}
+        <motion.section
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.25 }}
+          className="space-y-3"
+        >
+          <label className="text-[10px] font-bold text-gray-400 uppercase ml-1 tracking-widest">Quand organiser le vocal ?</label>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="glass rounded-2xl border-2 border-white focus-within:border-orange-200 shadow-glass p-3 flex items-center gap-3">
+              <Calendar size={18} className="text-orange-400 flex-shrink-0" />
+              <input
+                type="date"
+                value={dateVocal}
+                onChange={(e) => setDateVocal(e.target.value)}
+                min={getMinDate()}
+                className="w-full bg-transparent focus:outline-none font-bold text-gray-700 text-sm"
+                style={{ fontSize: '16px' }}
+              />
+            </div>
+
+            <div className="glass rounded-2xl border-2 border-white focus-within:border-orange-200 shadow-glass p-3 flex items-center gap-3">
+              <Clock size={18} className="text-orange-400 flex-shrink-0" />
+              <input
+                type="time"
+                value={heureVocal}
+                onChange={(e) => setHeureVocal(e.target.value)}
+                className="w-full bg-transparent focus:outline-none font-bold text-gray-700 text-sm"
+                style={{ fontSize: '16px' }}
+              />
+            </div>
+          </div>
+
+          <p className="text-[10px] text-gray-400 font-medium ml-1">
+            Le groupe vocal dure environ 45 minutes. Minimum 24h à l'avance.
+          </p>
+        </motion.section>
+
+        {/* ====== SECTION 5 : Organisation ====== */}
+        <motion.section
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
+          className="space-y-3"
+        >
+          <div className="flex items-center gap-2 ml-1">
+            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Comment organiser le temps ?</label>
+            <span className="text-[9px] font-bold text-orange-400 bg-orange-50 px-2 py-0.5 rounded-full uppercase tracking-wider">Facultatif</span>
+          </div>
+
+          <div className="space-y-3">
+            {/* Option Libre */}
+            <button
+              onClick={() => setStructureType('libre')}
+              className={`w-full p-4 rounded-2xl text-left transition-all flex items-center gap-3 ${
+                structureType === 'libre'
+                  ? 'bg-orange-50 border-2 border-orange-200 shadow-sm'
+                  : 'bg-white/50 border-2 border-gray-100/60'
+              }`}
+            >
+              <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
+                structureType === 'libre' ? 'border-orange-500 bg-orange-500' : 'border-gray-300'
+              }`}>
+                {structureType === 'libre' && <div className="w-2 h-2 bg-white rounded-full" />}
+              </div>
+              <div>
+                <p className="text-sm font-bold text-gray-800">Groupe libre</p>
+                <p className="text-[10px] text-gray-400 font-medium">Discussion naturelle sans contrainte</p>
+              </div>
+            </button>
+
+            {/* Option Structurée */}
+            <button
+              onClick={() => setStructureType('structuree')}
+              className={`w-full p-4 rounded-2xl text-left transition-all flex items-center gap-3 ${
+                structureType === 'structuree'
+                  ? 'bg-orange-50 border-2 border-orange-200 shadow-sm'
+                  : 'bg-white/50 border-2 border-gray-100/60'
+              }`}
+            >
+              <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
+                structureType === 'structuree' ? 'border-orange-500 bg-orange-500' : 'border-gray-300'
+              }`}>
+                {structureType === 'structuree' && <div className="w-2 h-2 bg-white rounded-full" />}
+              </div>
+              <div>
+                <p className="text-sm font-bold text-gray-800">Avec une structure</p>
+                <p className="text-[10px] text-gray-400 font-medium">Un cadre proposé pour guider les échanges</p>
+              </div>
+            </button>
+          </div>
+
+          {/* Structure éditable */}
+          <AnimatePresence>
+            {structureType === 'structuree' && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="overflow-hidden"
+              >
+                <div className="glass rounded-2xl border-2 border-white shadow-glass p-4 space-y-3">
+                  {structure.map((etape, index) => (
+                    <div key={index} className="flex items-center gap-3">
+                      <input
+                        type="text"
+                        value={etape.label}
+                        onChange={(e) => updateStructureEtape(index, 'label', e.target.value)}
+                        className="flex-1 bg-white/60 rounded-xl px-3 py-2 text-sm font-semibold text-gray-700 focus:outline-none focus:ring-2 focus:ring-orange-200 border border-gray-100"
+                        style={{ fontSize: '14px' }}
+                      />
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => updateStructureEtape(index, 'dureeMinutes', Math.max(1, etape.dureeMinutes - 5))}
+                          className="w-7 h-7 rounded-lg bg-gray-100 flex items-center justify-center text-gray-500 hover:bg-gray-200 transition-colors"
+                        >
+                          <Minus size={14} />
+                        </button>
+                        <span className="text-xs font-bold text-gray-600 w-10 text-center">{etape.dureeMinutes}min</span>
+                        <button
+                          onClick={() => updateStructureEtape(index, 'dureeMinutes', etape.dureeMinutes + 5)}
+                          className="w-7 h-7 rounded-lg bg-gray-100 flex items-center justify-center text-gray-500 hover:bg-gray-200 transition-colors"
+                        >
+                          <Plus size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+
+                  <div className="flex items-center justify-between pt-2 border-t border-gray-100">
+                    <span className={`text-xs font-bold ${totalMinutes >= 35 && totalMinutes <= 55 ? 'text-emerald-600' : 'text-orange-500'}`}>
+                      Total : {totalMinutes} min
+                    </span>
+                    <button
+                      onClick={() => setStructure(STRUCTURE_DEFAUT.map(s => ({ ...s })))}
+                      className="flex items-center gap-1.5 text-[10px] font-bold text-gray-400 hover:text-gray-600 transition-colors"
+                    >
+                      <RotateCcw size={12} />
+                      Réinitialiser
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </motion.section>
+
+        {/* ====== SECTION 6 : Prévisualisation + Publish ====== */}
+        <motion.section
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.35 }}
+          className="space-y-4"
+        >
+          {/* Preview card */}
+          {selectedTheme && titre.trim() && dateVocal && (
+            <div className="space-y-2">
+              <label className="text-[10px] font-bold text-gray-400 uppercase ml-1 tracking-widest">Votre groupe ressemblera à ça</label>
+              <div className="glass rounded-3xl border border-white/60 shadow-glass overflow-hidden">
+                <div className={`${THEME_COLORS[selectedTheme].bg} px-4 py-2.5`}>
+                  <span className="text-[10px] font-bold text-white uppercase tracking-wider">
+                    {THEME_SHORT_LABELS[selectedTheme]}
+                  </span>
+                </div>
+                <div className="p-4 space-y-2">
+                  <h3 className="text-sm font-extrabold text-gray-800">{titre}</h3>
+                  <p className="text-[10px] text-gray-400 font-semibold">Créé par vous</p>
+                  <div className="flex items-center gap-2">
+                    <div className={`w-7 h-7 ${THEME_COLORS[selectedTheme].light} rounded-lg flex items-center justify-center`}>
+                      <Users size={14} className={THEME_COLORS[selectedTheme].text} />
+                    </div>
+                    <span className="text-xs font-bold text-gray-700">1 / 5</span>
+                    <span className="text-[10px] font-semibold text-emerald-600">4 places</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 bg-orange-50 rounded-lg flex items-center justify-center">
+                      <Mic size={14} className="text-orange-500" />
+                    </div>
+                    <span className="text-xs font-semibold text-gray-600">
+                      {new Date(`${dateVocal}T${heureVocal}`).toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' })} à {heureVocal}
+                    </span>
+                    <span className="text-[9px] font-bold bg-orange-50 text-orange-500 px-2 py-0.5 rounded-full ml-auto">À venir</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Error */}
+          <AnimatePresence>
+            {error && (
+              <motion.div
+                initial={{ opacity: 0, x: 10 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 10 }}
+                className="p-4 bg-red-50 text-red-600 rounded-2xl border border-red-100 text-sm font-bold"
+              >
+                {error}
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Publish button */}
+          <button
+            onClick={handlePublish}
+            disabled={isPublishing || !isFormValid()}
+            className="w-full h-16 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 disabled:bg-gray-300 rounded-[1.5rem] shadow-premium flex items-center justify-center gap-3 transition-all group"
+          >
+            {isPublishing ? (
+              <Loader2 className="animate-spin text-white" />
+            ) : (
+              <>
+                <Send size={24} className="text-white group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />
+                <span className="text-white font-extrabold text-lg">Publier le groupe</span>
+              </>
+            )}
+          </button>
+
+          <p className="text-center text-[10px] text-gray-400 font-medium leading-relaxed pb-4">
+            Vous serez l'animateur de ce groupe de parole.
+          </p>
+        </motion.section>
+      </main>
+    </div>
+  );
+};
+
+export default CreateGroupeParole;

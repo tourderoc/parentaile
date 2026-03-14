@@ -5,6 +5,7 @@ import { Swiper, SwiperSlide } from 'swiper/react';
 import 'swiper/css';
 import type { GroupeParole, ThemeGroupe } from '../../../types/groupeParole';
 import { THEME_LABELS, THEME_COLORS, THEME_SHORT_LABELS } from '../../../types/groupeParole';
+import { CreateGroupeParole } from './CreateGroupeParole';
 
 // --- Mock data (à remplacer par Firestore) ---
 const MOCK_GROUPES: GroupeParole[] = [
@@ -14,10 +15,12 @@ const MOCK_GROUPES: GroupeParole[] = [
     theme: 'ecole',
     createurUid: 'u1',
     createurPseudo: 'Marie',
+    description: 'Mon fils de 7 ans refuse catégoriquement d\'aller à l\'école depuis 2 semaines. J\'aimerais échanger avec d\'autres parents qui vivent ou ont vécu cette situation.',
     dateCreation: new Date(Date.now() - 2 * 86400000),
     dateVocal: new Date(Date.now() + 1 * 86400000),
     dateExpiration: new Date(Date.now() + 5 * 86400000),
     participantsMax: 5,
+    structureType: 'libre',
     participants: [
       { uid: 'u1', pseudo: 'Marie', inscritVocal: true, dateInscription: new Date() },
       { uid: 'u2', pseudo: 'Sophie', inscritVocal: true, dateInscription: new Date() },
@@ -31,10 +34,18 @@ const MOCK_GROUPES: GroupeParole[] = [
     theme: 'comportement',
     createurUid: 'u4',
     createurPseudo: 'Laura',
+    description: 'Ma fille fait des crises de colère très intenses. Je me sens démunie et j\'aimerais savoir comment d\'autres parents gèrent ça.',
     dateCreation: new Date(Date.now() - 1 * 86400000),
     dateVocal: new Date(Date.now() + 2 * 86400000),
     dateExpiration: new Date(Date.now() + 6 * 86400000),
     participantsMax: 5,
+    structureType: 'structuree',
+    structure: [
+      { label: 'Présentations', dureeMinutes: 5 },
+      { label: 'Partage du vécu', dureeMinutes: 15 },
+      { label: 'Tour de parole', dureeMinutes: 15 },
+      { label: 'Discussion libre', dureeMinutes: 10 },
+    ],
     participants: [
       { uid: 'u4', pseudo: 'Laura', inscritVocal: true, dateInscription: new Date() },
       { uid: 'u5', pseudo: 'Pierre', inscritVocal: true, dateInscription: new Date() },
@@ -50,10 +61,12 @@ const MOCK_GROUPES: GroupeParole[] = [
     theme: 'emotions',
     createurUid: 'u9',
     createurPseudo: 'Claire',
+    description: 'Mon enfant a du mal à exprimer ce qu\'il ressent et se renferme. J\'aimerais des idées et du soutien.',
     dateCreation: new Date(Date.now() - 3 * 86400000),
     dateVocal: new Date(Date.now() + 3 * 86400000),
     dateExpiration: new Date(Date.now() + 4 * 86400000),
     participantsMax: 5,
+    structureType: 'libre',
     participants: [
       { uid: 'u9', pseudo: 'Claire', inscritVocal: true, dateInscription: new Date() },
       { uid: 'u10', pseudo: 'David', inscritVocal: true, dateInscription: new Date() },
@@ -66,10 +79,12 @@ const MOCK_GROUPES: GroupeParole[] = [
     theme: 'developpement',
     createurUid: 'u11',
     createurPseudo: 'Nathalie',
+    description: 'Mon fils a un retard de langage diagnostiqué. Je cherche des parents qui partagent cette expérience.',
     dateCreation: new Date(Date.now() - 4 * 86400000),
     dateVocal: new Date(Date.now() - 1 * 86400000),
     dateExpiration: new Date(Date.now() + 3 * 86400000),
     participantsMax: 5,
+    structureType: 'libre',
     participants: [
       { uid: 'u11', pseudo: 'Nathalie', inscritVocal: true, dateInscription: new Date() },
       { uid: 'u12', pseudo: 'Antoine', inscritVocal: true, dateInscription: new Date() },
@@ -84,10 +99,18 @@ const MOCK_GROUPES: GroupeParole[] = [
     theme: 'ecole',
     createurUid: 'u15',
     createurPseudo: 'Isabelle',
+    description: 'Les devoirs du soir tournent au cauchemar chez nous. Comment vous organisez-vous ?',
     dateCreation: new Date(Date.now() - 1 * 86400000),
     dateVocal: new Date(Date.now() + 4 * 86400000),
     dateExpiration: new Date(Date.now() + 6 * 86400000),
     participantsMax: 5,
+    structureType: 'structuree',
+    structure: [
+      { label: 'Présentations', dureeMinutes: 5 },
+      { label: 'Partage du vécu', dureeMinutes: 15 },
+      { label: 'Tour de parole', dureeMinutes: 15 },
+      { label: 'Discussion libre', dureeMinutes: 10 },
+    ],
     participants: [
       { uid: 'u15', pseudo: 'Isabelle', inscritVocal: true, dateInscription: new Date() },
     ],
@@ -253,6 +276,7 @@ const GroupeCard: React.FC<{
 
 // --- Page principale ---
 export const SlideForum = () => {
+  const [showCreate, setShowCreate] = useState(false);
   const [selectedTheme, setSelectedTheme] = useState<ThemeGroupe | 'tous'>('tous');
   const [placesDispoOnly, setPlacesDispoOnly] = useState(false);
 
@@ -278,6 +302,10 @@ export const SlideForum = () => {
     { key: 'developpement', label: 'Développement' },
     { key: 'autre', label: 'Autre' },
   ];
+
+  if (showCreate) {
+    return <CreateGroupeParole onBack={() => setShowCreate(false)} />;
+  }
 
   return (
     <div className="h-full bg-[#FFFBF0] overflow-y-auto pb-32">
@@ -411,7 +439,7 @@ export const SlideForum = () => {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.35 }}
         >
-          <button className="w-full glass rounded-3xl border-2 border-dashed border-orange-200/60 shadow-glass p-5 flex items-center gap-4 hover:border-orange-300 hover:bg-white/60 transition-all active:scale-[0.98] group">
+          <button onClick={() => setShowCreate(true)} className="w-full glass rounded-3xl border-2 border-dashed border-orange-200/60 shadow-glass p-5 flex items-center gap-4 hover:border-orange-300 hover:bg-white/60 transition-all active:scale-[0.98] group">
             <div className="w-12 h-12 bg-gradient-to-br from-orange-400 to-orange-500 rounded-2xl flex items-center justify-center shadow-md group-hover:shadow-lg transition-shadow flex-shrink-0">
               <Plus size={24} className="text-white" />
             </div>
