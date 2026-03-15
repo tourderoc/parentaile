@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Home, MessageSquarePlus, Inbox, Users, Settings } from 'lucide-react';
+import { Home, MessageSquarePlus, LayoutGrid, Users, Settings } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { auth, db } from '../../lib/firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
@@ -70,7 +70,7 @@ export const BottomNavSwiper: React.FC<BottomNavSwiperProps> = ({ activeIndex, o
   const navItems = [
     { id: 'accueil', label: 'Accueil', icon: Home },
     { id: 'forum', label: 'Groupes', icon: Users },
-    { id: 'messages', label: 'Messages', icon: Inbox },
+    { id: 'mon-espace', label: 'Mon Espace', icon: LayoutGrid },
     { id: 'contact', label: 'Contact', icon: MessageSquarePlus },
     { id: 'settings', label: 'Param.', icon: Settings },
   ];
@@ -80,13 +80,13 @@ export const BottomNavSwiper: React.FC<BottomNavSwiperProps> = ({ activeIndex, o
       <nav className="max-w-md mx-auto glass shadow-premium rounded-3xl p-1.5 flex justify-around items-center">
         {navItems.map((item, index) => {
           const active = activeIndex === index;
-          const showBadge = item.id === 'messages' && unreadCount > 0;
+          const showBadge = item.id === 'mon-espace' && unreadCount > 0;
 
           return (
             <button
               key={item.id}
               onClick={() => {
-                const requiresAuth = ['messages', 'contact', 'settings'].includes(item.id);
+                const requiresAuth = ['mon-espace', 'contact', 'settings'].includes(item.id);
                 if (requiresAuth && !currentUser) {
                   navigate('/espace?mode=login');
                 } else {

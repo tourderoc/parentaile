@@ -5,7 +5,7 @@ import type { SwiperClass } from 'swiper/react';
 import 'swiper/css';
 import { SlideAccueil } from './slides/SlideAccueil';
 import { SlideContact } from './slides/SlideContact';
-import { SlideMessages } from './slides/SlideMessages';
+import { SlideMonEspace } from './slides/SlideMonEspace';
 import { SlideForum } from './slides/SlideForum';
 import { SlideParametres } from './slides/SlideParametres';
 import { BottomNavSwiper } from '../../components/ui/BottomNavSwiper';
@@ -16,7 +16,8 @@ const sectionToSlide: Record<string, number> = {
   'app': 0,
   'forum': 1,       // compat
   'groupes': 1,
-  'messages': 2,
+  'mon-espace': 2,
+  'messages': 2,  // compat
   'nouveau-message': 3,
   'parametres': 4,
 };
@@ -24,7 +25,7 @@ const sectionToSlide: Record<string, number> = {
 const slideToSection: Record<number, string> = {
   0: 'dashboard',
   1: 'groupes',
-  2: 'messages',
+  2: 'mon-espace',
   3: 'nouveau-message', // Contact slide
   4: 'parametres',
 };
@@ -94,7 +95,7 @@ export const EspaceMain = () => {
           </SwiperSlide>
           <SwiperSlide>
             <div className="h-full overflow-y-auto">
-              <SlideMessages />
+              <SlideMonEspace />
             </div>
           </SwiperSlide>
           <SwiperSlide>

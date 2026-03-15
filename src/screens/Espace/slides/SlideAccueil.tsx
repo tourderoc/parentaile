@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { auth, db } from '../../../lib/firebase';
 import { signOut, onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import { collection, getDocs, query, orderBy, doc, getDoc } from 'firebase/firestore';
-import { LogOut, Loader2, MessageSquarePlus, Inbox, Users, Settings, ShieldCheck } from 'lucide-react';
+import { LogOut, Loader2, MessageSquarePlus, LayoutGrid, Users, Settings, ShieldCheck } from 'lucide-react';
 import { UserAvatar } from '../../../components/ui/UserAvatar';
 import type { AvatarConfig } from '../../../lib/avatarTypes';
 import { motion } from 'framer-motion';
@@ -23,9 +23,9 @@ const getSectionCards = (hasChildren: boolean) => [
     slideIndex: 1,
   },
   {
-    label: 'Messages',
-    description: 'Historique des echanges',
-    icon: Inbox,
+    label: 'Mon Espace',
+    description: 'Votre espace personnel',
+    icon: LayoutGrid,
     bgImage: '/assets/backgrounds/slide_bg_messages.png',
     slideIndex: 2,
   },

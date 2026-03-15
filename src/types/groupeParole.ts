@@ -47,6 +47,7 @@ export interface GroupeParole {
   structure?: StructureEtape[];
   participants: ParticipantGroupe[];
   messages: MessageGroupe[];
+  messageCount?: number;
 }
 
 export const THEME_LABELS: Record<ThemeGroupe, string> = {

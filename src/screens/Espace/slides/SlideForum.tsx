@@ -64,7 +64,8 @@ const ThemeChip: React.FC<{
 const GroupeCard: React.FC<{
   groupe: GroupeParole;
   index: number;
-}> = ({ groupe, index }) => {
+  onClick?: () => void;
+}> = ({ groupe, index, onClick }) => {
   const colors = THEME_COLORS[groupe.theme];
   const jours = joursRestants(groupe.dateExpiration);
   const placesRestantes = groupe.participantsMax - groupe.participants.length;
@@ -76,7 +77,8 @@ const GroupeCard: React.FC<{
       initial={{ opacity: 0, scale: 0.92 }}
       animate={{ opacity: 1, scale: 1 }}
       transition={{ delay: 0.1 + index * 0.06 }}
-      className="w-full"
+      className="w-full cursor-pointer"
+      onClick={onClick}
     >
       <div className="glass rounded-3xl border border-white/60 shadow-glass overflow-hidden h-full flex flex-col">
         {/* Bandeau thème */}
@@ -160,7 +162,7 @@ const GroupeCard: React.FC<{
             Encore {jours} jour{jours > 1 ? 's' : ''}
           </span>
           <span className="text-[10px] text-gray-300 ml-auto font-medium">
-            {groupe.messages.length} message{groupe.messages.length !== 1 ? 's' : ''}
+            {groupe.messageCount || 0} message{(groupe.messageCount || 0) !== 1 ? 's' : ''}
           </span>
         </div>
       </div>
@@ -322,7 +324,7 @@ export const SlideForum = () => {
                           opacity: isActive ? 1 : 0.7,
                         }}
                       >
-                        <GroupeCard groupe={groupe} index={i} />
+                        <GroupeCard groupe={groupe} index={i} onClick={() => navigate(`/espace/groupes/${groupe.id}`)} />
                       </div>
                     )}
                   </SwiperSlide>
