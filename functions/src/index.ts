@@ -1,101 +1,107 @@
 import * as functions from 'firebase-functions';
-import Stripe from 'stripe';
 import * as admin from 'firebase-admin';
+import { AccessToken } from 'livekit-server-sdk';
 
 admin.initializeApp();
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2023-10-16',
-});
+// ========== LIVEKIT — Token pour salle vocale ==========
 
-export const createCheckoutSession = functions.https.onCall(async (data, context) => {
-  try {
-    if (!context.auth) {
-      throw new Error('Authentication required');
-    }
-
-    const { items, success_url, cancel_url } = data;
-
-    if (!items?.length) {
-      throw new Error('No items provided');
-    }
-
-    const session = await stripe.checkout.sessions.create({
-      payment_method_types: ['card'],
-      line_items: items.map((item: any) => ({
-        price_data: {
-          currency: 'eur',
-          product_data: {
-            name: item.title,
-            images: [item.image_url],
-          },
-          unit_amount: Math.round(item.price * 100),
-        },
-        quantity: item.quantity,
-      })),
-      mode: 'payment',
-      success_url,
-      cancel_url,
-      metadata: {
-        userId: context.auth.uid,
-      },
-    });
-
-    return { sessionId: session.id };
-  } catch (error: any) {
-    console.error('Error creating checkout session:', error);
-    throw new functions.https.HttpsError('internal', error.message);
+export const getLiveKitToken = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'Connexion requise');
   }
-});
 
-export const stripeWebhook = functions.https.onRequest(async (req, res) => {
-  const signature = req.headers['stripe-signature'];
+  const { groupeId } = data;
+  if (!groupeId || typeof groupeId !== 'string') {
+    throw new functions.https.HttpsError('invalid-argument', 'groupeId requis');
+  }
 
-  try {
-    const event = stripe.webhooks.constructEvent(
-      req.rawBody,
-      signature!,
-      process.env.STRIPE_WEBHOOK_SECRET!
+  // Vérifier que le groupe existe et que le vocal est accessible
+  const db = admin.firestore();
+  const groupeSnap = await db.collection('groupes').doc(groupeId).get();
+
+  if (!groupeSnap.exists) {
+    throw new functions.https.HttpsError('not-found', 'Groupe introuvable');
+  }
+
+  const groupe = groupeSnap.data()!;
+  const uid = context.auth.uid;
+
+  // Vérifier que l'utilisateur est inscrit
+  const isParticipant = (groupe.participants || []).some(
+    (p: any) => p.uid === uid
+  );
+  if (!isParticipant) {
+    throw new functions.https.HttpsError(
+      'permission-denied',
+      'Vous devez être inscrit au groupe pour rejoindre le vocal'
     );
-
-    if (event.type === 'checkout.session.completed') {
-      const session = event.data.object as Stripe.Checkout.Session;
-      const userId = session.metadata?.userId;
-
-      if (!userId) {
-        throw new Error('No user ID in session metadata');
-      }
-
-      // Update order status and stock levels
-      const db = admin.firestore();
-      const batch = db.batch();
-
-      // Create order record
-      const orderRef = db.collection('orders').doc();
-      batch.set(orderRef, {
-        userId,
-        sessionId: session.id,
-        paymentIntentId: session.payment_intent,
-        status: 'paid',
-        amount: session.amount_total! / 100,
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
-
-      // Update stock levels
-      const lineItems = await stripe.checkout.sessions.listLineItems(session.id);
-      for (const item of lineItems.data) {
-        const productRef = db.collection('livres_enfants').doc(item.price?.product as string);
-        batch.update(productRef, {
-          stock: admin.firestore.FieldValue.increment(-item.quantity!),
-        });
-      }
-
-      await batch.commit();
-    }
-
-    res.json({ received: true });
-  } catch (error) {
-    console.error('Webhook error:', error);
-    res.status(400).send('Webhook Error');
   }
+
+  // Vérifier la fenêtre temporelle (15 min avant → 60 min après le début)
+  const dateVocal = groupe.dateVocal?.toDate?.() || new Date(groupe.dateVocal);
+  const now = Date.now();
+  const diff = dateVocal.getTime() - now;
+  const minutesBefore = diff / 60000;
+
+  if (minutesBefore > 15) {
+    throw new functions.https.HttpsError(
+      'failed-precondition',
+      'La salle ouvre 15 minutes avant le vocal'
+    );
+  }
+  if (minutesBefore < -60) {
+    throw new functions.https.HttpsError(
+      'failed-precondition',
+      'Le vocal est terminé'
+    );
+  }
+
+  // Récupérer le pseudo
+  const accountSnap = await db.collection('accounts').doc(uid).get();
+  const pseudo = accountSnap.exists
+    ? accountSnap.data()?.pseudo || 'Parent'
+    : 'Parent';
+
+  // Déterminer si l'utilisateur est l'animateur (créateur du groupe)
+  const isAnimateur = groupe.createurUid === uid;
+
+  // Générer le token LiveKit
+  const apiKey = functions.config().livekit?.api_key || process.env.LIVEKIT_API_KEY;
+  const apiSecret = functions.config().livekit?.api_secret || process.env.LIVEKIT_API_SECRET;
+
+  if (!apiKey || !apiSecret) {
+    console.error('LiveKit API credentials not configured');
+    throw new functions.https.HttpsError(
+      'internal',
+      'Configuration LiveKit manquante'
+    );
+  }
+
+  const roomName = `parentaile-${groupeId}`;
+
+  const token = new AccessToken(apiKey, apiSecret, {
+    identity: uid,
+    name: pseudo,
+    ttl: '1h',
+    metadata: JSON.stringify({ isAnimateur, groupeId }),
+  });
+
+  token.addGrant({
+    room: roomName,
+    roomJoin: true,
+    canPublish: true,
+    canSubscribe: true,
+    canPublishData: isAnimateur,
+  });
+
+  const jwt = await token.toJwt();
+
+  return {
+    token: jwt,
+    roomName,
+    wsUrl: functions.config().livekit?.url || process.env.LIVEKIT_URL || '',
+    isAnimateur,
+    pseudo,
+  };
 });

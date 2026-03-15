@@ -44,7 +44,8 @@ function getVocalStatus(dateVocal: Date): {
 const VocalCartouche: React.FC<{
   groupe: GroupeParole;
   isParticipant: boolean;
-}> = ({ groupe, isParticipant }) => {
+  onRejoindre: () => void;
+}> = ({ groupe, isParticipant, onRejoindre }) => {
   const { status, minutesLeft } = getVocalStatus(groupe.dateVocal);
   const [, setTick] = useState(0);
 
@@ -76,8 +77,7 @@ const VocalCartouche: React.FC<{
         <button
           onClick={(e) => {
             e.stopPropagation();
-            // TODO: LiveKit — ouvrir la salle vocale
-            alert('La salle vocale LiveKit sera bientôt disponible !');
+            onRejoindre();
           }}
           className="px-4 py-2 bg-white text-emerald-600 rounded-xl text-xs font-extrabold shadow-sm active:scale-95 transition-transform"
         >
@@ -129,7 +129,8 @@ const MiniGroupeCard: React.FC<{
   isCreateur: boolean;
   isParticipant: boolean;
   onClick: () => void;
-}> = ({ groupe, isCreateur, isParticipant, onClick }) => {
+  onRejoindreVocal: () => void;
+}> = ({ groupe, isCreateur, isParticipant, onClick, onRejoindreVocal }) => {
   const colors = THEME_COLORS[groupe.theme];
   const vocalPassé = groupe.dateVocal.getTime() < Date.now();
   const jours = joursRestants(groupe.dateExpiration);
@@ -203,7 +204,7 @@ const MiniGroupeCard: React.FC<{
       </button>
 
       {/* Vocal cartouche — separate from the clickable card */}
-      <VocalCartouche groupe={groupe} isParticipant={isParticipant} />
+      <VocalCartouche groupe={groupe} isParticipant={isParticipant} onRejoindre={onRejoindreVocal} />
     </motion.div>
   );
 };
@@ -346,6 +347,7 @@ export const MesGroupesPage = () => {
                         isCreateur={true}
                         isParticipant={true}
                         onClick={() => navigate(`/espace/groupes/${g.id}`)}
+                        onRejoindreVocal={() => navigate(`/espace/groupes/${g.id}/vocal`)}
                       />
                     ))}
                   </div>
@@ -367,6 +369,7 @@ export const MesGroupesPage = () => {
                         isCreateur={false}
                         isParticipant={true}
                         onClick={() => navigate(`/espace/groupes/${g.id}`)}
+                        onRejoindreVocal={() => navigate(`/espace/groupes/${g.id}/vocal`)}
                       />
                     ))}
                   </div>
@@ -388,6 +391,7 @@ export const MesGroupesPage = () => {
                         isCreateur={false}
                         isParticipant={true}
                         onClick={() => navigate(`/espace/groupes/${g.id}`)}
+                        onRejoindreVocal={() => navigate(`/espace/groupes/${g.id}/vocal`)}
                       />
                     ))}
                   </div>

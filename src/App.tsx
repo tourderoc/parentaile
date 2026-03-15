@@ -13,6 +13,7 @@ import { EspaceMain } from './screens/Espace/EspaceMain';
 import { GroupeDetailPage } from './screens/Espace/GroupeDetailPage';
 import { MesMessagesPage } from './screens/Espace/MesMessagesPage';
 import { MesGroupesPage } from './screens/Espace/MesGroupesPage';
+import { SalleVocalePage } from './screens/Espace/SalleVocalePage';
 import { WelcomeWithSplash } from './screens/Welcome/WelcomeWithSplash';
 
 const Layout = () => {
@@ -36,6 +37,7 @@ const Layout = () => {
 
       {/* ========== ESPACE PATIENT ========== */}
       <Route path="/espace" element={<Espace />} />
+      <Route path="/espace/groupes/:groupeId/vocal" element={<SalleVocalePage />} />
       <Route path="/espace/groupes/:groupeId" element={<GroupeDetailPage />} />
       <Route path="/espace/mes-messages" element={<MesMessagesPage />} />
       <Route path="/espace/mes-groupes" element={<MesGroupesPage />} />
