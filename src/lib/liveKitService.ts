@@ -12,12 +12,13 @@ interface LiveKitTokenResponse {
 /**
  * Appelle la Cloud Function pour obtenir un token LiveKit.
  * Vérifie côté serveur : auth, inscription, fenêtre temporelle.
+ * Pour les groupes test, passe le mot de passe optionnel.
  */
-export async function getLiveKitToken(groupeId: string): Promise<LiveKitTokenResponse> {
-  const callable = httpsCallable<{ groupeId: string }, LiveKitTokenResponse>(
+export async function getLiveKitToken(groupeId: string, password?: string): Promise<LiveKitTokenResponse> {
+  const callable = httpsCallable<{ groupeId: string; password?: string }, LiveKitTokenResponse>(
     functions,
     'getLiveKitToken'
   );
-  const result = await callable({ groupeId });
+  const result = await callable({ groupeId, ...(password ? { password } : {}) });
   return result.data;
 }

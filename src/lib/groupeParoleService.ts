@@ -4,12 +4,15 @@ import {
   addDoc,
   doc,
   getDoc,
+  getDocs,
+  setDoc,
   updateDoc,
   deleteDoc,
   serverTimestamp,
   Timestamp,
   query,
   orderBy,
+  where,
   onSnapshot,
   arrayUnion,
   increment,
@@ -101,6 +104,8 @@ export function onGroupesParole(
           })),
           messages: [],
           messageCount: d.messageCount || 0,
+          passwordVocal: d.passwordVocal,
+          isTestGroup: d.isTestGroup || false,
         } as GroupeParole;
       })
       .filter((g) => g.dateExpiration > now);
@@ -146,6 +151,8 @@ export function onGroupeParole(
       })),
       messages: [],
       messageCount: d.messageCount || 0,
+      passwordVocal: d.passwordVocal,
+      isTestGroup: d.isTestGroup || false,
     } as GroupeParole);
   }, (error) => {
     console.error('Erreur chargement groupe:', error);
@@ -247,4 +254,39 @@ export async function quitterGroupe(
   await updateDoc(doc(db, 'groupes', groupeId), {
     participants: updatedParticipants,
   });
+}
+
+// ========== GROUPE TEST ==========
+const TEST_GROUP_ID = 'groupe-test-vocal';
+
+/**
+ * Seed un groupe de parole test dans Firestore s'il n'existe pas déjà.
+ * - Pas de contrainte horaire (isTestGroup = true)
+ * - Mot de passe : "tunisien"
+ * - Expiration en 2027
+ * - Le premier inscrit devient le créateur
+ */
+export async function seedTestGroup(): Promise<void> {
+  const ref = doc(db, 'groupes', TEST_GROUP_ID);
+  const snap = await getDoc(ref);
+  if (snap.exists()) return; // déjà créé
+
+  await setDoc(ref, {
+    titre: 'Salle de test vocal',
+    description:
+      'Groupe de test pour vérifier le fonctionnement de la salle vocale. Accès par mot de passe.',
+    theme: 'autre',
+    createurUid: '__test__',
+    createurPseudo: 'Système',
+    dateCreation: serverTimestamp(),
+    dateVocal: Timestamp.fromDate(new Date('2027-01-01T00:00:00')),
+    dateExpiration: Timestamp.fromDate(new Date('2027-12-31T23:59:59')),
+    participantsMax: 5,
+    structureType: 'libre',
+    participants: [],
+    isTestGroup: true,
+    passwordVocal: 'tunisien',
+  });
+
+  console.log('[SEED] Groupe test vocal créé:', TEST_GROUP_ID);
 }

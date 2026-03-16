@@ -1,6 +1,7 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Swiper, SwiperSlide } from 'swiper/react';
+import { seedTestGroup } from '../../lib/groupeParoleService';
 import type { SwiperClass } from 'swiper/react';
 import 'swiper/css';
 import { SlideAccueil } from './slides/SlideAccueil';
@@ -44,6 +45,11 @@ export const EspaceMain = () => {
 
   // Ref to skip URL→Swiper sync when Swiper already triggered the URL change
   const skipUrlSync = useRef(false);
+
+  // Seed le groupe test au premier montage
+  useEffect(() => {
+    seedTestGroup().catch((err) => console.warn('[SEED] Erreur:', err));
+  }, []);
 
   // URL → Swiper sync (when navigate() is called from inside a component)
   useEffect(() => {

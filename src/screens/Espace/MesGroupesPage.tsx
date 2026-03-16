@@ -46,7 +46,11 @@ const VocalCartouche: React.FC<{
   isParticipant: boolean;
   onRejoindre: () => void;
 }> = ({ groupe, isParticipant, onRejoindre }) => {
-  const { status, minutesLeft } = getVocalStatus(groupe.dateVocal);
+  // Groupe test → toujours ouvert
+  const rawStatus = getVocalStatus(groupe.dateVocal);
+  const { status, minutesLeft } = groupe.isTestGroup
+    ? { status: 'open' as const, minutesLeft: undefined }
+    : rawStatus;
   const [, setTick] = useState(0);
 
   // Re-render every 30s to update countdown

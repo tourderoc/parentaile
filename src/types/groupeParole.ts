@@ -48,6 +48,8 @@ export interface GroupeParole {
   participants: ParticipantGroupe[];
   messages: MessageGroupe[];
   messageCount?: number;
+  passwordVocal?: string;
+  isTestGroup?: boolean;
 }
 
 export const THEME_LABELS: Record<ThemeGroupe, string> = {

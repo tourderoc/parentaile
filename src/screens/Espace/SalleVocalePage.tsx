@@ -31,6 +31,7 @@ import { auth, db } from '../../lib/firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { getLiveKitToken } from '../../lib/liveKitService';
 import { UserAvatar } from '../../components/ui/UserAvatar';
+import { KeyRound } from 'lucide-react';
 
 // ========== Timer Component ==========
 const VocalTimer: React.FC<{ dateVocal: Date; durationMin: number }> = ({
@@ -341,7 +342,25 @@ export const SalleVocalePage = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [showRules, setShowRules] = useState(true);
 
-  // Load token and group info
+  // Password prompt state
+  const [needsPassword, setNeedsPassword] = useState(false);
+  const [passwordInput, setPasswordInput] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [connectingAfterPassword, setConnectingAfterPassword] = useState(false);
+
+  // Connect to LiveKit (shared logic)
+  const connectToRoom = async (password?: string) => {
+    try {
+      const result = await getLiveKitToken(groupeId!, password);
+      setToken(result.token);
+      setWsUrl(result.wsUrl);
+      setIsAnimateur(result.isAnimateur);
+    } catch (err: any) {
+      throw err;
+    }
+  };
+
+  // Load group info and check if password is needed
   useEffect(() => {
     if (!groupeId) return;
 
@@ -353,13 +372,17 @@ export const SalleVocalePage = () => {
           const data = groupeSnap.data();
           setGroupeTitre(data.titre || '');
           setDateVocal(data.dateVocal?.toDate?.() || new Date());
+
+          // Si groupe test avec mot de passe → demander le mot de passe
+          if (data.isTestGroup && data.passwordVocal) {
+            setNeedsPassword(true);
+            setIsLoading(false);
+            return;
+          }
         }
 
-        // Get LiveKit token
-        const result = await getLiveKitToken(groupeId);
-        setToken(result.token);
-        setWsUrl(result.wsUrl);
-        setIsAnimateur(result.isAnimateur);
+        // Pas de mot de passe requis → connexion directe
+        await connectToRoom();
       } catch (err: any) {
         console.error('Erreur connexion salle:', err);
         setError(err.message || 'Impossible de rejoindre la salle vocale');
@@ -370,6 +393,27 @@ export const SalleVocalePage = () => {
 
     init();
   }, [groupeId]);
+
+  // Submit password
+  const handlePasswordSubmit = async () => {
+    if (!passwordInput.trim()) return;
+    setPasswordError('');
+    setConnectingAfterPassword(true);
+    try {
+      await connectToRoom(passwordInput.trim());
+      setNeedsPassword(false);
+    } catch (err: any) {
+      const msg = err?.message || '';
+      if (msg.includes('mot de passe') || msg.includes('password')) {
+        setPasswordError('Mot de passe incorrect');
+      } else {
+        setError(msg || 'Impossible de rejoindre la salle vocale');
+        setNeedsPassword(false);
+      }
+    } finally {
+      setConnectingAfterPassword(false);
+    }
+  };
 
   // Auto-hide rules after 5 seconds
   useEffect(() => {
@@ -388,6 +432,52 @@ export const SalleVocalePage = () => {
       <div className="h-screen bg-[#FFFBF0] flex flex-col items-center justify-center gap-4">
         <Loader2 className="w-12 h-12 animate-spin text-orange-400" />
         <p className="text-sm font-bold text-gray-500">Connexion à la salle vocale...</p>
+      </div>
+    );
+  }
+
+  if (needsPassword) {
+    return (
+      <div className="h-screen bg-[#FFFBF0] flex flex-col items-center justify-center gap-4 px-6">
+        <div className="w-20 h-20 bg-orange-50 rounded-full flex items-center justify-center">
+          <KeyRound size={36} className="text-orange-400" />
+        </div>
+        <h2 className="text-lg font-extrabold text-gray-800">Salle protégée</h2>
+        <p className="text-sm text-gray-500 text-center font-medium">
+          Entrez le mot de passe pour accéder à la salle vocale
+        </p>
+        <input
+          type="password"
+          value={passwordInput}
+          onChange={(e) => { setPasswordInput(e.target.value); setPasswordError(''); }}
+          onKeyDown={(e) => { if (e.key === 'Enter') handlePasswordSubmit(); }}
+          placeholder="Mot de passe"
+          className="w-full max-w-xs px-4 py-3 bg-white border-2 border-gray-200 rounded-2xl text-center text-sm font-bold text-gray-700 outline-none focus:border-orange-400 transition-colors"
+          autoFocus
+        />
+        {passwordError && (
+          <p className="text-xs font-bold text-red-500">{passwordError}</p>
+        )}
+        <button
+          onClick={handlePasswordSubmit}
+          disabled={!passwordInput.trim() || connectingAfterPassword}
+          className="px-8 py-3 bg-orange-500 text-white rounded-2xl font-bold text-sm shadow-lg shadow-orange-500/30 disabled:opacity-50 flex items-center gap-2"
+        >
+          {connectingAfterPassword ? (
+            <>
+              <Loader2 size={16} className="animate-spin" />
+              Connexion...
+            </>
+          ) : (
+            'Entrer'
+          )}
+        </button>
+        <button
+          onClick={() => navigate(`/espace/groupes/${groupeId}`)}
+          className="text-xs font-bold text-gray-400 hover:text-gray-600 transition-colors"
+        >
+          Retour au groupe
+        </button>
       </div>
     );
   }
