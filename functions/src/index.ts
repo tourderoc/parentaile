@@ -47,6 +47,11 @@ export const getLiveKitToken = functions.https.onCall(async (data, context) => {
       const accSnap = await db.collection('accounts').doc(uid).get();
       const accPseudo = accSnap.exists ? accSnap.data()?.pseudo || 'Parent' : 'Parent';
 
+      // Premier vrai inscrit → devient créateur/animateur
+      const shouldBecomeCreator =
+        groupe.participants.length === 0 ||
+        groupe.createurUid === '__test__';
+
       await groupeRef.update({
         participants: admin.firestore.FieldValue.arrayUnion({
           uid,
@@ -54,8 +59,7 @@ export const getLiveKitToken = functions.https.onCall(async (data, context) => {
           inscritVocal: true,
           dateInscription: admin.firestore.Timestamp.now(),
         }),
-        // Premier inscrit → devient créateur
-        ...(groupe.participants.length === 0 ? {
+        ...(shouldBecomeCreator ? {
           createurUid: uid,
           createurPseudo: accPseudo,
         } : {}),
@@ -133,7 +137,7 @@ export const getLiveKitToken = functions.https.onCall(async (data, context) => {
     roomJoin: true,
     canPublish: true,
     canSubscribe: true,
-    canPublishData: isAnimateur,
+    canPublishData: true, // All participants can send data (raise hand, etc.)
   });
 
   const jwt = await token.toJwt();

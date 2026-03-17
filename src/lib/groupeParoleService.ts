@@ -269,24 +269,42 @@ const TEST_GROUP_ID = 'groupe-test-vocal';
 export async function seedTestGroup(): Promise<void> {
   const ref = doc(db, 'groupes', TEST_GROUP_ID);
   const snap = await getDoc(ref);
-  if (snap.exists()) return; // déjà créé
 
-  await setDoc(ref, {
-    titre: 'Salle de test vocal',
-    description:
-      'Groupe de test pour vérifier le fonctionnement de la salle vocale. Accès par mot de passe.',
-    theme: 'autre',
-    createurUid: '__test__',
-    createurPseudo: 'Système',
-    dateCreation: serverTimestamp(),
-    dateVocal: Timestamp.fromDate(new Date('2027-01-01T00:00:00')),
-    dateExpiration: Timestamp.fromDate(new Date('2027-12-31T23:59:59')),
-    participantsMax: 5,
-    structureType: 'libre',
+  if (!snap.exists()) {
+    // Créer le groupe test
+    await setDoc(ref, {
+      titre: 'Salle de test vocal',
+      description:
+        'Groupe de test pour vérifier le fonctionnement de la salle vocale. Acces par mot de passe.',
+      theme: 'autre',
+      createurUid: '__test__',
+      createurPseudo: 'Systeme',
+      dateCreation: serverTimestamp(),
+      dateVocal: Timestamp.fromDate(new Date('2027-01-01T00:00:00')),
+      dateExpiration: Timestamp.fromDate(new Date('2027-12-31T23:59:59')),
+      participantsMax: 5,
+      structureType: 'libre',
+      participants: [],
+      isTestGroup: true,
+      passwordVocal: 'tunisien',
+    });
+    console.log('[SEED] Groupe test vocal créé:', TEST_GROUP_ID);
+  }
+}
+
+/**
+ * Reset le groupe test : vide les participants et remet le créateur à __test__
+ * pour que le prochain qui entre devienne animateur.
+ */
+export async function resetTestGroup(): Promise<void> {
+  const ref = doc(db, 'groupes', TEST_GROUP_ID);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) return;
+
+  await updateDoc(ref, {
     participants: [],
-    isTestGroup: true,
-    passwordVocal: 'tunisien',
+    createurUid: '__test__',
+    createurPseudo: 'Systeme',
   });
-
-  console.log('[SEED] Groupe test vocal créé:', TEST_GROUP_ID);
+  console.log('[RESET] Groupe test vocal réinitialisé');
 }
