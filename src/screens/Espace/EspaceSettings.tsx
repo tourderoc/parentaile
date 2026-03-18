@@ -359,7 +359,7 @@ export const EspaceSettings = () => {
       >
         {/* Slide 1: Mon Compte */}
         <SwiperSlide>
-          <div className="max-w-md mx-auto px-6 pt-8 h-full overflow-y-auto pb-28">
+          <div className="max-w-md mx-auto px-6 pt-8 h-full overflow-y-auto pb-40">
             <section className="space-y-4">
               <h2 className="text-xl font-extrabold text-gray-800 tracking-tight px-1">Mon Compte</h2>
               <div className="bg-white/40 backdrop-blur-xl rounded-[2rem] border border-white/60 shadow-[0_8px_32px_rgba(31,38,135,0.07)] overflow-hidden">
@@ -428,7 +428,7 @@ export const EspaceSettings = () => {
 
         {/* Slide 2: Avatar */}
         <SwiperSlide>
-          <div className="h-full overflow-y-auto pb-28">
+          <div className="h-full overflow-y-auto pb-40">
             <div className="max-w-md mx-auto px-6 pt-4 flex flex-col min-h-full">
             {/* Preview - always visible */}
             <div className="flex flex-col items-center">
@@ -641,7 +641,7 @@ export const EspaceSettings = () => {
 
         {/* Slide 3: Notifications */}
         <SwiperSlide>
-          <div className="max-w-md mx-auto px-6 pt-8 h-full overflow-y-auto pb-28">
+          <div className="max-w-md mx-auto px-6 pt-8 h-full overflow-y-auto pb-40">
             <section className="space-y-4">
               <h2 className="text-xl font-extrabold text-gray-800 tracking-tight px-1">Notifications</h2>
               <div className="bg-white/40 backdrop-blur-xl rounded-[2rem] border border-white/60 shadow-[0_8px_32px_rgba(31,38,135,0.07)] overflow-hidden">
