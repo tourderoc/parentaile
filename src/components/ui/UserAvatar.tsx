@@ -48,6 +48,36 @@ export const UserAvatar: React.FC<UserAvatarProps> = ({ config, size = 48, class
     );
   }
 
+  // Handle DiceBear (Version 2)
+  if (config.version === 'v2' || config.dicebearStyle) {
+    const style = config.dicebearStyle || 'lorelei';
+    const seed = config.seed || 'default';
+    const backgroundColor = config.bgColor ? config.bgColor.replace('#', '') : 'D4E8FF';
+    const dicebearUrl = `https://api.dicebear.com/7.x/${style}/svg?seed=${seed}&backgroundColor=${backgroundColor}`;
+
+    return (
+      <div 
+        className={`overflow-hidden shadow-inner bg-gray-50 ${className}`}
+        style={{ 
+          width: size, 
+          height: size, 
+          borderRadius: size * 0.3,
+        }}
+      >
+        <img 
+          src={dicebearUrl} 
+          alt="Avatar" 
+          className="w-full h-full object-cover"
+          onError={(e) => {
+            // Fallback if API fails
+            (e.target as HTMLImageElement).src = `https://api.dicebear.com/7.x/initials/svg?seed=${seed}`;
+          }}
+        />
+      </div>
+    );
+  }
+
+  // Handle Legacy SVG (Version 1)
   const { style = 'neutral', skinColor = '#FDDCB5', bgColor, faceShape, hairStyle, hairColor, glasses, beard, mustache } = config;
   const isFeminine = style === 'feminine';
   const isMasculine = style === 'masculine';

@@ -40,19 +40,9 @@ import type { AvatarConfig } from '../../lib/avatarTypes';
 import {
   DEFAULT_AVATAR,
   BG_COLORS,
-  HAIR_COLORS,
-  HAIR_STYLES,
-  HAIR_STYLE_LABELS,
-  FACE_SHAPES,
-  FACE_SHAPE_LABELS,
-  STYLES,
-  STYLE_LABELS,
-  SKIN_COLORS,
-  GLASSES_STYLES,
-  GLASSES_LABELS,
-  BEARD_STYLES,
-  BEARD_LABELS
+  DICEBEAR_STYLES
 } from '../../lib/avatarTypes';
+import { RefreshCw, Layout, Palette, Sparkles, Star } from 'lucide-react';
 
 export const EspaceSettings = () => {
   const navigate = useNavigate();
@@ -87,7 +77,8 @@ export const EspaceSettings = () => {
   const [avatarSaving, setAvatarSaving] = useState(false);
   const [avatarSuccess, setAvatarSuccess] = useState<string | null>(null);
   const [avatarStep, setAvatarStep] = useState(0);
-  const AVATAR_STEPS = ['Style', 'Peau', 'Fond', 'Visage', 'Cheveux', 'Couleur', 'Accessoires'];
+  const [recentConfigs, setRecentConfigs] = useState<AvatarConfig[]>([]);
+  const AVATAR_STEPS = ['Style', 'Inspiration', 'Fond'];
 
   useEffect(() => {
     loadData();
@@ -479,57 +470,119 @@ export const EspaceSettings = () => {
                   >
                   <p className="text-[10px] font-bold text-orange-400 uppercase tracking-widest text-center">
                     {AVATAR_STEPS[avatarStep]}
-                  </p>
-
-                  {/* Step 0: Style */}
+                  </p>                  {/* Step 0: Artistic Style */}
                   {avatarStep === 0 && (
-                    <div className="flex flex-col gap-3">
-                      {STYLES.map((s) => (
+                    <div className="grid grid-cols-2 gap-3">
+                      {DICEBEAR_STYLES.map((s) => (
                         <button
-                          key={s}
+                          key={s.id}
                           onClick={() => {
                             setAvatarConfig(prev => ({
                               ...prev,
-                              style: s,
-                              beard: s === 'feminine' ? false : prev.beard,
+                              version: 'v2',
+                              dicebearStyle: s.id as any,
                             }));
                           }}
-                          className={`w-full py-4 rounded-2xl text-base font-bold transition-all active:scale-[0.97] ${
-                            avatarConfig.style === s
-                              ? 'bg-orange-500 text-white shadow-md'
-                              : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                          className={`flex flex-col items-center gap-2 p-3 rounded-2xl transition-all active:scale-[0.97] border-2 ${
+                            avatarConfig.dicebearStyle === s.id
+                              ? 'bg-orange-50 border-orange-500 shadow-sm'
+                              : 'bg-gray-50 border-transparent hover:bg-gray-100'
                           }`}
                         >
-                          {STYLE_LABELS[s]}
+                          <div className="w-16 h-16 rounded-xl overflow-hidden shadow-inner bg-white">
+                             <img src={s.preview} alt={s.label} className="w-full h-full object-cover" />
+                          </div>
+                          <span className={`text-[10px] font-bold uppercase tracking-wider ${
+                            avatarConfig.dicebearStyle === s.id ? 'text-orange-600' : 'text-gray-500'
+                          }`}>
+                            {s.label}
+                          </span>
                         </button>
                       ))}
                     </div>
                   )}
 
-                  {/* Step 1: Couleur de peau */}
+                  {/* Step 1: Inspiration (Random Seed) */}
                   {avatarStep === 1 && (
-                    <div className="flex flex-wrap gap-4 justify-center py-2">
-                      {SKIN_COLORS.map(({ label, value }) => (
-                        <button
-                          key={value}
-                          onClick={() => setAvatarConfig(prev => ({ ...prev, skinColor: value }))}
-                          className="flex flex-col items-center gap-1.5 transition-all active:scale-90"
-                        >
-                          <div
-                            className={`w-12 h-12 rounded-full border-[3px] transition-all ${
-                              avatarConfig.skinColor === value ? 'border-orange-500 scale-110 shadow-md' : 'border-transparent'
-                            }`}
-                            style={{ backgroundColor: value }}
-                          />
-                          <span className="text-[10px] font-bold text-gray-500">{label}</span>
-                        </button>
-                      ))}
+                    <div className="flex flex-col items-center justify-center py-6 space-y-6">
+                      <div className="text-center space-y-2">
+                        <Sparkles className="w-8 h-8 text-orange-400 mx-auto" />
+                        <h4 className="text-sm font-extrabold text-gray-800">Trouvez votre style</h4>
+                        <p className="text-xs text-gray-500">Cliquez pour générer une nouvelle combinaison unique.</p>
+                      </div>
+                      
+                      <div className="flex items-center gap-6">
+                        <div className="relative group">
+                          <button
+                            onClick={() => {
+                              setAvatarConfig(prev => ({
+                                ...prev,
+                                version: 'v2',
+                                seed: Math.random().toString(36).substring(7),
+                              }));
+                            }}
+                            className="w-20 h-20 bg-orange-500 text-white rounded-3xl shadow-lg flex items-center justify-center active:rotate-180 transition-transform duration-500 hover:scale-105 z-10"
+                            title="Nouvelle inspiration"
+                          >
+                            <RefreshCw size={32} />
+                          </button>
+                          
+                          <button
+                            onClick={() => {
+                              // Save current as favorite (if not already there)
+                              const exists = recentConfigs.some(c => c.seed === avatarConfig.seed && c.dicebearStyle === avatarConfig.dicebearStyle);
+                              if (!exists) {
+                                setRecentConfigs(prev => [avatarConfig, ...prev].slice(0, 3));
+                              }
+                            }}
+                            className="absolute -top-2 -right-2 w-10 h-10 bg-yellow-400 text-white rounded-2xl shadow-md flex items-center justify-center hover:scale-110 active:scale-95 transition-all border-4 border-white z-20"
+                            title="Ajouter aux favoris"
+                          >
+                            <Star size={20} fill="white" />
+                          </button>
+                        </div>
+
+                        {/* Favorites */}
+                        <div className="flex flex-col gap-2">
+                          <p className="text-[8px] font-black text-gray-400 uppercase tracking-tighter text-center">
+                            {recentConfigs.length > 0 ? 'Tes Favoris' : 'Sélection'}
+                          </p>
+                          <div className="flex gap-2 min-w-[120px]">
+                            {[0, 1, 2].map((idx) => {
+                              const config = recentConfigs[idx];
+                              return (
+                                <button
+                                  key={idx}
+                                  onClick={() => config && setAvatarConfig(config)}
+                                  className={`w-12 h-12 rounded-xl border-2 transition-all overflow-hidden bg-white/40 backdrop-blur-sm shadow-sm ${
+                                    config ? 'border-yellow-200 active:scale-90 opacity-100' : 'border-gray-100 border-dashed opacity-40 grayscale pointer-events-none'
+                                  }`}
+                                >
+                                  {config ? (
+                                    <UserAvatar config={config} size={48} className="w-full h-full" />
+                                  ) : (
+                                    <div className="w-full h-full flex items-center justify-center text-gray-300">
+                                      <Star size={12} />
+                                    </div>
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex gap-2">
+                         <span className="px-3 py-1 bg-gray-100 rounded-full text-[10px] font-bold text-gray-500">
+                           Identifiant: {avatarConfig.seed || 'aucun'}
+                         </span>
+                      </div>
                     </div>
                   )}
 
-                  {/* Step 2: Couleur de fond */}
+                  {/* Step 2: Background Color */}
                   {avatarStep === 2 && (
-                    <div className="flex flex-wrap gap-4 justify-center py-2">
+                    <div className="flex flex-wrap gap-4 justify-center py-4">
                       {BG_COLORS.map((color) => (
                         <button
                           key={color}
@@ -542,148 +595,6 @@ export const EspaceSettings = () => {
                       ))}
                     </div>
                   )}
-
-                  {/* Step 3: Forme du visage */}
-                  {avatarStep === 3 && (
-                    <div className="flex gap-3 py-2">
-                      {FACE_SHAPES.map((shape) => (
-                        <button
-                          key={shape}
-                          onClick={() => setAvatarConfig(prev => ({ ...prev, faceShape: shape }))}
-                          className={`flex-1 py-4 rounded-2xl text-base font-bold transition-all active:scale-95 ${
-                            avatarConfig.faceShape === shape
-                              ? 'bg-orange-500 text-white shadow-md'
-                              : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                          }`}
-                        >
-                          {FACE_SHAPE_LABELS[shape]}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Step 4: Style de cheveux */}
-                  {avatarStep === 4 && (
-                    <div className="flex flex-wrap gap-2 justify-center py-2">
-                      {HAIR_STYLES.map((hs) => (
-                        <button
-                          key={hs}
-                          onClick={() => setAvatarConfig(prev => ({ ...prev, hairStyle: hs }))}
-                          className={`px-5 py-3 rounded-2xl text-sm font-bold transition-all active:scale-95 ${
-                            avatarConfig.hairStyle === hs
-                              ? 'bg-orange-500 text-white shadow-md'
-                              : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                          }`}
-                        >
-                          {HAIR_STYLE_LABELS[hs]}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Step 5: Couleur de cheveux */}
-                  {avatarStep === 5 && (
-                    <div className="flex flex-wrap gap-4 justify-center py-2">
-                      {HAIR_COLORS.map(({ label, value }) => (
-                        <button
-                          key={value}
-                          onClick={() => setAvatarConfig(prev => ({ ...prev, hairColor: value }))}
-                          className="flex flex-col items-center gap-1.5 transition-all active:scale-90"
-                        >
-                          <div
-                            className={`w-12 h-12 rounded-full border-[3px] transition-all ${
-                              avatarConfig.hairColor === value ? 'border-orange-500 scale-110 shadow-md' : 'border-transparent'
-                            }`}
-                            style={{ backgroundColor: value }}
-                          />
-                          <span className="text-[10px] font-bold text-gray-500">{label}</span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Step 6: Accessoires */}
-                  {avatarStep === 6 && (() => {
-                    const isMustacheActive = avatarConfig.mustache !== undefined 
-                      ? avatarConfig.mustache 
-                      : (avatarConfig.beard === true);
-
-                    return (
-                      <div className="flex flex-col gap-3 py-1">
-                        {/* Lunettes */}
-                        <div className="space-y-2">
-                          <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest text-center">Monture des Lunettes</p>
-                          <div className="flex flex-wrap justify-center gap-1.5">
-                            {GLASSES_STYLES.map((style) => {
-                              const normalized = avatarConfig.glasses === true ? 'round' : (avatarConfig.glasses || 'none');
-                              const isActive = normalized === style;
-                              return (
-                                <button
-                                  key={style}
-                                  onClick={() => setAvatarConfig(prev => ({ ...prev, glasses: style }))}
-                                  className={`px-3 py-1.5 rounded-xl text-[11px] font-bold transition-all active:scale-95 ${
-                                    isActive
-                                      ? 'bg-orange-500 text-white shadow-md'
-                                      : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                                  }`}
-                                >
-                                  {GLASSES_LABELS[style]}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-
-                        {/* Pilosité */}
-                        {avatarConfig.style !== 'feminine' && (
-                          <>
-                            <div className="w-full h-px bg-gray-100 my-1" />
-                            <div className="space-y-2">
-                              <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest text-center">Pilosité Faciale</p>
-                              
-                              <div className="flex flex-wrap justify-center gap-1.5 mb-2">
-                                {BEARD_STYLES.map((style) => {
-                                  const normalized = avatarConfig.beard === true ? 'short' : (avatarConfig.beard || 'none');
-                                  const isActive = normalized === style;
-                                  return (
-                                    <button
-                                      key={style}
-                                      onClick={() => setAvatarConfig(prev => ({ ...prev, beard: style }))}
-                                      className={`px-3 py-1.5 rounded-xl text-[11px] font-bold transition-all active:scale-95 ${
-                                        isActive
-                                          ? 'bg-orange-500 text-white shadow-md'
-                                          : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                                      }`}
-                                    >
-                                      {BEARD_LABELS[style]}
-                                    </button>
-                                  );
-                                })}
-                              </div>
-
-                              <button
-                                onClick={() => setAvatarConfig(prev => ({ ...prev, mustache: !isMustacheActive }))}
-                                className={`w-full py-2 flex items-center justify-between px-4 rounded-xl text-[12px] font-bold transition-all active:scale-95 ${
-                                  isMustacheActive
-                                    ? 'bg-orange-100 text-orange-600 border-2 border-orange-200'
-                                    : 'bg-gray-100 text-gray-500 border-2 border-transparent hover:bg-gray-200'
-                                }`}
-                              >
-                                <span>Ajouter une Moustache</span>
-                                <div className={`w-8 h-4.5 rounded-full p-0.5 transition-colors ${
-                                  isMustacheActive ? 'bg-orange-500' : 'bg-gray-300'
-                                }`}>
-                                  <div className={`w-3.5 h-3.5 bg-white rounded-full shadow-sm transition-transform ${
-                                    isMustacheActive ? 'translate-x-3.5' : 'translate-x-0'
-                                  }`} />
-                                </div>
-                              </button>
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    );
-                  })()}
                 </motion.div>
               </AnimatePresence>
 

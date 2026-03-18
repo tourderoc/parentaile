@@ -1,4 +1,6 @@
 export interface AvatarConfig {
+  version?: 'v1' | 'v2';
+  // V1 fields (kept for compatibility)
   style: 'masculine' | 'feminine' | 'neutral';
   skinColor: string;
   bgColor: string;
@@ -8,12 +10,19 @@ export interface AvatarConfig {
   glasses: boolean | 'none' | 'round' | 'square' | 'cateye' | 'aviator';
   beard: boolean | 'none' | 'stubble' | 'short' | 'medium' | 'long';
   mustache?: boolean;
+  
+  // V2 fields (DiceBear)
+  dicebearStyle?: 'lorelei' | 'avataaars' | 'personas' | 'big-smile' | 'open-peeps' | 'bottts';
+  seed?: string;
 }
 
 export const DEFAULT_AVATAR: AvatarConfig = {
+  version: 'v2',
   style: 'neutral',
+  dicebearStyle: 'lorelei',
+  seed: Math.random().toString(36).substring(7),
   skinColor: '#FDDCB5',
-  bgColor: '#E8E8E8',
+  bgColor: '#D4E8FF',
   faceShape: 'round',
   hairStyle: 'short',
   hairColor: '#4A3728',
@@ -21,6 +30,15 @@ export const DEFAULT_AVATAR: AvatarConfig = {
   beard: 'none',
   mustache: false,
 };
+
+export const DICEBEAR_STYLES = [
+  { id: 'lorelei', label: 'Lorelei (Moderne)', preview: 'https://api.dicebear.com/7.x/lorelei/svg?seed=Felix' },
+  { id: 'avataaars', label: 'Avataaars', preview: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Felix' },
+  { id: 'personas', label: 'Personas', preview: 'https://api.dicebear.com/7.x/personas/svg?seed=Felix' },
+  { id: 'big-smile', label: 'Big Smile', preview: 'https://api.dicebear.com/7.x/big-smile/svg?seed=Felix' },
+  { id: 'open-peeps', label: 'Open Peeps', preview: 'https://api.dicebear.com/7.x/open-peeps/svg?seed=Felix' },
+  { id: 'bottts', label: 'Robots', preview: 'https://api.dicebear.com/7.x/bottts/svg?seed=Felix' },
+] as const;
 
 export const SKIN_COLORS = [
   { label: 'Clair', value: '#FDDCB5' },
