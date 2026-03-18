@@ -2,7 +2,7 @@ import { EspaceSettings } from '../EspaceSettings';
 
 export const SlideParametres = () => {
   return (
-    <div className="h-full bg-[#FFFBF0] overflow-y-auto pb-32">
+    <div className="h-full bg-[#FFFBF0]">
       <EspaceSettings />
     </div>
   );

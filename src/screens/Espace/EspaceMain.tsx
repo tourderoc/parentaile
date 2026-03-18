@@ -110,7 +110,7 @@ export const EspaceMain = () => {
             </div>
           </SwiperSlide>
           <SwiperSlide>
-            <div className="h-full overflow-hidden">
+            <div className="h-full overflow-y-auto">
               <SlideParametres />
             </div>
           </SwiperSlide>

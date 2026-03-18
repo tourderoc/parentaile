@@ -1,7 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Swiper, SwiperSlide } from 'swiper/react';
-import type { SwiperClass } from 'swiper/react';
-import 'swiper/css';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { auth, db } from '../../lib/firebase';
 import { signOut, updateEmail, updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
@@ -50,7 +47,6 @@ export const EspaceSettings = () => {
   const tabParam = new URLSearchParams(location.search).get('tab');
   const initialTab = tabParam === 'avatar' ? 1 : tabParam === 'notifs' ? 2 : 0;
   const [activeTab, setActiveTab] = useState(initialTab);
-  const swiperRef = useRef<SwiperClass | null>(null);
 
   const [isLoading, setIsLoading] = useState(true);
   const [pseudo, setPseudo] = useState('');
@@ -303,7 +299,7 @@ export const EspaceSettings = () => {
   }
 
   return (
-    <div className="h-full flex flex-col overflow-hidden">
+    <div className="min-h-full flex flex-col">
       {/* Header + Tab Bar - Transparent Glass */}
       <div className="bg-white/40 backdrop-blur-xl sticky top-0 z-40 border-b border-white/40 shadow-sm">
         <div className="max-w-md mx-auto px-6 py-4 flex items-center gap-4">
@@ -324,10 +320,7 @@ export const EspaceSettings = () => {
           ].map((tab, index) => (
             <button
               key={index}
-              onClick={() => {
-                setActiveTab(index);
-                swiperRef.current?.slideTo(index);
-              }}
+              onClick={() => setActiveTab(index)}
               className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold transition-colors ${
                 activeTab === index
                   ? 'text-orange-600 bg-orange-100'
@@ -341,25 +334,11 @@ export const EspaceSettings = () => {
         </div>
       </div>
 
-      {/* Swiper Content (nested inside outer navigation Swiper) */}
-      <Swiper
-        nested={true}
-        onSwiper={(swiper) => {
-          swiperRef.current = swiper;
-          if (initialTab > 0) {
-            swiper.slideTo(initialTab, 0);
-          }
-        }}
-        onSlideChange={(swiper) => setActiveTab(swiper.activeIndex)}
-        initialSlide={initialTab}
-        slidesPerView={1}
-        spaceBetween={0}
-        className="flex-1 w-full"
-        style={{ paddingBottom: '6rem' }}
-      >
-        {/* Slide 1: Mon Compte */}
-        <SwiperSlide>
-          <div className="max-w-md mx-auto px-6 pt-8 h-full overflow-y-auto pb-40">
+      {/* Tab Content */}
+      <div className="flex-1 pb-32">
+        {/* Tab 1: Mon Compte */}
+        {activeTab === 0 && (
+          <div className="max-w-md mx-auto px-6 pt-8">
             <section className="space-y-4">
               <h2 className="text-xl font-extrabold text-gray-800 tracking-tight px-1">Mon Compte</h2>
               <div className="bg-white/40 backdrop-blur-xl rounded-[2rem] border border-white/60 shadow-[0_8px_32px_rgba(31,38,135,0.07)] overflow-hidden">
@@ -424,12 +403,11 @@ export const EspaceSettings = () => {
               </div>
             </section>
           </div>
-        </SwiperSlide>
+        )}
 
-        {/* Slide 2: Avatar */}
-        <SwiperSlide>
-          <div className="h-full overflow-y-auto pb-40">
-            <div className="max-w-md mx-auto px-6 pt-4 flex flex-col min-h-full">
+        {/* Tab 2: Avatar */}
+        {activeTab === 1 && (
+          <div className="max-w-md mx-auto px-6 pt-4 flex flex-col">
             {/* Preview - always visible */}
             <div className="flex flex-col items-center">
               <UserAvatar config={avatarConfig} size={100} className="shadow-premium" />
@@ -636,12 +614,11 @@ export const EspaceSettings = () => {
               </div>
             </div>
           </div>
-        </div>
-      </SwiperSlide>
+        )}
 
-        {/* Slide 3: Notifications */}
-        <SwiperSlide>
-          <div className="max-w-md mx-auto px-6 pt-8 h-full overflow-y-auto pb-40">
+        {/* Tab 3: Notifications */}
+        {activeTab === 2 && (
+          <div className="max-w-md mx-auto px-6 pt-8">
             <section className="space-y-4">
               <h2 className="text-xl font-extrabold text-gray-800 tracking-tight px-1">Notifications</h2>
               <div className="bg-white/40 backdrop-blur-xl rounded-[2rem] border border-white/60 shadow-[0_8px_32px_rgba(31,38,135,0.07)] overflow-hidden">
@@ -703,8 +680,8 @@ export const EspaceSettings = () => {
               </p>
             </section>
           </div>
-        </SwiperSlide>
-      </Swiper>
+        )}
+      </div>
 
       {/* Modal Edit Account */}
       <AnimatePresence>
