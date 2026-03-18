@@ -17,7 +17,8 @@ import {
   arrayUnion,
   increment,
 } from 'firebase/firestore';
-import type { GroupeParole, MessageGroupe, ThemeGroupe, StructureEtape } from '../types/groupeParole';
+import type { GroupeParole, MessageGroupe, ThemeGroupe, StructureEtape, EvaluationGroupe, EvaluationPendante, BadgeLevel, ParticipationEntry, UserProgression } from '../types/groupeParole';
+import { getBadgeForPoints } from '../types/groupeParole';
 
 export interface CreateGroupeData {
   titre: string;
@@ -63,6 +64,15 @@ export async function createGroupeParole(data: CreateGroupeData): Promise<string
   };
 
   const docRef = await addDoc(collection(db, 'groupes'), groupeDoc);
+
+  // +30 points pour la création d'un groupe
+  addPoints(data.createurUid, 30, {
+    groupeId: docRef.id,
+    groupeTitre: data.titre,
+    date: new Date(),
+    type: 'creation',
+  }).catch(() => {}); // fire and forget
+
   return docRef.id;
 }
 
@@ -254,6 +264,284 @@ export async function quitterGroupe(
   await updateDoc(doc(db, 'groupes', groupeId), {
     participants: updatedParticipants,
   });
+}
+
+// ========== ÉVALUATIONS ==========
+
+/**
+ * Envoie l'évaluation d'un participant pour un groupe.
+ * Stockée dans groupes/{groupeId}/evaluations/{uid}
+ */
+export async function submitEvaluation(
+  evaluation: Omit<EvaluationGroupe, 'id' | 'dateEvaluation'>
+): Promise<void> {
+  const evalDoc = {
+    ...evaluation,
+    dateEvaluation: serverTimestamp(),
+  };
+  await setDoc(
+    doc(db, 'groupes', evaluation.groupeId, 'evaluations', evaluation.participantUid),
+    evalDoc
+  );
+}
+
+/**
+ * Marque qu'un participant veut évaluer plus tard.
+ * Stocke un doc minimal dans groupes/{groupeId}/evaluations/{uid} avec status 'pending'.
+ */
+export async function markEvaluationPending(
+  groupeId: string,
+  participantUid: string,
+  participantPseudo: string
+): Promise<void> {
+  await setDoc(
+    doc(db, 'groupes', groupeId, 'evaluations', participantUid),
+    {
+      groupeId,
+      participantUid,
+      participantPseudo,
+      status: 'pending',
+      dateCreation: serverTimestamp(),
+    }
+  );
+}
+
+/**
+ * Vérifie si un participant a déjà évalué un groupe (ou a une évaluation pendante).
+ */
+export async function getEvaluationStatus(
+  groupeId: string,
+  participantUid: string
+): Promise<'none' | 'pending' | 'done'> {
+  try {
+    const snap = await getDoc(doc(db, 'groupes', groupeId, 'evaluations', participantUid));
+    if (!snap.exists()) return 'none';
+    return snap.data().status === 'pending' ? 'pending' : 'done';
+  } catch {
+    return 'none';
+  }
+}
+
+/**
+ * Récupère les évaluations pendantes d'un utilisateur (tous les groupes non expirés).
+ */
+export function onPendingEvaluations(
+  uid: string,
+  callback: (pending: EvaluationPendante[]) => void
+): () => void {
+  // Listen to all active groups where user is participant
+  return onGroupesParole((groupes) => {
+    const myGroupes = groupes.filter(
+      (g) => g.participants.some((p) => p.uid === uid) || g.createurUid === uid
+    );
+
+    // For each group, check if user has a pending evaluation
+    const checks = myGroupes.map(async (g) => {
+      const status = await getEvaluationStatus(g.id, uid);
+      if (status === 'pending') {
+        return {
+          groupeId: g.id,
+          groupeTitre: g.titre,
+          groupeTheme: g.theme,
+          dateVocal: g.dateVocal,
+          dateExpiration: g.dateExpiration,
+        } as EvaluationPendante;
+      }
+      return null;
+    });
+
+    Promise.all(checks).then((results) => {
+      callback(results.filter((r): r is EvaluationPendante => r !== null));
+    });
+  });
+}
+
+/**
+ * Récupère la note moyenne d'un groupe (toutes les évaluations complétées).
+ * Retourne null si aucune évaluation.
+ */
+export async function getGroupeAverageRating(
+  groupeId: string
+): Promise<{ average: number; count: number } | null> {
+  const evalsRef = collection(db, 'groupes', groupeId, 'evaluations');
+  const snapshot = await getDocs(evalsRef);
+
+  const completed = snapshot.docs.filter(
+    (d) => d.data().status !== 'pending' && d.data().noteAmbiance
+  );
+
+  if (completed.length === 0) return null;
+
+  let totalAmbiance = 0;
+  let totalTheme = 0;
+  let totalTechnique = 0;
+
+  for (const d of completed) {
+    const data = d.data();
+    totalAmbiance += data.noteAmbiance || 0;
+    totalTheme += data.noteTheme || 0;
+    totalTechnique += data.noteTechnique || 0;
+  }
+
+  const count = completed.length;
+  const average = (totalAmbiance + totalTheme + totalTechnique) / (count * 3);
+
+  return { average: Math.round(average * 10) / 10, count };
+}
+
+/**
+ * Écoute en temps réel la note moyenne d'un groupe.
+ */
+export function onGroupeRating(
+  groupeId: string,
+  callback: (rating: { average: number; count: number } | null) => void
+): () => void {
+  const evalsRef = collection(db, 'groupes', groupeId, 'evaluations');
+  return onSnapshot(evalsRef, (snapshot) => {
+    const completed = snapshot.docs.filter(
+      (d) => d.data().status !== 'pending' && d.data().noteAmbiance
+    );
+
+    if (completed.length === 0) {
+      callback(null);
+      return;
+    }
+
+    let totalAmbiance = 0;
+    let totalTheme = 0;
+    let totalTechnique = 0;
+
+    for (const d of completed) {
+      const data = d.data();
+      totalAmbiance += data.noteAmbiance || 0;
+      totalTheme += data.noteTheme || 0;
+      totalTechnique += data.noteTechnique || 0;
+    }
+
+    const count = completed.length;
+    const average = (totalAmbiance + totalTheme + totalTechnique) / (count * 3);
+    callback({ average: Math.round(average * 10) / 10, count });
+  }, () => {
+    // Firestore rules may not allow reading evaluations — fail silently
+    callback(null);
+  });
+}
+
+// ========== POINTS & BADGES ==========
+
+/**
+ * Ajoute des points à un utilisateur et enregistre l'entrée dans l'historique.
+ * Met à jour le badge automatiquement.
+ */
+export async function addPoints(
+  uid: string,
+  points: number,
+  entry: Omit<ParticipationEntry, 'points'>
+): Promise<void> {
+  const ref = doc(db, 'accounts', uid);
+  try {
+    await updateDoc(ref, {
+      points: increment(points),
+      participationHistory: arrayUnion({
+        ...entry,
+        points,
+        date: Timestamp.now(),
+      }),
+    });
+    // Update badge based on new points total
+    const snap = await getDoc(ref);
+    if (snap.exists()) {
+      const newPoints = snap.data().points || 0;
+      const newBadge = getBadgeForPoints(newPoints);
+      const currentBadge = snap.data().badge || 'none';
+      if (newBadge !== currentBadge) {
+        await updateDoc(ref, { badge: newBadge });
+      }
+    }
+  } catch {
+    // Account may not have these fields yet — initialize them
+    const snap = await getDoc(ref);
+    if (snap.exists()) {
+      const data = snap.data();
+      const currentPoints = data.points || 0;
+      const newPoints = currentPoints + points;
+      await updateDoc(ref, {
+        points: newPoints,
+        badge: getBadgeForPoints(newPoints),
+        participationHistory: [
+          ...(data.participationHistory || []),
+          { ...entry, points, date: Timestamp.now() },
+        ],
+      });
+    }
+  }
+}
+
+/**
+ * Récupère la progression d'un utilisateur (points, badge, historique).
+ */
+export async function getUserProgression(uid: string): Promise<UserProgression> {
+  try {
+    const snap = await getDoc(doc(db, 'accounts', uid));
+    if (!snap.exists()) return { points: 0, badge: 'none', history: [] };
+    const data = snap.data();
+    return {
+      points: data.points || 0,
+      badge: (data.badge as BadgeLevel) || getBadgeForPoints(data.points || 0),
+      history: (data.participationHistory || []).map((h: any) => ({
+        groupeId: h.groupeId || '',
+        groupeTitre: h.groupeTitre || '',
+        date: h.date?.toDate?.() || new Date(),
+        type: h.type || 'participation',
+        points: h.points || 0,
+      })),
+    };
+  } catch {
+    return { points: 0, badge: 'none', history: [] };
+  }
+}
+
+/**
+ * Écoute en temps réel la progression d'un utilisateur.
+ */
+export function onUserProgression(
+  uid: string,
+  callback: (prog: UserProgression) => void
+): () => void {
+  return onSnapshot(doc(db, 'accounts', uid), (snap) => {
+    if (!snap.exists()) {
+      callback({ points: 0, badge: 'none', history: [] });
+      return;
+    }
+    const data = snap.data();
+    callback({
+      points: data.points || 0,
+      badge: (data.badge as BadgeLevel) || getBadgeForPoints(data.points || 0),
+      history: (data.participationHistory || []).map((h: any) => ({
+        groupeId: h.groupeId || '',
+        groupeTitre: h.groupeTitre || '',
+        date: h.date?.toDate?.() || new Date(),
+        type: h.type || 'participation',
+        points: h.points || 0,
+      })),
+    });
+  }, () => {
+    callback({ points: 0, badge: 'none', history: [] });
+  });
+}
+
+/**
+ * Récupère le badge d'un utilisateur (lecture rapide pour la salle vocale).
+ */
+export async function getUserBadge(uid: string): Promise<BadgeLevel> {
+  try {
+    const snap = await getDoc(doc(db, 'accounts', uid));
+    if (!snap.exists()) return 'none';
+    const data = snap.data();
+    return (data.badge as BadgeLevel) || getBadgeForPoints(data.points || 0);
+  } catch {
+    return 'none';
+  }
 }
 
 // ========== GROUPE TEST ==========

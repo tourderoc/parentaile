@@ -1,12 +1,12 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Users, Mic, Clock, Plus, MessageCircle, Filter, Loader2 } from 'lucide-react';
+import { Users, Mic, Clock, Plus, MessageCircle, Filter, Loader2, Heart } from 'lucide-react';
 import { Swiper, SwiperSlide } from 'swiper/react';
 import 'swiper/css';
 import { auth } from '../../../lib/firebase';
-import { onGroupesParole } from '../../../lib/groupeParoleService';
+import { onGroupesParole, onGroupeRating } from '../../../lib/groupeParoleService';
 import type { GroupeParole, ThemeGroupe } from '../../../types/groupeParole';
 import { THEME_LABELS, THEME_COLORS, THEME_SHORT_LABELS } from '../../../types/groupeParole';
 import { CreateGroupeParole } from './CreateGroupeParole';
@@ -58,6 +58,25 @@ const ThemeChip: React.FC<{
     >
       {label}
     </button>
+  );
+};
+
+const GroupeRatingBadge: React.FC<{ groupeId: string }> = ({ groupeId }) => {
+  const [rating, setRating] = useState<{ average: number; count: number } | null>(null);
+
+  useEffect(() => {
+    const unsub = onGroupeRating(groupeId, setRating);
+    return () => unsub();
+  }, [groupeId]);
+
+  if (!rating) return null;
+
+  return (
+    <span className="flex items-center gap-1 text-[11px] font-bold text-orange-500">
+      <Heart size={10} className="text-orange-400 fill-orange-400" />
+      {rating.average}/5
+      <span className="text-gray-300 font-medium">({rating.count})</span>
+    </span>
   );
 };
 
@@ -155,15 +174,18 @@ const GroupeCard: React.FC<{
           </div>
         </div>
 
-        {/* Pied : temps restant */}
+        {/* Pied : temps restant + rating */}
         <div className="px-4 py-3 border-t border-gray-100/60 flex items-center gap-2">
           <Clock size={12} className="text-orange-400" />
           <span className="text-[11px] font-semibold text-orange-500">
             Encore {jours} jour{jours > 1 ? 's' : ''}
           </span>
-          <span className="text-[10px] text-gray-300 ml-auto font-medium">
-            {groupe.messageCount || 0} message{(groupe.messageCount || 0) !== 1 ? 's' : ''}
-          </span>
+          <div className="ml-auto flex items-center gap-3">
+            <GroupeRatingBadge groupeId={groupe.id} />
+            <span className="text-[10px] text-gray-300 font-medium">
+              {groupe.messageCount || 0} msg
+            </span>
+          </div>
         </div>
       </div>
     </motion.div>

@@ -11,10 +11,11 @@ import {
   getDocs,
   onSnapshot,
 } from 'firebase/firestore';
-import { MessageSquare, Users, ChevronRight, Sparkles, LayoutGrid, Loader2 } from 'lucide-react';
+import { MessageSquare, Users, ChevronRight, Sparkles, LayoutGrid, Loader2, Heart, Feather, Wind, Home } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { onGroupesParole } from '../../../lib/groupeParoleService';
-import type { GroupeParole } from '../../../types/groupeParole';
+import { onGroupesParole, onPendingEvaluations, onUserProgression } from '../../../lib/groupeParoleService';
+import type { GroupeParole, EvaluationPendante, UserProgression, BadgeLevel } from '../../../types/groupeParole';
+import { getNextBadge, BADGE_THRESHOLDS } from '../../../types/groupeParole';
 
 export const SlideMonEspace = () => {
   const navigate = useNavigate();
@@ -22,6 +23,8 @@ export const SlideMonEspace = () => {
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [myGroupsCount, setMyGroupsCount] = useState(0);
+  const [pendingEvals, setPendingEvals] = useState<EvaluationPendante[]>([]);
+  const [progression, setProgression] = useState<UserProgression | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   // Auth listener
@@ -96,6 +99,30 @@ export const SlideMonEspace = () => {
       setIsLoading(false);
     });
 
+    return () => unsub();
+  }, [currentUser]);
+
+  // User progression (points & badges)
+  useEffect(() => {
+    if (!currentUser) {
+      setProgression(null);
+      return;
+    }
+    const unsub = onUserProgression(currentUser.uid, (prog) => {
+      setProgression(prog);
+    });
+    return () => unsub();
+  }, [currentUser]);
+
+  // Pending evaluations
+  useEffect(() => {
+    if (!currentUser) {
+      setPendingEvals([]);
+      return;
+    }
+    const unsub = onPendingEvaluations(currentUser.uid, (pending) => {
+      setPendingEvals(pending);
+    });
     return () => unsub();
   }, [currentUser]);
 
@@ -190,22 +217,175 @@ export const SlideMonEspace = () => {
           </div>
         </motion.button>
 
-        {/* Placeholder: Bientôt */}
+        {/* Card: Evaluations en attente */}
+        {pendingEvals.length > 0 ? (
+          <motion.button
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+            onClick={() => {
+              // Navigate to the first pending group's vocal page to show evaluation
+              const first = pendingEvals[0];
+              navigate(`/espace/groupes/${first.groupeId}/vocal`);
+            }}
+            className="w-full glass rounded-3xl p-5 flex items-center gap-4 shadow-glass text-left active:scale-[0.98] transition-transform border-2 border-orange-200/50"
+          >
+            <div className="w-14 h-14 bg-gradient-to-br from-pink-400 to-orange-400 rounded-2xl flex items-center justify-center flex-shrink-0 shadow-lg shadow-pink-500/20">
+              <Heart size={24} className="text-white fill-white" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h3 className="text-base font-extrabold text-gray-800 tracking-tight">Donner mon avis</h3>
+              <p className="text-xs text-gray-400 font-medium mt-0.5">
+                {pendingEvals.length === 1
+                  ? `"${pendingEvals[0].groupeTitre}"`
+                  : `${pendingEvals.length} groupes en attente`}
+              </p>
+            </div>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <span className="min-w-[24px] h-[24px] bg-orange-100 text-orange-600 text-[11px] font-bold rounded-full flex items-center justify-center px-1.5 animate-pulse">
+                {pendingEvals.length}
+              </span>
+              <ChevronRight size={18} className="text-gray-300" />
+            </div>
+          </motion.button>
+        ) : (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+            className="w-full glass rounded-3xl p-5 flex items-center gap-4 opacity-50 cursor-default"
+          >
+            <div className="w-14 h-14 bg-gray-200 rounded-2xl flex items-center justify-center flex-shrink-0">
+              <Sparkles size={24} className="text-gray-400" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h3 className="text-base font-extrabold text-gray-400 tracking-tight">Bientot disponible</h3>
+              <p className="text-xs text-gray-300 font-medium mt-0.5">De nouvelles fonctionnalites arrivent</p>
+            </div>
+          </motion.div>
+        )}
+      </div>
+
+      {/* Ma progression */}
+      {currentUser && progression && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-          className="w-full glass rounded-3xl p-5 flex items-center gap-4 opacity-50 cursor-default"
+          transition={{ delay: 0.4 }}
+          className="px-6 max-w-md mx-auto mt-6"
         >
-          <div className="w-14 h-14 bg-gray-200 rounded-2xl flex items-center justify-center flex-shrink-0">
-            <Sparkles size={24} className="text-gray-400" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <h3 className="text-base font-extrabold text-gray-400 tracking-tight">Bientôt disponible</h3>
-            <p className="text-xs text-gray-300 font-medium mt-0.5">De nouvelles fonctionnalités arrivent</p>
+          <div className="glass rounded-3xl border border-white/60 shadow-glass overflow-hidden">
+            {/* Header */}
+            <div className="px-5 pt-5 pb-3">
+              <h3 className="text-sm font-extrabold text-gray-800 tracking-tight">Ma progression</h3>
+              <p className="text-[11px] text-gray-400 font-medium mt-0.5">Votre engagement dans la communaute</p>
+            </div>
+
+            {/* Badge + Points */}
+            <div className="px-5 pb-4 flex items-center gap-4">
+              {/* Badge icon */}
+              <div
+                className="w-16 h-16 rounded-full flex items-center justify-center shadow-lg"
+                style={{
+                  background: progression.badge === 'nid'
+                    ? 'linear-gradient(135deg, #F59E0B, #D97706)'
+                    : progression.badge === 'envol'
+                    ? 'linear-gradient(135deg, #8B5CF6, #7C3AED)'
+                    : progression.badge === 'plume'
+                    ? 'linear-gradient(135deg, #F9A826, #FB923C)'
+                    : 'linear-gradient(135deg, #E5E7EB, #D1D5DB)',
+                }}
+              >
+                {progression.badge === 'nid' ? (
+                  <Home size={28} className="text-white" />
+                ) : progression.badge === 'envol' ? (
+                  <Wind size={28} className="text-white" />
+                ) : progression.badge === 'plume' ? (
+                  <Feather size={28} className="text-white" />
+                ) : (
+                  <Feather size={28} className="text-gray-400" />
+                )}
+              </div>
+
+              <div className="flex-1">
+                <p className="text-lg font-extrabold text-gray-800">
+                  {progression.points} <span className="text-sm font-bold text-gray-400">points</span>
+                </p>
+                {progression.badge !== 'none' ? (
+                  <p className="text-sm font-bold" style={{
+                    color: progression.badge === 'nid' ? '#D97706'
+                      : progression.badge === 'envol' ? '#7C3AED'
+                      : '#F9A826',
+                  }}>
+                    Badge {BADGE_THRESHOLDS.find((b) => b.level === progression.badge)?.label}
+                  </p>
+                ) : (
+                  <p className="text-xs text-gray-400 font-medium">Pas encore de badge</p>
+                )}
+
+                {/* Next badge progress */}
+                {(() => {
+                  const next = getNextBadge(progression.points);
+                  if (!next) return <p className="text-[11px] text-amber-500 font-bold mt-1">Niveau maximum atteint !</p>;
+                  const threshold = next.label === 'Plume' ? 50 : next.label === 'Envol' ? 150 : 300;
+                  const prevThreshold = next.label === 'Plume' ? 0 : next.label === 'Envol' ? 50 : 150;
+                  const progressPct = ((progression.points - prevThreshold) / (threshold - prevThreshold)) * 100;
+                  return (
+                    <div className="mt-2">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[10px] text-gray-400 font-medium">
+                          Encore {next.pointsNeeded} pts pour {next.label}
+                        </span>
+                      </div>
+                      <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                        <motion.div
+                          className="h-full rounded-full"
+                          style={{
+                            background: next.label === 'Envol' ? '#8B5CF6'
+                              : next.label === 'Nid' ? '#F59E0B'
+                              : '#F9A826',
+                          }}
+                          initial={{ width: 0 }}
+                          animate={{ width: `${Math.min(100, progressPct)}%` }}
+                          transition={{ duration: 0.8, ease: 'easeOut' }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+
+            {/* Historique (dernières 5 entrées) */}
+            {progression.history.length > 0 && (
+              <div className="border-t border-gray-100/60 px-5 py-3">
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Historique recent</p>
+                <div className="space-y-1.5">
+                  {progression.history
+                    .slice()
+                    .sort((a, b) => b.date.getTime() - a.date.getTime())
+                    .slice(0, 5)
+                    .map((entry, i) => (
+                      <div key={i} className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                            entry.type === 'creation' ? 'bg-orange-400' : 'bg-blue-400'
+                          }`} />
+                          <p className="text-[11px] text-gray-600 font-medium truncate">
+                            {entry.type === 'creation' ? 'Cree' : 'Participe'} — {entry.groupeTitre}
+                          </p>
+                        </div>
+                        <span className="text-[10px] font-bold text-emerald-500 shrink-0 ml-2">
+                          +{entry.points}
+                        </span>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
           </div>
         </motion.div>
-      </div>
+      )}
 
       {/* Auth Modal */}
       {showAuthModal &&

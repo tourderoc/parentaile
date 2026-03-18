@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Users, Mic, Clock, Crown, Calendar, Inbox, Radio, Lock } from 'lucide-react';
+import { ArrowLeft, Users, Mic, Clock, Crown, Calendar, Inbox, Radio, Lock, Heart } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { auth } from '../../lib/firebase';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
-import { onGroupesParole } from '../../lib/groupeParoleService';
+import { onGroupesParole, onGroupeRating } from '../../lib/groupeParoleService';
 import type { GroupeParole } from '../../types/groupeParole';
 import { THEME_COLORS, THEME_SHORT_LABELS } from '../../types/groupeParole';
 
@@ -127,6 +127,24 @@ const VocalCartouche: React.FC<{
   );
 };
 
+const GroupeRatingBadge: React.FC<{ groupeId: string }> = ({ groupeId }) => {
+  const [rating, setRating] = useState<{ average: number; count: number } | null>(null);
+
+  useEffect(() => {
+    const unsub = onGroupeRating(groupeId, setRating);
+    return () => unsub();
+  }, [groupeId]);
+
+  if (!rating) return null;
+
+  return (
+    <span className="flex items-center gap-1 text-[10px] font-bold text-orange-500">
+      <Heart size={9} className="text-orange-400 fill-orange-400" />
+      {rating.average}/5
+    </span>
+  );
+};
+
 // --- Mini Group Card ---
 const MiniGroupeCard: React.FC<{
   groupe: GroupeParole;
@@ -200,9 +218,12 @@ const MiniGroupeCard: React.FC<{
                 {jours}j restant{jours > 1 ? 's' : ''}
               </span>
             </div>
-            <span className="text-[10px] text-gray-300 font-medium">
-              {groupe.messageCount || 0} msg
-            </span>
+            <div className="flex items-center gap-2">
+              <GroupeRatingBadge groupeId={groupe.id} />
+              <span className="text-[10px] text-gray-300 font-medium">
+                {groupe.messageCount || 0} msg
+              </span>
+            </div>
           </div>
         </div>
       </button>

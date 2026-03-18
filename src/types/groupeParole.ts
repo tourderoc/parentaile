@@ -68,6 +68,75 @@ export const THEME_COLORS: Record<ThemeGroupe, { bg: string; text: string; light
   autre: { bg: 'bg-amber-500', text: 'text-amber-600', light: 'bg-amber-50' },
 };
 
+// ========== Évaluation post-groupe ==========
+export interface EvaluationGroupe {
+  id?: string;
+  groupeId: string;
+  participantUid: string;
+  participantPseudo: string;
+  noteAmbiance: number;       // 1-5
+  noteTheme: number;          // 1-5
+  noteTechnique: number;      // 1-5
+  ressenti?: string;          // champ libre facultatif
+  signalement?: {
+    participantUid: string;
+    participantPseudo: string;
+    description: string;
+  };
+  dateEvaluation: Date;
+}
+
+export interface EvaluationPendante {
+  groupeId: string;
+  groupeTitre: string;
+  groupeTheme: ThemeGroupe;
+  dateVocal: Date;
+  dateExpiration: Date;
+}
+
+// ========== Système de points & badges ==========
+export type BadgeLevel = 'none' | 'plume' | 'envol' | 'nid';
+
+export interface ParticipationEntry {
+  groupeId: string;
+  groupeTitre: string;
+  date: Date;
+  type: 'participation' | 'creation';
+  points: number;
+}
+
+export interface UserProgression {
+  points: number;
+  badge: BadgeLevel;
+  history: ParticipationEntry[];
+}
+
+export const BADGE_THRESHOLDS: { level: BadgeLevel; points: number; label: string; color: string; ring: string }[] = [
+  { level: 'nid',   points: 300, label: 'Nid',   color: '#F59E0B', ring: 'ring-amber-400' },
+  { level: 'envol', points: 150, label: 'Envol', color: '#8B5CF6', ring: 'ring-violet-400' },
+  { level: 'plume', points: 50,  label: 'Plume', color: '#F9A826', ring: 'ring-orange-300' },
+];
+
+export function getBadgeForPoints(points: number): BadgeLevel {
+  if (points >= 300) return 'nid';
+  if (points >= 150) return 'envol';
+  if (points >= 50) return 'plume';
+  return 'none';
+}
+
+export function getBadgeInfo(badge: BadgeLevel) {
+  const info = BADGE_THRESHOLDS.find((b) => b.level === badge);
+  if (!info) return { label: '', color: 'transparent', ring: '', points: 0 };
+  return info;
+}
+
+export function getNextBadge(points: number): { label: string; pointsNeeded: number } | null {
+  if (points >= 300) return null;
+  if (points >= 150) return { label: 'Nid', pointsNeeded: 300 - points };
+  if (points >= 50) return { label: 'Envol', pointsNeeded: 150 - points };
+  return { label: 'Plume', pointsNeeded: 50 - points };
+}
+
 export const THEME_SHORT_LABELS: Record<ThemeGroupe, string> = {
   ecole: 'École',
   comportement: 'Comportement',
