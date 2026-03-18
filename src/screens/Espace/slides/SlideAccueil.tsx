@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { auth, db } from '../../../lib/firebase';
 import { signOut, onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
-import { collection, getDocs, query, orderBy, doc, getDoc } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy, doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { LogOut, Loader2, MessageSquarePlus, LayoutGrid, Users, Settings, ShieldCheck } from 'lucide-react';
 import { UserAvatar } from '../../../components/ui/UserAvatar';
 import type { AvatarConfig } from '../../../lib/avatarTypes';
@@ -55,19 +55,36 @@ export const SlideAccueil = () => {
   const [avatarConfig, setAvatarConfig] = useState<AvatarConfig | null>(null);
   const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(auth.currentUser);
 
+  // Listen to account changes (avatar, pseudo) in real-time
   useEffect(() => {
+    let unsubAccount: (() => void) | null = null;
+
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setCurrentUser(user);
+      if (unsubAccount) { unsubAccount(); unsubAccount = null; }
       if (!user) {
         setIsLoading(false);
         setTokenIds([]);
         setPseudo('');
         setAvatarConfig(null);
       } else {
+        // Real-time listener for pseudo + avatar
+        const accountRef = doc(db, 'accounts', user.uid);
+        unsubAccount = onSnapshot(accountRef, (snap) => {
+          if (snap.exists()) {
+            setPseudo(snap.data().pseudo || '');
+            if (snap.data().avatar) {
+              setAvatarConfig(snap.data().avatar);
+            }
+          }
+        });
         loadData(user);
       }
     });
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      if (unsubAccount) unsubAccount();
+    };
   }, []);
 
   const loadData = async (user: FirebaseUser) => {
