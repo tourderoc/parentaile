@@ -42,7 +42,7 @@ import {
   BG_COLORS,
   DICEBEAR_STYLES
 } from '../../lib/avatarTypes';
-import { RefreshCw, Layout, Palette, Sparkles, Star } from 'lucide-react';
+import { RefreshCw, Sparkles, Star } from 'lucide-react';
 
 export const EspaceSettings = () => {
   const navigate = useNavigate();
@@ -428,7 +428,8 @@ export const EspaceSettings = () => {
 
         {/* Slide 2: Avatar */}
         <SwiperSlide>
-          <div className="max-w-md mx-auto px-6 pt-4 h-full flex flex-col pb-48">
+          <div className="h-full overflow-y-auto pb-40">
+            <div className="max-w-md mx-auto px-6 pt-4 flex flex-col min-h-full">
             {/* Preview - always visible */}
             <div className="flex flex-col items-center">
               <UserAvatar config={avatarConfig} size={100} className="shadow-premium" />
@@ -635,7 +636,8 @@ export const EspaceSettings = () => {
               </div>
             </div>
           </div>
-        </SwiperSlide>
+        </div>
+      </SwiperSlide>
 
         {/* Slide 3: Notifications */}
         <SwiperSlide>
