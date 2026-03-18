@@ -169,13 +169,8 @@ export const SlideContact = () => {
 
   if (isLoading) {
     return (
-      <div className="h-full bg-[#FFFBF0] flex items-center justify-center relative overflow-hidden">
-        {/* Background Image with blur during loading */}
-        <div 
-          className="absolute inset-0 bg-cover bg-center blur-sm opacity-20"
-          style={{ backgroundImage: 'url(/assets/backgrounds/slide_bg_contact.png)' }}
-        />
-        <Loader2 className="w-12 h-12 animate-spin text-orange-500 relative z-10" />
+      <div className="h-full bg-[#FFFBF0] flex items-center justify-center">
+        <Loader2 className="w-12 h-12 animate-spin text-orange-500" />
       </div>
     );
   }
@@ -183,21 +178,14 @@ export const SlideContact = () => {
   // ========== NOT AUTHENTICATED: Show auth prompt ==========
   if (!auth.currentUser) {
     return (
-      <div className="h-full flex flex-col items-center justify-center p-6 text-center relative overflow-hidden">
-        {/* Background Image */}
-        <div 
-          className="absolute inset-0 bg-cover bg-center pointer-events-none"
-          style={{ backgroundImage: 'url(/assets/backgrounds/slide_bg_contact.png)' }}
-        />
-        <div className="absolute inset-0 bg-white/40 backdrop-blur-sm pointer-events-none" />
-
-        <div className="relative z-10 w-full max-w-sm">
-          <div className="w-20 h-20 bg-white/60 backdrop-blur-md rounded-3xl flex items-center justify-center text-orange-500 mx-auto mb-6 shadow-premium border border-white/40">
+      <div className="h-full bg-[#FFFBF0] flex flex-col items-center justify-center p-6 text-center">
+        <div className="w-full max-w-sm">
+          <div className="w-20 h-20 bg-white rounded-3xl flex items-center justify-center text-orange-500 mx-auto mb-6 shadow-sm border border-orange-100">
             <Users size={40} />
           </div>
           <h2 className="text-2xl font-extrabold text-gray-800 mb-2">Espace Privé</h2>
           <p className="text-gray-500 mb-8 font-medium">Une session est requise pour ajouter et gérer vos enfants.</p>
-          <button onClick={() => navigate('/espace?mode=login')} className="w-full h-14 bg-orange-500 text-white rounded-2xl font-bold shadow-premium active:scale-95 transition-transform">
+          <button onClick={() => navigate('/espace?mode=login')} className="w-full h-14 bg-orange-500 text-white rounded-2xl font-bold shadow-sm active:scale-95 transition-transform">
             Se connecter
           </button>
         </div>
@@ -208,23 +196,14 @@ export const SlideContact = () => {
   // ========== NO CHILDREN: Show empty state ==========
   if (children.length === 0) {
     return (
-      <div className="h-full flex flex-col relative overflow-hidden">
-        {/* Background Image */}
-        <div 
-          className="absolute inset-0 bg-cover bg-center pointer-events-none"
-          style={{ backgroundImage: 'url(/assets/backgrounds/slide_bg_contact.png)' }}
-        />
-        
-        {/* Soft Overlay for readability */}
-        <div className="absolute inset-0 bg-white/30 backdrop-blur-[2px] pointer-events-none" />
-
+      <div className="h-full bg-[#FFFBF0] flex flex-col">
         <div className="flex-1 flex flex-col items-center justify-center px-8 relative z-10">
           <motion.div
             initial={{ scale: 0.8, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             className="text-center space-y-6"
           >
-            <div className="w-24 h-24 bg-white/60 backdrop-blur-md rounded-[2.5rem] flex items-center justify-center mx-auto shadow-premium border border-white/40">
+            <div className="w-24 h-24 bg-white rounded-[2.5rem] flex items-center justify-center mx-auto shadow-glass border border-white/60">
               <Baby size={48} className="text-orange-400" />
             </div>
 
@@ -269,25 +248,16 @@ export const SlideContact = () => {
 
   // ========== HAS CHILDREN: Show composer or manage view ==========
   return (
-    <div className="h-full flex flex-col overflow-hidden relative">
-      {/* Background Image */}
-      <div 
-        className="absolute inset-0 bg-cover bg-center pointer-events-none"
-        style={{ backgroundImage: 'url(/assets/backgrounds/slide_bg_contact.png)' }}
-      />
-      
-      {/* Soft Overlay for readability */}
-      <div className="absolute inset-0 bg-gradient-to-b from-white/10 via-transparent to-white/30 pointer-events-none" />
-
+    <div className="h-full bg-[#FFFBF0] flex flex-col overflow-hidden">
       {/* Header with toggle */}
-      <div className="bg-white/40 backdrop-blur-xl sticky top-0 z-40 border-b border-white/40 shadow-sm">
+      <div className="bg-white/80 backdrop-blur-md sticky top-0 z-40 border-b border-orange-100">
         <div className="max-w-md mx-auto px-6 py-3">
-          <div className="flex gap-1 bg-black/5 backdrop-blur-md rounded-xl p-1">
+          <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
             <button
               onClick={() => setView('compose')}
               className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-bold transition-all ${
                 view === 'compose'
-                  ? 'text-orange-600 bg-white shadow-md'
+                  ? 'text-orange-600 bg-white shadow-sm'
                   : 'text-gray-500 hover:text-gray-700'
               }`}
             >
@@ -298,7 +268,7 @@ export const SlideContact = () => {
               onClick={() => setView('manage')}
               className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-bold transition-all ${
                 view === 'manage'
-                  ? 'text-orange-600 bg-white shadow-md'
+                  ? 'text-orange-600 bg-white shadow-sm'
                   : 'text-gray-500 hover:text-gray-700'
               }`}
             >
@@ -335,7 +305,7 @@ export const SlideContact = () => {
                   <motion.div
                     key={child.tokenId}
                     layout
-                    className="bg-white/40 backdrop-blur-md rounded-3xl p-5 border border-white/60 shadow-[0_8px_32px_rgba(31,38,135,0.07)]"
+                    className="glass rounded-3xl border border-white/60 shadow-glass p-5"
                   >
                     {editingChild === child.tokenId ? (
                       <div className="flex items-center gap-3">
@@ -383,7 +353,7 @@ export const SlideContact = () => {
                 {/* Dashed add child button */}
                 <button
                   onClick={() => setShowAddChild(true)}
-                  className="w-full border-2 border-dashed border-white/40 bg-white/20 backdrop-blur-sm rounded-3xl p-5 flex items-center gap-4 hover:border-orange-300 hover:bg-white/40 transition-all cursor-pointer group"
+                  className="w-full glass rounded-3xl border-2 border-dashed border-orange-200/60 shadow-glass p-5 flex items-center gap-4 hover:border-orange-300 hover:bg-white/60 transition-all active:scale-[0.98] cursor-pointer group"
                 >
                   <div className="w-12 h-12 bg-gray-50 rounded-2xl flex items-center justify-center text-gray-300 group-hover:bg-orange-100 group-hover:text-orange-500 transition-colors">
                     <Plus size={24} />

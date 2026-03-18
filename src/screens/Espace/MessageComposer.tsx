@@ -444,6 +444,8 @@ export const MessageComposer: React.FC = () => {
             <textarea
               ref={textareaRef}
               value={message}
+              spellCheck={true}
+              lang="fr-FR"
               onChange={(e) => {
                 setMessage(e.target.value);
                 if (!isRecording) {

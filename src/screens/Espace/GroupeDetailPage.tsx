@@ -163,6 +163,7 @@ export const GroupeDetailPage = () => {
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [voiceSupported, setVoiceSupported] = useState(false);
+  const [isInputFocused, setIsInputFocused] = useState(false);
 
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -751,20 +752,31 @@ export const GroupeDetailPage = () => {
                   </span>
                 </button>
               ) : (
-                <div className="px-3 py-2.5 flex items-end gap-2">
+                <div className="px-3 py-3 flex items-end gap-2 bg-white transition-all duration-300">
                   <textarea
                     ref={textareaRef}
                     value={messageInput}
+                    spellCheck={true}
+                    lang="fr-FR"
+                    onFocus={() => setIsInputFocused(true)}
+                    onBlur={() => setIsInputFocused(false)}
                     onChange={(e) => {
                       setMessageInput(e.target.value);
                       e.target.style.height = 'auto';
-                      e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px';
+                      e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px';
                     }}
                     onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(); } }}
-                    placeholder={isRecording ? 'Parlez...' : 'Votre message...'}
-                    rows={1}
-                    className={`flex-1 bg-gray-50 rounded-2xl px-4 py-2.5 text-sm text-gray-700 placeholder:text-gray-400 outline-none focus:ring-2 focus:ring-orange-200 transition-all resize-none overflow-y-auto ${isRecording ? 'ring-2 ring-red-300 bg-red-50/30' : ''}`}
-                    style={{ minHeight: '40px', maxHeight: '120px' }}
+                    placeholder={isRecording ? 'Parlez...' : 'Votre message (Agrandit au clic)...'}
+                    className={`
+                      flex-1 rounded-2xl px-4 py-3 text-sm text-gray-700 placeholder:text-gray-400 outline-none border-2
+                      transition-all resize-none overflow-y-auto
+                      ${isInputFocused || messageInput.length > 0
+                        ? 'min-h-[140px] bg-white border-orange-200 shadow-sm leading-relaxed' 
+                        : 'min-h-[44px] bg-gray-50 border-transparent leading-normal'
+                      }
+                      ${isRecording ? '!border-red-300 !bg-red-50/30' : ''}
+                    `}
+                    style={{ maxHeight: '200px' }}
                     disabled={sending}
                   />
                   {voiceSupported && (

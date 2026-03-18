@@ -96,17 +96,17 @@ const GroupeCard: React.FC<{
       initial={{ opacity: 0, scale: 0.92 }}
       animate={{ opacity: 1, scale: 1 }}
       transition={{ delay: 0.1 + index * 0.06 }}
-      className="w-full cursor-pointer"
+      className="w-full h-full cursor-pointer"
       onClick={onClick}
     >
-      <div className="glass rounded-3xl border border-white/60 shadow-glass overflow-hidden h-full flex flex-col">
-        {/* Bandeau thème */}
-        <div className={`${colors.bg} px-4 py-2.5 flex items-center justify-between`}>
-          <span className="text-[10px] font-bold text-white uppercase tracking-wider">
+      <div className="glass rounded-3xl border border-white/60 shadow-glass overflow-hidden h-full flex flex-col bg-white/40 hover:bg-white/60 transition-colors duration-300">
+        {/* Bandeau thème avec dégradé subtil */}
+        <div className={`${colors.bg} bg-gradient-to-r from-transparent to-black/10 px-4 py-3 flex items-center justify-between border-b border-white/20`}>
+          <span className="text-[10px] font-extrabold text-white uppercase tracking-[0.15em] drop-shadow-sm">
             {THEME_SHORT_LABELS[groupe.theme]}
           </span>
           {estComplet && (
-            <span className="text-[9px] font-bold bg-white/25 text-white px-2 py-0.5 rounded-full uppercase tracking-wider">
+            <span className="text-[9px] font-bold bg-white/25 text-white px-2 py-0.5 rounded-full uppercase tracking-wider backdrop-blur-md">
               Complet
             </span>
           )}
@@ -218,7 +218,10 @@ export const SlideForum = () => {
     }
 
     if (placesDispoOnly) {
-      result = result.filter(g => g.participants.length < g.participantsMax);
+      result = result.filter(g => 
+        g.participants.length < g.participantsMax &&
+        !isVocalPassé(g.dateVocal)
+      );
     }
 
     return result;
@@ -331,19 +334,20 @@ export const SlideForum = () => {
             <div className="-mx-6" onTouchStart={(e: React.TouchEvent) => e.stopPropagation()} onTouchMove={(e: React.TouchEvent) => e.stopPropagation()}>
               <Swiper
                 nested={true}
-                slidesPerView={1.15}
-                spaceBetween={12}
+                slidesPerView={1.25}
+                spaceBetween={16}
                 centeredSlides={true}
-                className="w-full py-2"
+                className="w-full py-6"
               >
                 {groupesFiltres.map((groupe, i) => (
-                  <SwiperSlide key={groupe.id}>
+                  <SwiperSlide key={groupe.id} className="h-auto">
                     {({ isActive }) => (
                       <div
-                        className="transition-transform duration-300 ease-out"
+                        className="transition-all duration-500 ease-out h-full"
                         style={{
-                          transform: isActive ? 'scale(1)' : 'scale(0.92)',
-                          opacity: isActive ? 1 : 0.7,
+                          transform: isActive ? 'scale(1)' : 'scale(0.88)',
+                          opacity: isActive ? 1 : 0.45,
+                          filter: isActive ? 'drop-shadow(0 12px 24px rgba(0,0,0,0.06))' : 'drop-shadow(0 4px 8px rgba(0,0,0,0.02))'
                         }}
                       >
                         <GroupeCard groupe={groupe} index={i} onClick={() => navigate(`/espace/groupes/${groupe.id}`)} />

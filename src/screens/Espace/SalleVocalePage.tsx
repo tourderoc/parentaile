@@ -185,6 +185,8 @@ const ChatPanel: React.FC<{
           <input
             type="text"
             value={input}
+            spellCheck={true}
+            lang="fr-FR"
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') handleSend(); }}
             placeholder="Votre message..."

@@ -467,13 +467,13 @@ export const EspaceSettings = () => {
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: -30 }}
                     transition={{ duration: 0.2 }}
-                    className="bg-white/40 backdrop-blur-xl rounded-3xl border border-white/60 shadow-[0_8px_32px_rgba(31,38,135,0.07)] p-5 space-y-4 mb-3"
+                    className="bg-white/40 backdrop-blur-xl rounded-3xl border border-white/60 shadow-[0_8px_32px_rgba(31,38,135,0.07)] p-4 space-y-3 mb-3"
                   >
                   <p className="text-[10px] font-bold text-orange-400 uppercase tracking-widest text-center">
                     {AVATAR_STEPS[avatarStep]}
                   </p>                  {/* Step 0: Artistic Style */}
                   {avatarStep === 0 && (
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-3 gap-2">
                       {DICEBEAR_STYLES.map((s) => (
                         <button
                           key={s.id}
@@ -484,16 +484,16 @@ export const EspaceSettings = () => {
                               dicebearStyle: s.id as any,
                             }));
                           }}
-                          className={`flex flex-col items-center gap-2 p-3 rounded-2xl transition-all active:scale-[0.97] border-2 ${
+                          className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-all active:scale-[0.97] border-2 ${
                             avatarConfig.dicebearStyle === s.id
                               ? 'bg-orange-50 border-orange-500 shadow-sm'
                               : 'bg-gray-50 border-transparent hover:bg-gray-100'
                           }`}
                         >
-                          <div className="w-16 h-16 rounded-xl overflow-hidden shadow-inner bg-white">
+                          <div className="w-11 h-11 rounded-lg overflow-hidden shadow-inner bg-white">
                              <img src={s.preview} alt={s.label} className="w-full h-full object-cover" />
                           </div>
-                          <span className={`text-[10px] font-bold uppercase tracking-wider ${
+                          <span className={`text-[9px] font-bold uppercase tracking-wider ${
                             avatarConfig.dicebearStyle === s.id ? 'text-orange-600' : 'text-gray-500'
                           }`}>
                             {s.label}

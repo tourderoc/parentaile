@@ -394,6 +394,8 @@ export const CreateGroupeParole: React.FC<CreateGroupeParoleProps> = ({ onBack }
                   <textarea
                     ref={textareaRef}
                     value={description}
+                    spellCheck={true}
+                    lang="fr-FR"
                     onChange={(e) => {
                       setDescription(e.target.value);
                       if (!isRecording) finalTranscriptRef.current = e.target.value;

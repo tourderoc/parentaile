@@ -165,9 +165,17 @@ export const SlideAccueil = () => {
         transition={{ delay: 0.12 }}
         className="mx-6 relative z-10"
       >
-        <div className="bg-white/40 backdrop-blur-xl rounded-[2.5rem] border border-white/60 shadow-[0_8px_32px_rgba(0,0,0,0.05)] py-6 px-6 relative overflow-hidden group">
+        <div className="rounded-[2.5rem] border border-white/60 shadow-premium py-6 px-6 relative overflow-hidden group">
+          {/* Background Image */}
+          <div 
+            className="absolute inset-0 bg-cover bg-center transition-transform duration-700 group-hover:scale-105"
+            style={{ backgroundImage: 'url(/assets/backgrounds/profile_bg.png)' }}
+          />
+          {/* Glass overlay for text readability */}
+          <div className="absolute inset-0 bg-white/50 backdrop-blur-xl pointer-events-none" />
+
           {/* Subtle inside glow */}
-          <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-b from-white/40 to-transparent pointer-events-none" />
+          <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-b from-white/30 to-transparent pointer-events-none" />
           
           <div className="flex flex-col items-center text-center relative z-10 w-full">
             {currentUser ? (
@@ -233,8 +241,8 @@ export const SlideAccueil = () => {
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.3 }}
         className="flex-1 flex flex-col justify-center relative z-10 mt-3 min-h-0"
-        onTouchStart={e => e.stopPropagation()}
-        onTouchMove={e => e.stopPropagation()}
+        onTouchStart={(e: React.TouchEvent) => e.stopPropagation()}
+        onTouchMove={(e: React.TouchEvent) => e.stopPropagation()}
       >
         <Swiper
           nested={true}
