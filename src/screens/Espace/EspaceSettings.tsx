@@ -600,7 +600,7 @@ export const EspaceSettings = () => {
               </AnimatePresence>
 
               {/* Navigation + Save (Pinned) */}
-              <div className="flex gap-3 mt-auto shrink-0 pb-32">
+              <div className="flex gap-3 mt-auto shrink-0 pb-4">
                 {avatarStep > 0 && (
                   <button
                     onClick={() => setAvatarStep(prev => prev - 1)}
