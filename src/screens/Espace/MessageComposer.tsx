@@ -318,7 +318,7 @@ export const MessageComposer: React.FC = () => {
             <h2 className="text-3xl font-extrabold text-gray-800 tracking-tight">Message envoyé !</h2>
             <p className="text-gray-500 mt-2 font-medium">Votre demande est en route vers le cabinet.</p>
           </div>
-          <p className="text-xs font-bold text-gray-400 uppercase tracking-widest pt-4">Redirection vers l'historique...</p>
+          <p className="text-xs font-bold text-gray-500 uppercase tracking-widest pt-4">Redirection vers l'historique...</p>
         </motion.div>
       </div>
     );
@@ -330,7 +330,7 @@ export const MessageComposer: React.FC = () => {
         <div className="max-w-md mx-auto px-6 py-4 flex items-center gap-4">
           <button
             onClick={() => navigate(-1)}
-            className="p-2 hover:bg-orange-50 rounded-xl transition-colors text-gray-400"
+            className="p-2 hover:bg-orange-50 rounded-xl transition-colors text-gray-500"
           >
             <ArrowLeft size={20} />
           </button>
@@ -348,7 +348,7 @@ export const MessageComposer: React.FC = () => {
       <main className="max-w-md mx-auto px-6 pt-6 space-y-6">
         {children.length > 1 && (
           <div className="space-y-2">
-             <label className="text-[10px] font-bold text-gray-400 uppercase ml-1 tracking-widest font-sans">Enfant concerné</label>
+             <label className="text-[10px] font-bold text-gray-500 uppercase ml-1 tracking-widest font-sans">Enfant concerné</label>
              <div className="relative">
                 <button
                   onClick={() => setShowChildSelector(!showChildSelector)}
@@ -362,7 +362,7 @@ export const MessageComposer: React.FC = () => {
                       {selectedChild?.nickname || 'Sélectionner...'}
                     </span>
                   </div>
-                  <ChevronDown size={18} className={`text-gray-400 transition-transform ${showChildSelector ? 'rotate-180' : ''}`} />
+                  <ChevronDown size={18} className={`text-gray-500 transition-transform ${showChildSelector ? 'rotate-180' : ''}`} />
                 </button>
 
                 <AnimatePresence>
@@ -386,7 +386,7 @@ export const MessageComposer: React.FC = () => {
                           }`}
                         >
                           <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-                            selectedChild?.tokenId === child.tokenId ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-400'
+                            selectedChild?.tokenId === child.tokenId ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-500'
                           }`}>
                             <User size={16} />
                           </div>

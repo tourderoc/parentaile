@@ -312,13 +312,13 @@ export const EspaceSettings = () => {
   }
 
   return (
-    <div className="h-full bg-[#FFFBF0] flex flex-col overflow-hidden">
-      {/* Header + Tab Bar */}
-      <div className="bg-white/80 backdrop-blur-md sticky top-0 z-40 border-b border-orange-100">
+    <div className="h-full flex flex-col overflow-hidden">
+      {/* Header + Tab Bar - Transparent Glass */}
+      <div className="bg-white/40 backdrop-blur-xl sticky top-0 z-40 border-b border-white/40 shadow-sm">
         <div className="max-w-md mx-auto px-6 py-4 flex items-center gap-4">
           <button
             onClick={() => navigate('/espace/dashboard')}
-            className="p-2 hover:bg-orange-50 rounded-xl transition-colors text-gray-400"
+            className="p-2 hover:bg-orange-50 rounded-xl transition-colors text-gray-500"
           >
             <ArrowLeft size={20} />
           </button>
@@ -340,7 +340,7 @@ export const EspaceSettings = () => {
               className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold transition-colors ${
                 activeTab === index
                   ? 'text-orange-600 bg-orange-100'
-                  : 'text-gray-400 hover:text-gray-600'
+                  : 'text-gray-700 hover:text-gray-900'
               }`}
             >
               <tab.icon size={16} />
@@ -371,7 +371,7 @@ export const EspaceSettings = () => {
           <div className="max-w-md mx-auto px-6 pt-8 h-full overflow-y-auto pb-32">
             <section className="space-y-4">
               <h2 className="text-xl font-extrabold text-gray-800 tracking-tight px-1">Mon Compte</h2>
-              <div className="glass rounded-[2rem] border-2 border-white shadow-glass overflow-hidden">
+              <div className="bg-white/40 backdrop-blur-xl rounded-[2rem] border border-white/60 shadow-[0_8px_32px_rgba(31,38,135,0.07)] overflow-hidden">
                 {/* Pseudo */}
                 <button
                    onClick={() => openEditModal('pseudo')}
@@ -392,11 +392,11 @@ export const EspaceSettings = () => {
                    onClick={() => openEditModal('email')}
                    className="w-full p-6 flex items-center gap-4 border-b border-black/5 hover:bg-gray-50 transition-colors group"
                 >
-                   <div className="w-12 h-12 bg-gray-100 rounded-2xl flex items-center justify-center text-gray-400">
+                   <div className="w-12 h-12 bg-gray-100 rounded-2xl flex items-center justify-center text-gray-500">
                       <Mail size={24} />
                    </div>
                    <div className="flex-1 text-left truncate">
-                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Email</p>
+                      <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Email</p>
                       <p className="text-gray-600 font-bold truncate">{auth.currentUser?.email}</p>
                    </div>
                    <Pencil size={18} className="text-gray-300 group-hover:text-orange-500 transition-colors" />
@@ -407,11 +407,11 @@ export const EspaceSettings = () => {
                    onClick={() => openEditModal('password')}
                    className="w-full p-6 flex items-center gap-4 border-b border-black/5 hover:bg-gray-50 transition-colors group"
                 >
-                   <div className="w-12 h-12 bg-gray-100 rounded-2xl flex items-center justify-center text-gray-400">
+                   <div className="w-12 h-12 bg-gray-100 rounded-2xl flex items-center justify-center text-gray-500">
                       <Key size={24} />
                    </div>
                    <div className="flex-1 text-left">
-                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Mot de passe</p>
+                      <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Mot de passe</p>
                       <p className="text-gray-600 font-bold">........</p>
                    </div>
                    <Pencil size={18} className="text-gray-300 group-hover:text-orange-500 transition-colors" />
@@ -469,14 +469,14 @@ export const EspaceSettings = () => {
             {/* Step content */}
             <div className="flex-1 flex flex-col min-h-0">
               <AnimatePresence mode="wait">
-                <motion.div
-                  key={avatarStep}
-                  initial={{ opacity: 0, x: 30 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -30 }}
-                  transition={{ duration: 0.2 }}
-                  className="glass rounded-2xl border-2 border-white shadow-glass p-5 space-y-4 mb-3"
-                >
+                  <motion.div
+                    key={avatarStep}
+                    initial={{ opacity: 0, x: 30 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -30 }}
+                    transition={{ duration: 0.2 }}
+                    className="bg-white/40 backdrop-blur-xl rounded-3xl border border-white/60 shadow-[0_8px_32px_rgba(31,38,135,0.07)] p-5 space-y-4 mb-3"
+                  >
                   <p className="text-[10px] font-bold text-orange-400 uppercase tracking-widest text-center">
                     {AVATAR_STEPS[avatarStep]}
                   </p>
@@ -521,7 +521,7 @@ export const EspaceSettings = () => {
                             }`}
                             style={{ backgroundColor: value }}
                           />
-                          <span className="text-[10px] font-bold text-gray-400">{label}</span>
+                          <span className="text-[10px] font-bold text-gray-500">{label}</span>
                         </button>
                       ))}
                     </div>
@@ -596,7 +596,7 @@ export const EspaceSettings = () => {
                             }`}
                             style={{ backgroundColor: value }}
                           />
-                          <span className="text-[10px] font-bold text-gray-400">{label}</span>
+                          <span className="text-[10px] font-bold text-gray-500">{label}</span>
                         </button>
                       ))}
                     </div>
@@ -692,7 +692,7 @@ export const EspaceSettings = () => {
                 {avatarStep > 0 && (
                   <button
                     onClick={() => setAvatarStep(prev => prev - 1)}
-                    className="w-14 h-12 bg-gray-100 rounded-2xl flex items-center justify-center text-gray-400 active:scale-95 transition-all"
+                    className="w-14 h-12 bg-gray-100 rounded-2xl flex items-center justify-center text-gray-500 active:scale-95 transition-all"
                   >
                     <ArrowLeft size={20} />
                   </button>
@@ -731,19 +731,19 @@ export const EspaceSettings = () => {
           <div className="max-w-md mx-auto px-6 pt-8 h-full overflow-y-auto pb-32">
             <section className="space-y-4">
               <h2 className="text-xl font-extrabold text-gray-800 tracking-tight px-1">Notifications</h2>
-              <div className="glass rounded-[2rem] border-2 border-white shadow-glass overflow-hidden">
+              <div className="bg-white/40 backdrop-blur-xl rounded-[2rem] border border-white/60 shadow-[0_8px_32px_rgba(31,38,135,0.07)] overflow-hidden">
                 {/* Toggle Notifications */}
                 <button
                    onClick={handleNotificationsToggle}
                    className="w-full p-6 flex items-center gap-4 border-b border-black/5 hover:bg-orange-50/50 transition-colors group"
                 >
                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-colors ${
-                     notificationsEnabled ? 'bg-orange-100 text-orange-500' : 'bg-gray-100 text-gray-400'
+                     notificationsEnabled ? 'bg-orange-100 text-orange-500' : 'bg-gray-100 text-gray-500'
                    }`}>
                       <Bell size={24} />
                    </div>
                    <div className="flex-1 text-left">
-                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Notifications</p>
+                      <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Notifications</p>
                       <p className="text-lg font-extrabold text-gray-800">
                         {notificationsEnabled ? 'Activees' : 'Desactivees'}
                       </p>
@@ -766,12 +766,12 @@ export const EspaceSettings = () => {
                    }`}
                 >
                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-colors ${
-                     soundEnabled && notificationsEnabled ? 'bg-blue-100 text-blue-500' : 'bg-gray-100 text-gray-400'
+                     soundEnabled && notificationsEnabled ? 'bg-blue-100 text-blue-500' : 'bg-gray-100 text-gray-500'
                    }`}>
                       <Volume2 size={24} />
                    </div>
                    <div className="flex-1 text-left">
-                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Son</p>
+                      <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Son</p>
                       <p className="text-lg font-extrabold text-gray-800">
                         {soundEnabled ? 'Active' : 'Desactive'}
                       </p>
@@ -785,7 +785,7 @@ export const EspaceSettings = () => {
                    </div>
                 </button>
               </div>
-              <p className="text-xs text-gray-400 text-center px-4">
+              <p className="text-sm font-bold text-gray-700 text-center px-8 mt-4 leading-relaxed">
                 Recevez des alertes lorsque votre medecin vous envoie un message
               </p>
             </section>
@@ -816,7 +816,7 @@ export const EspaceSettings = () => {
                   {editModal === 'email' && 'Modifier l\'email'}
                   {editModal === 'password' && 'Modifier le mot de passe'}
                 </h3>
-                <button onClick={() => setEditModal(null)} className="p-2 bg-gray-100 rounded-xl text-gray-400">
+                <button onClick={() => setEditModal(null)} className="p-2 bg-gray-100 rounded-xl text-gray-500">
                   <X size={20} />
                 </button>
               </div>
@@ -838,7 +838,7 @@ export const EspaceSettings = () => {
                 {editModal === 'pseudo' && (
                   <>
                     <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">
+                      <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest ml-1">
                         Nouveau pseudo
                       </label>
                       <input
@@ -849,7 +849,7 @@ export const EspaceSettings = () => {
                         className="w-full h-14 bg-gray-50 rounded-2xl border-2 border-gray-100 px-5 focus:outline-none focus:border-orange-500 font-bold"
                         autoFocus
                       />
-                      <p className="text-[10px] text-gray-400 text-right">{newPseudo.length}/20</p>
+                      <p className="text-[10px] text-gray-500 text-right">{newPseudo.length}/20</p>
                     </div>
                     <button
                       onClick={handleSavePseudo}
@@ -864,7 +864,7 @@ export const EspaceSettings = () => {
                 {editModal === 'email' && (
                   <>
                     <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">
+                      <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest ml-1">
                         Nouvel email
                       </label>
                       <input
@@ -877,7 +877,7 @@ export const EspaceSettings = () => {
                       />
                     </div>
                     <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">
+                      <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest ml-1">
                         Mot de passe actuel (requis)
                       </label>
                       <div className="relative">
@@ -891,7 +891,7 @@ export const EspaceSettings = () => {
                         <button
                           type="button"
                           onClick={() => setShowCurrentPassword(!showCurrentPassword)}
-                          className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400"
+                          className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500"
                         >
                           {showCurrentPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                         </button>
