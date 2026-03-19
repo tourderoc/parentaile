@@ -14,6 +14,7 @@ import { GroupeDetailPage } from './screens/Espace/GroupeDetailPage';
 import { MesMessagesPage } from './screens/Espace/MesMessagesPage';
 import { MesGroupesPage } from './screens/Espace/MesGroupesPage';
 import { SalleVocalePage } from './screens/Espace/SalleVocalePage';
+import { TestGroupConfigPage } from './screens/Espace/TestGroupConfigPage';
 import { WelcomeWithSplash } from './screens/Welcome/WelcomeWithSplash';
 
 const Layout = () => {
@@ -41,6 +42,7 @@ const Layout = () => {
       <Route path="/espace/groupes/:groupeId" element={<GroupeDetailPage />} />
       <Route path="/espace/mes-messages" element={<MesMessagesPage />} />
       <Route path="/espace/mes-groupes" element={<MesGroupesPage />} />
+      <Route path="/espace/test-config" element={<TestGroupConfigPage />} />
       <Route path="/espace/:section" element={<EspaceMain />} />
     </Routes>
   );

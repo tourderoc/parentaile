@@ -112,7 +112,7 @@ export const SlideAccueil = () => {
   // Push notifications + badge
   useEffect(() => {
     if (tokenIds.length > 0 && !isLoading) {
-      initializePushNotifications(tokenIds);
+      initializePushNotifications(tokenIds, currentUser?.uid);
 
       const unsubscribe = onForegroundNotification((payload) => {
         console.log('[SlideAccueil] Notification premier plan:', payload.title);

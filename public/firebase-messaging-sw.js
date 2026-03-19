@@ -89,18 +89,25 @@ self.addEventListener('notificationclick', (event) => {
     navigator.setAppBadge(0).catch(() => {});
   }
 
-  // Ouvrir l'app sur le dashboard
+  // Deep link : utiliser le lien de la notification si disponible
+  const deepLink = event.notification.data?.link || '/espace/dashboard';
+
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-      // Si une fenêtre est déjà ouverte, la focaliser
+      // Si une fenêtre est déjà ouverte, la focaliser et naviguer
       for (const client of clientList) {
         if (client.url.includes('/espace') && 'focus' in client) {
-          return client.focus();
+          client.focus();
+          // Naviguer vers le deep link si different de la page actuelle
+          if (deepLink !== '/espace/dashboard') {
+            client.postMessage({ type: 'NAVIGATE', url: deepLink });
+          }
+          return;
         }
       }
-      // Sinon ouvrir une nouvelle fenêtre
+      // Sinon ouvrir une nouvelle fenêtre avec le deep link
       if (clients.openWindow) {
-        return clients.openWindow('/espace/dashboard');
+        return clients.openWindow(deepLink);
       }
     })
   );

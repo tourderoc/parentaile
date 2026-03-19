@@ -4,6 +4,102 @@ import { AccessToken } from 'livekit-server-sdk';
 
 admin.initializeApp();
 
+// ========== RAPPELS VOCAUX — Notifications 15min et 5min avant ==========
+
+export const sendVocalReminders = functions
+  .region('europe-west1')
+  .pubsub.schedule('every 1 minutes')
+  .timeZone('Europe/Paris')
+  .onRun(async () => {
+    const db = admin.firestore();
+    const now = Date.now();
+
+    // Chercher les groupes avec dateVocal dans [now+4min, now+16min]
+    const minDate = new Date(now + 4 * 60000);
+    const maxDate = new Date(now + 16 * 60000);
+
+    const snapshot = await db
+      .collection('groupes')
+      .where('dateVocal', '>=', admin.firestore.Timestamp.fromDate(minDate))
+      .where('dateVocal', '<=', admin.firestore.Timestamp.fromDate(maxDate))
+      .get();
+
+    if (snapshot.empty) return null;
+
+    for (const doc of snapshot.docs) {
+      const data = doc.data();
+
+      // Exclure les groupes test
+      if (data.isTestGroup) continue;
+
+      const dateVocal = data.dateVocal?.toDate?.() || new Date(data.dateVocal);
+      const minutesLeft = Math.round((dateVocal.getTime() - now) / 60000);
+
+      // Determiner le type de rappel
+      let reminderType: '15min' | '5min' | null = null;
+      if (minutesLeft >= 13 && minutesLeft <= 16) reminderType = '15min';
+      else if (minutesLeft >= 4 && minutesLeft <= 6) reminderType = '5min';
+      else continue;
+
+      // Verifier la deduplication
+      const dedupRef = db.collection('groupes').doc(doc.id)
+        .collection('notifications_sent').doc(`reminder_${reminderType}`);
+      const dedupSnap = await dedupRef.get();
+      if (dedupSnap.exists) continue;
+
+      // Recuperer les FCM tokens des participants
+      const participants: any[] = data.participants || [];
+      const fcmTokens: string[] = [];
+
+      for (const p of participants) {
+        if (!p.uid) continue;
+        const accountSnap = await db.collection('accounts').doc(p.uid).get();
+        const fcmToken = accountSnap.data()?.fcmToken;
+        if (fcmToken) fcmTokens.push(fcmToken);
+      }
+
+      if (fcmTokens.length === 0) continue;
+
+      // Construire le message
+      const title = reminderType === '15min'
+        ? `Votre groupe dans ${minutesLeft} min`
+        : 'Votre groupe commence !';
+      const body = reminderType === '15min'
+        ? `"${data.titre}" — La salle d'attente est ouverte`
+        : `"${data.titre}" — ${participants.length} parent${participants.length > 1 ? 's' : ''} vous attendent`;
+
+      // Envoyer les notifications
+      try {
+        await admin.messaging().sendEachForMulticast({
+          tokens: fcmTokens,
+          notification: {
+            title,
+            body,
+          },
+          data: {
+            link: `/espace/groupes/${doc.id}/vocal`,
+            type: 'vocal_reminder',
+            groupeId: doc.id,
+          },
+          webpush: {
+            fcmOptions: {
+              link: `/espace/groupes/${doc.id}/vocal`,
+            },
+          },
+        });
+
+        console.log(`[Reminders] ${reminderType} sent for ${doc.id} to ${fcmTokens.length} tokens`);
+      } catch (err) {
+        console.error(`[Reminders] Error sending for ${doc.id}:`, err);
+      }
+
+      // Marquer comme envoye
+      await dedupRef.set({ sentAt: admin.firestore.FieldValue.serverTimestamp() });
+    }
+
+    return null;
+  });
+
 // ========== LIVEKIT — Token pour salle vocale ==========
 
 export const getLiveKitToken = functions.https.onCall(async (data, context) => {

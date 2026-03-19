@@ -11,6 +11,8 @@ import { SlideForum } from './slides/SlideForum';
 import { SlideParametres } from './slides/SlideParametres';
 import { BottomNavSwiper } from '../../components/ui/BottomNavSwiper';
 import { SwiperModeContext } from '../../lib/swiperContext';
+import { UpcomingGroupProvider } from '../../lib/upcomingGroupContext';
+import { UpcomingGroupCard } from '../../components/ui/UpcomingGroupCard';
 
 const sectionToSlide: Record<string, number> = {
   'dashboard': 0,
@@ -51,6 +53,17 @@ export const EspaceMain = () => {
     seedTestGroup().catch((err) => console.warn('[SEED] Erreur:', err));
   }, []);
 
+  // Ecouter les deep links envoyes par le service worker (clic notification)
+  useEffect(() => {
+    const handler = (event: MessageEvent) => {
+      if (event.data?.type === 'NAVIGATE' && event.data?.url) {
+        navigate(event.data.url);
+      }
+    };
+    navigator.serviceWorker?.addEventListener('message', handler);
+    return () => navigator.serviceWorker?.removeEventListener('message', handler);
+  }, [navigate]);
+
   // URL → Swiper sync (when navigate() is called from inside a component)
   useEffect(() => {
     if (skipUrlSync.current) {
@@ -79,8 +92,10 @@ export const EspaceMain = () => {
   }, []);
 
   return (
+    <UpcomingGroupProvider>
     <SwiperModeContext.Provider value={{ isSwiperMode: true, navigateToSlide: handleNavigate }}>
       <div className="h-screen flex flex-col bg-[#FFFBF0]">
+        <UpcomingGroupCard />
         <Swiper
           onSwiper={(swiper) => { swiperRef.current = swiper; }}
           onSlideChange={handleSlideChange}
@@ -123,6 +138,7 @@ export const EspaceMain = () => {
         )}
       </div>
     </SwiperModeContext.Provider>
+    </UpcomingGroupProvider>
   );
 };
 

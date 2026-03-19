@@ -16,6 +16,7 @@ import {
   onSnapshot,
   arrayUnion,
   increment,
+  deleteField,
 } from 'firebase/firestore';
 import type { GroupeParole, MessageGroupe, ThemeGroupe, StructureEtape, EvaluationGroupe, EvaluationPendante, BadgeLevel, ParticipationEntry, UserProgression } from '../types/groupeParole';
 import { getBadgeForPoints } from '../types/groupeParole';
@@ -266,6 +267,54 @@ export async function quitterGroupe(
   });
 }
 
+// ========== PRESENCE TEMPS REEL ==========
+
+/**
+ * Marque un utilisateur comme present dans la salle d'un groupe.
+ * Ecrit dans groupes/{groupeId}/presence/{uid}
+ */
+export async function setPresence(
+  groupeId: string,
+  uid: string,
+  data?: { pseudo?: string; mood?: string; ready?: boolean }
+): Promise<void> {
+  const presenceRef = doc(db, 'groupes', groupeId, 'presence', uid);
+  await setDoc(presenceRef, {
+    uid,
+    joinedAt: serverTimestamp(),
+    ...data,
+  }, { merge: true });
+}
+
+/**
+ * Supprime la presence d'un utilisateur.
+ */
+export async function removePresence(
+  groupeId: string,
+  uid: string
+): Promise<void> {
+  try {
+    await deleteDoc(doc(db, 'groupes', groupeId, 'presence', uid));
+  } catch {
+    // Ignorer si le doc n'existe pas
+  }
+}
+
+/**
+ * Ecoute le nombre de participants presents en temps reel.
+ * Retourne une fonction unsubscribe.
+ */
+export function onPresenceCount(
+  groupeId: string,
+  callback: (count: number) => void
+): () => void {
+  return onSnapshot(
+    collection(db, 'groupes', groupeId, 'presence'),
+    (snapshot) => callback(snapshot.size),
+    () => callback(0)
+  );
+}
+
 // ========== ÉVALUATIONS ==========
 
 /**
@@ -275,10 +324,17 @@ export async function quitterGroupe(
 export async function submitEvaluation(
   evaluation: Omit<EvaluationGroupe, 'id' | 'dateEvaluation'>
 ): Promise<void> {
-  const evalDoc = {
-    ...evaluation,
+  const evalDoc: Record<string, unknown> = {
+    groupeId: evaluation.groupeId,
+    participantUid: evaluation.participantUid,
+    participantPseudo: evaluation.participantPseudo,
+    noteAmbiance: evaluation.noteAmbiance,
+    noteTheme: evaluation.noteTheme,
+    noteTechnique: evaluation.noteTechnique,
     dateEvaluation: serverTimestamp(),
   };
+  if (evaluation.ressenti) evalDoc.ressenti = evaluation.ressenti;
+  if (evaluation.signalement) evalDoc.signalement = evaluation.signalement;
   await setDoc(
     doc(db, 'groupes', evaluation.groupeId, 'evaluations', evaluation.participantUid),
     evalDoc
@@ -595,4 +651,38 @@ export async function resetTestGroup(): Promise<void> {
     createurPseudo: 'Systeme',
   });
   console.log('[RESET] Groupe test vocal réinitialisé');
+}
+
+/**
+ * Met à jour la configuration du groupe test (thème, structure, durée, titre).
+ */
+export async function updateTestGroup(config: {
+  theme: ThemeGroupe;
+  structureType: 'libre' | 'structuree';
+  structure?: StructureEtape[];
+  durationMin?: number;
+  titre?: string;
+  createurUid?: string;
+  createurPseudo?: string;
+}): Promise<void> {
+  const ref = doc(db, 'groupes', TEST_GROUP_ID);
+  const updates: Record<string, unknown> = {
+    theme: config.theme,
+    structureType: config.structureType,
+    // Reset participants so role assignment works fresh
+    participants: [],
+  };
+  if (config.structureType === 'structuree' && config.structure) {
+    updates.structure = config.structure;
+    updates.durationMin = deleteField();
+  } else {
+    updates.structure = deleteField();
+    if (config.durationMin) updates.durationMin = config.durationMin;
+  }
+  if (config.titre) updates.titre = config.titre;
+  if (config.createurUid) {
+    updates.createurUid = config.createurUid;
+    updates.createurPseudo = config.createurPseudo || 'Parent';
+  }
+  await updateDoc(ref, updates);
 }

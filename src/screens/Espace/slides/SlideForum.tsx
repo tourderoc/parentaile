@@ -2,11 +2,11 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Users, Mic, Clock, Plus, MessageCircle, Filter, Loader2, Heart } from 'lucide-react';
+import { Users, Mic, Clock, Plus, MessageCircle, Filter, Loader2, Heart, Settings } from 'lucide-react';
 import { Swiper, SwiperSlide } from 'swiper/react';
 import 'swiper/css';
 import { auth } from '../../../lib/firebase';
-import { onGroupesParole, onGroupeRating } from '../../../lib/groupeParoleService';
+import { onGroupesParole, onGroupeRating, onPresenceCount } from '../../../lib/groupeParoleService';
 import type { GroupeParole, ThemeGroupe } from '../../../types/groupeParole';
 import { THEME_LABELS, THEME_COLORS, THEME_SHORT_LABELS } from '../../../types/groupeParole';
 import { CreateGroupeParole } from './CreateGroupeParole';
@@ -85,11 +85,22 @@ const GroupeCard: React.FC<{
   index: number;
   onClick?: () => void;
 }> = ({ groupe, index, onClick }) => {
+  const navigate = useNavigate();
   const colors = THEME_COLORS[groupe.theme];
   const jours = joursRestants(groupe.dateExpiration);
   const placesRestantes = groupe.participantsMax - groupe.participants.length;
   const estComplet = placesRestantes === 0;
   const vocalPassé = isVocalPassé(groupe.dateVocal);
+
+  // Presence temps reel : ecouter quand la salle est ouverte (15 min avant → 60 min apres)
+  const [onlineCount, setOnlineCount] = useState(0);
+  const salleOuverte = !vocalPassé && (groupe.dateVocal.getTime() - Date.now()) < 15 * 60000;
+
+  useEffect(() => {
+    if (!salleOuverte && !groupe.isTestGroup) return;
+    const unsub = onPresenceCount(groupe.id, setOnlineCount);
+    return unsub;
+  }, [salleOuverte, groupe.id, groupe.isTestGroup]);
 
   return (
     <motion.div
@@ -105,11 +116,24 @@ const GroupeCard: React.FC<{
           <span className="text-[10px] font-extrabold text-white uppercase tracking-[0.15em] drop-shadow-sm">
             {THEME_SHORT_LABELS[groupe.theme]}
           </span>
-          {estComplet && (
-            <span className="text-[9px] font-bold bg-white/25 text-white px-2 py-0.5 rounded-full uppercase tracking-wider backdrop-blur-md">
-              Complet
-            </span>
-          )}
+          <div className="flex items-center gap-2">
+            {groupe.isTestGroup && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigate('/espace/test-config');
+                }}
+                className="w-7 h-7 bg-white/25 backdrop-blur-md rounded-lg flex items-center justify-center hover:bg-white/40 transition-colors"
+              >
+                <Settings size={14} className="text-white" />
+              </button>
+            )}
+            {estComplet && (
+              <span className="text-[9px] font-bold bg-white/25 text-white px-2 py-0.5 rounded-full uppercase tracking-wider backdrop-blur-md">
+                Complet
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Contenu */}
@@ -165,7 +189,13 @@ const GroupeCard: React.FC<{
                   Passé
                 </span>
               )}
-              {!vocalPassé && (
+              {!vocalPassé && onlineCount > 0 && (
+                <span className="text-[9px] font-bold bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-full ml-auto flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
+                  {onlineCount} en ligne
+                </span>
+              )}
+              {!vocalPassé && onlineCount === 0 && (
                 <span className="text-[9px] font-bold bg-orange-50 text-orange-500 px-2 py-0.5 rounded-full ml-auto">
                   À venir
                 </span>
@@ -175,18 +205,28 @@ const GroupeCard: React.FC<{
         </div>
 
         {/* Pied : temps restant + rating */}
-        <div className="px-4 py-3 border-t border-gray-100/60 flex items-center gap-2">
-          <Clock size={12} className="text-orange-400" />
-          <span className="text-[11px] font-semibold text-orange-500">
-            Encore {jours} jour{jours > 1 ? 's' : ''}
-          </span>
-          <div className="ml-auto flex items-center gap-3">
-            <GroupeRatingBadge groupeId={groupe.id} />
-            <span className="text-[10px] text-gray-300 font-medium">
-              {groupe.messageCount || 0} msg
+        {/* Pied : temps restant + rating ou CTA Début imminent */}
+        {salleOuverte && (!estComplet || groupe.participants.some(p => p.uid === auth.currentUser?.uid)) ? (
+          <div className="px-4 py-3.5 bg-gradient-to-r from-emerald-500 to-emerald-400 flex items-center justify-center gap-2 mt-auto">
+            <span className="w-2 h-2 rounded-full bg-white animate-pulse shadow-[0_0_8px_rgba(255,255,255,0.8)]" />
+            <span className="text-[11px] font-extrabold text-white uppercase tracking-widest">
+              Rejoindre · Début imminent
             </span>
           </div>
-        </div>
+        ) : (
+          <div className="px-4 py-3 border-t border-gray-100/60 flex items-center gap-2 mt-auto">
+            <Clock size={12} className="text-orange-400" />
+            <span className="text-[11px] font-semibold text-orange-500">
+              Encore {jours} jour{jours > 1 ? 's' : ''}
+            </span>
+            <div className="ml-auto flex items-center gap-3">
+              <GroupeRatingBadge groupeId={groupe.id} />
+              <span className="text-[10px] text-gray-300 font-medium">
+                {groupe.messageCount || 0} msg
+              </span>
+            </div>
+          </div>
+        )}
       </div>
     </motion.div>
   );
@@ -223,6 +263,35 @@ export const SlideForum = () => {
         !isVocalPassé(g.dateVocal)
       );
     }
+
+    // Tri personnalisé : sessions les plus proches et disponibles en premier
+    result.sort((a, b) => {
+      const aPast = isVocalPassé(a.dateVocal);
+      const bPast = isVocalPassé(b.dateVocal);
+      
+      const aPlaces = a.participantsMax - a.participants.length;
+      const bPlaces = b.participantsMax - b.participants.length;
+      
+      const aDispo = !aPast && aPlaces > 0;
+      const bDispo = !bPast && bPlaces > 0;
+
+      // 1. Priorité aux sessions à venir et avec places dispo
+      if (aDispo && !bDispo) return -1;
+      if (!aDispo && bDispo) return 1;
+
+      // 2. Priorité aux sessions à venir vs passées
+      if (!aPast && bPast) return -1;
+      if (aPast && !bPast) return 1;
+
+      // 3. Tri par date
+      if (!aPast && !bPast) {
+        // Pour les sessions à venir : la plus proche en premier
+        return a.dateVocal.getTime() - b.dateVocal.getTime();
+      }
+
+      // Pour les sessions passées : la plus récente en premier
+      return b.dateVocal.getTime() - a.dateVocal.getTime();
+    });
 
     return result;
   }, [groupes, selectedTheme, placesDispoOnly]);

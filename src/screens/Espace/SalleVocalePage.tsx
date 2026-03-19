@@ -41,7 +41,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { auth, db } from '../../lib/firebase';
 import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { getLiveKitToken } from '../../lib/liveKitService';
-import { onGroupeMessages, sendGroupeMessage, submitEvaluation, markEvaluationPending, getEvaluationStatus, addPoints, getUserBadge } from '../../lib/groupeParoleService';
+import { onGroupeMessages, sendGroupeMessage, submitEvaluation, markEvaluationPending, getEvaluationStatus, addPoints, getUserBadge, setPresence, removePresence } from '../../lib/groupeParoleService';
 import type { MessageGroupe, ParticipantGroupe, StructureEtape, BadgeLevel } from '../../types/groupeParole';
 import { STRUCTURE_DEFAUT, getBadgeInfo } from '../../types/groupeParole';
 
@@ -381,12 +381,13 @@ const CircleParticipant: React.FC<{
         )}
 
         <div
-          className={`relative w-[72px] h-[72px] rounded-full flex items-center justify-center shadow-lg transition-all duration-300 ${
-            isSpeaking ? 'scale-110' : ''
+          className={`relative w-[76px] h-[76px] rounded-full flex items-center justify-center transition-all duration-300 ${
+            isSpeaking ? 'scale-110 z-10' : 'hover:scale-105'
           }`}
           style={{
-            background: avatarUrl ? 'transparent' : color,
+            background: avatarUrl ? 'transparent' : `linear-gradient(135deg, ${color}, ${color}cc)`,
             border: isSpeaking ? `3px solid ${color}` : `3px solid ${BADGE_RING_COLORS[badge]}`,
+            boxShadow: isSpeaking ? `0 0 25px ${color}80, 0 8px 32px rgba(0,0,0,0.5)` : '0 8px 32px rgba(0,0,0,0.4)'
           }}
         >
           {avatarUrl ? (
@@ -687,7 +688,9 @@ const RoomContent: React.FC<{
   animateurNotes?: AnimateurNotes | null;
   structureType: 'libre' | 'structuree';
   structure: StructureEtape[];
-}> = ({ isAnimateur, groupeId, groupeTitre, groupeTheme, dateVocal, onLeave, animateurNotes, structureType, structure }) => {
+  defaultDurationMin?: number;
+  onSessionProgress?: (elapsedMin: number, totalDurationMin: number) => void;
+}> = ({ isAnimateur, groupeId, groupeTitre, groupeTheme, dateVocal, onLeave, animateurNotes, structureType, structure, defaultDurationMin, onSessionProgress }) => {
   const participants = useParticipants();
   const { localParticipant } = useLocalParticipant();
   const connectionState = useConnectionState();
@@ -701,6 +704,7 @@ const RoomContent: React.FC<{
   const [modTarget, setModTarget] = useState<ModTarget | null>(null);
   const [warnToast, setWarnToast] = useState<string | null>(null);
   const [showNotes, setShowNotes] = useState(false);
+  const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const [phaseToast, setPhaseToast] = useState<string | null>(null);
   const [showAllNotes, setShowAllNotes] = useState(false);
   const [notesPulse, setNotesPulse] = useState(false);
@@ -720,8 +724,13 @@ const RoomContent: React.FC<{
   }, [participants.length]); // re-fetch when participant count changes
 
   // Session phase tracking
-  const sessionPhase = useSessionPhase(dateVocal, structureType, structure);
+  const sessionPhase = useSessionPhase(dateVocal, structureType, structure, defaultDurationMin);
   const prevPhaseRef = useRef(0);
+
+  // Report session progress to parent (for proportional points)
+  useEffect(() => {
+    onSessionProgress?.(sessionPhase.elapsedMin, sessionPhase.totalDurationMin);
+  }, [sessionPhase.elapsedMin, sessionPhase.totalDurationMin, onSessionProgress]);
 
   // Phase transition notification
   useEffect(() => {
@@ -917,6 +926,13 @@ const RoomContent: React.FC<{
 
   return (
     <div className="flex-1 flex flex-col relative">
+      {/* Reconnection banner */}
+      {connectionState === ConnectionState.Reconnecting && (
+        <div className="absolute top-0 left-0 right-0 z-50 bg-orange-500/90 backdrop-blur-sm px-4 py-2 flex items-center justify-center gap-2">
+          <Loader2 size={14} className="animate-spin text-white" />
+          <span className="text-xs font-bold text-white">Reconnexion en cours...</span>
+        </div>
+      )}
       {/* Header */}
       <div className="text-center pt-6 pb-2 px-4">
         <h2 className="text-xl font-extrabold text-white tracking-tight">{groupeTitre}</h2>
@@ -954,43 +970,78 @@ const RoomContent: React.FC<{
       {/* Circular layout */}
       <div className="flex-1 flex items-center justify-center">
         <div className="relative" style={{ width: circleRadius * 2 + 100, height: circleRadius * 2 + 100 }}>
-          {/* Center: Logo Parent'aile with glow */}
+          {/* Center: Premium Table / Hub */}
           <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center">
-            {/* Glow effect */}
-            <div
-              className={`absolute w-24 h-24 rounded-full transition-all duration-500 ${
-                speakingName ? 'opacity-60' : 'opacity-30'
-              }`}
-              style={{
-                background: 'radial-gradient(circle, rgba(249,168,38,0.5) 0%, rgba(249,168,38,0) 70%)',
-                filter: 'blur(12px)',
-                transform: speakingName ? 'scale(1.3)' : 'scale(1)',
-              }}
-            />
-            {/* Logo */}
-            <img
-              src="/app-icon.png"
-              alt="Parent'aile"
-              className={`w-20 h-20 rounded-full shadow-xl transition-all duration-500 ${
-                speakingName ? 'ring-2 ring-orange-400/50' : ''
-              }`}
-              style={{
-                filter: speakingName
-                  ? 'drop-shadow(0 0 16px rgba(249,168,38,0.5))'
-                  : 'drop-shadow(0 0 8px rgba(249,168,38,0.2))',
-              }}
-            />
-            {/* Speaking label */}
+            {/* Outer Aura */}
+            {speakingName && (
+              <motion.div
+                initial={{ scale: 0.8, opacity: 0 }}
+                animate={{ scale: [1, 1.25, 1], opacity: [0.3, 0.6, 0.3] }}
+                transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
+                className="absolute inset-[-60px] rounded-full"
+                style={{
+                  background: 'radial-gradient(circle, rgba(249,168,38,0.2) 0%, transparent 60%)',
+                  filter: 'blur(20px)',
+                }}
+              />
+            )}
+
+            {/* The "Table": Glassmorphic 3D Ring */}
+            <div className="relative w-40 h-40 rounded-full flex items-center justify-center">
+              {/* Outer Ring / Table Edge */}
+              <div 
+                className="absolute inset-0 rounded-full border-[3px] border-white/10 shadow-[inset_0_4px_30px_rgba(255,255,255,0.05),_0_8px_32px_rgba(0,0,0,0.5)]" 
+                style={{ background: 'linear-gradient(145deg, rgba(255,255,255,0.05) 0%, rgba(0,0,0,0.2) 100%)' }}
+              />
+
+              {/* Inner Table Surface (Glass) */}
+              <div className="absolute inset-3 rounded-full overflow-hidden bg-[#151932]/60 backdrop-blur-md border border-white/5 flex items-center justify-center">
+                
+                {/* Embedded subtle motif */}
+                <div className="absolute w-28 h-28 opacity-20 bg-gradient-to-tr from-white/10 to-transparent rounded-full rotate-45 blur-[2px]" />
+
+                {/* Center Core (Glowing sound waves) */}
+                <div className={`relative z-10 w-20 h-20 rounded-full flex items-center justify-center transition-all duration-700 ${
+                  speakingName ? 'bg-orange-500/20 shadow-[0_0_30px_rgba(249,168,38,0.5)]' : 'bg-white/5 shadow-inner'
+                }`}>
+                  <div className={`absolute inset-0 rounded-full border transition-all duration-700 ${
+                    speakingName ? 'border-orange-400/50 scale-110' : 'border-white/10 scale-100'
+                  }`} />
+                  
+                  {/* Dynamic Sound Waves */}
+                  {speakingName ? (
+                     <div className="flex items-center justify-center gap-[3px] h-8 w-12">
+                       {[0.4, 0.8, 0.5, 0.9, 0.6].map((h, i) => (
+                         <motion.div 
+                           key={i}
+                           animate={{ scaleY: [h, h*2.5, h] }}
+                           transition={{ repeat: Infinity, duration: 0.5 + i*0.1, ease: 'easeInOut' }}
+                           className="w-1.5 bg-orange-400 rounded-full"
+                           style={{ height: 10 }}
+                         />
+                       ))}
+                     </div>
+                  ) : (
+                    <Mic className="text-white/20 w-8 h-8" />
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Speaking label floating */}
             <AnimatePresence>
               {speakingName && (
-                <motion.p
-                  initial={{ opacity: 0, y: 4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 4 }}
-                  className="mt-2 text-xs font-bold text-orange-300"
+                <motion.div
+                  initial={{ opacity: 0, y: 15, scale: 0.9 }}
+                  animate={{ opacity: 1, y: 25, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.9, y: 15 }}
+                  className="absolute bottom-[-15px] px-5 py-2 rounded-full bg-[#111426]/90 backdrop-blur-xl border border-orange-500/40 shadow-2xl z-20"
                 >
-                  {speakingName === 'Vous' ? 'Vous parlez' : `${speakingName} parle`}
-                </motion.p>
+                  <p className="text-[10px] uppercase tracking-widest font-extrabold flex items-center gap-2" style={{ color: '#F9A826' }}>
+                    <span className="w-2 h-2 rounded-full bg-[#F9A826] animate-pulse shadow-[0_0_10px_rgba(249,168,38,0.8)]" />
+                    {speakingName === 'Vous' ? 'Vous parlez' : `${speakingName} parle`}
+                  </p>
+                </motion.div>
               )}
             </AnimatePresence>
           </div>
@@ -1119,7 +1170,15 @@ const RoomContent: React.FC<{
 
           {/* Quitter */}
           <button
-            onClick={onLeave}
+            onClick={() => {
+              // Skip confirmation si session presque finie (<2 min)
+              const remaining = sessionPhase.totalDurationMin - sessionPhase.elapsedMin;
+              if (remaining < 2) {
+                onLeave();
+              } else {
+                setShowLeaveConfirm(true);
+              }
+            }}
             className="flex flex-col items-center gap-1 px-4 py-2 rounded-xl bg-white/10 transition-all active:scale-90"
           >
             <LogOut size={22} className="text-white/60" />
@@ -1309,6 +1368,50 @@ const RoomContent: React.FC<{
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Leave confirmation bottom sheet */}
+      <AnimatePresence>
+        {showLeaveConfirm && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowLeaveConfirm(false)}
+              className="absolute inset-0 bg-black/40 z-50"
+            />
+            <motion.div
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              className="absolute bottom-0 left-0 right-0 z-50 bg-[#1e2340] rounded-t-3xl p-6 pb-8"
+            >
+              <div className="w-12 h-1 bg-white/20 rounded-full mx-auto mb-5" />
+              <p className="text-base font-bold text-white text-center mb-2">
+                Quitter la session ?
+              </p>
+              <p className="text-sm text-white/50 text-center mb-6">
+                Pas de souci ! Vous pouvez revenir dans les prochaines minutes si vous changez d'avis.
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowLeaveConfirm(false)}
+                  className="flex-1 py-3 rounded-2xl bg-orange-500 text-white font-bold text-sm active:scale-95 transition-transform"
+                >
+                  Rester
+                </button>
+                <button
+                  onClick={() => { setShowLeaveConfirm(false); onLeave(); }}
+                  className="flex-1 py-3 rounded-2xl bg-white/10 text-white/70 font-bold text-sm active:scale-95 transition-transform"
+                >
+                  Quitter
+                </button>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
@@ -1445,9 +1548,11 @@ const WaitingRoom: React.FC<{
   isTestGroup: boolean;
   participants: ParticipantGroupe[];
   createurUid: string;
+  structureType?: 'libre' | 'structuree';
+  structure?: StructureEtape[];
   onEnter: () => void;
   onBack: () => void;
-}> = ({ groupeId, groupeTitre, groupeTheme, dateVocal, isTestGroup, participants, createurUid, onEnter, onBack }) => {
+}> = ({ groupeId, groupeTitre, groupeTheme, dateVocal, isTestGroup, participants, createurUid, structureType, structure, onEnter, onBack }) => {
   const currentUser = auth.currentUser;
   const [countdown, setCountdown] = useState('');
   const [sessionStarted, setSessionStarted] = useState(false);
@@ -1554,6 +1659,50 @@ const WaitingRoom: React.FC<{
                 ? 'Animateur present'
                 : 'En attente de l\'animateur...'}
             </p>
+          </div>
+        </div>
+
+        {/* Mini-briefing : structure de la session */}
+        {structureType === 'structuree' && structure && structure.length > 0 && (
+          <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4">
+            <p className="text-xs font-bold text-white/60 uppercase tracking-wider mb-3">Programme</p>
+            <div className="space-y-2">
+              {structure.map((phase, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-full bg-orange-500/20 text-orange-400 text-[10px] font-bold flex items-center justify-center shrink-0">
+                    {i + 1}
+                  </span>
+                  <span className="text-sm text-white/80 font-medium flex-1">{phase.label}</span>
+                  <span className="text-xs text-white/40 font-medium">{phase.dureeMinutes} min</span>
+                </div>
+              ))}
+            </div>
+            <div className="mt-2 pt-2 border-t border-white/10 text-right">
+              <span className="text-xs text-orange-400 font-bold">
+                Total : {structure.reduce((s, p) => s + p.dureeMinutes, 0)} min
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* Mood selector : humeur du jour */}
+        <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4">
+          <p className="text-xs font-bold text-white/60 uppercase tracking-wider mb-3">Votre humeur</p>
+          <div className="flex justify-center gap-3">
+            {['😊', '😐', '😔', '💪', '🤗'].map((emoji) => (
+              <button
+                key={emoji}
+                onClick={() => {
+                  const uid = currentUser?.uid;
+                  if (uid && groupeId) {
+                    setPresence(groupeId, uid, { mood: emoji }).catch(() => {});
+                  }
+                }}
+                className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center text-xl hover:bg-white/20 active:scale-90 transition-all"
+              >
+                {emoji}
+              </button>
+            ))}
           </div>
         </div>
       </div>
@@ -1950,7 +2099,7 @@ const PrepAnimateurScreen: React.FC<{
 };
 
 // ========== Flow steps ==========
-type FlowStep = 'loading' | 'password' | 'charte' | 'prenom' | 'waiting' | 'room' | 'end' | 'evaluation';
+type FlowStep = 'loading' | 'password' | 'charte' | 'prenom' | 'waiting' | 'room' | 'reconnecting' | 'end' | 'evaluation';
 
 // ========== Heart Rating ==========
 const HeartRating: React.FC<{
@@ -1985,9 +2134,10 @@ const HeartRating: React.FC<{
 // ========== End Screen (Thank you) ==========
 const EndScreen: React.FC<{
   groupeTitre: string;
+  canEvaluate: boolean;
   onEvaluate: () => void;
   onLater: () => void;
-}> = ({ groupeTitre, onEvaluate, onLater }) => (
+}> = ({ groupeTitre, canEvaluate, onEvaluate, onLater }) => (
   <div className="h-screen bg-[#FFFBF0] flex flex-col items-center justify-center px-6 text-center">
     <motion.div
       initial={{ scale: 0.8, opacity: 0 }}
@@ -1999,30 +2149,46 @@ const EndScreen: React.FC<{
         <Heart size={36} className="text-orange-400 fill-orange-400" />
       </div>
 
-      <h2 className="text-2xl font-extrabold text-gray-800">Merci d'avoir ete la</h2>
+      <h2 className="text-2xl font-extrabold text-gray-800">
+        {canEvaluate ? "Merci d'avoir ete la" : "A bientot !"}
+      </h2>
       <p className="text-sm text-gray-400 font-medium mt-3 max-w-xs leading-relaxed">
-        Votre presence dans "{groupeTitre}" compte. Chaque echange fait avancer les choses.
+        {canEvaluate
+          ? `Votre presence dans "${groupeTitre}" compte. Chaque echange fait avancer les choses.`
+          : `Vous avez quitte "${groupeTitre}" avant la fin. L'evaluation est reservee aux participants qui restent jusqu'au bout.`
+        }
       </p>
 
       <div className="mt-10 w-full max-w-xs space-y-3">
-        <button
-          onClick={onEvaluate}
-          className="w-full py-4 bg-gradient-to-r from-orange-500 to-amber-500 text-white rounded-2xl font-extrabold text-base shadow-xl shadow-orange-500/20 active:scale-[0.98] transition-all"
-        >
-          Donner mon avis
-        </button>
+        {canEvaluate ? (
+          <>
+            <button
+              onClick={onEvaluate}
+              className="w-full py-4 bg-gradient-to-r from-orange-500 to-amber-500 text-white rounded-2xl font-extrabold text-base shadow-xl shadow-orange-500/20 active:scale-[0.98] transition-all"
+            >
+              Donner mon avis (+5 pts)
+            </button>
 
-        <button
-          onClick={onLater}
-          className="w-full py-3 text-sm font-bold text-gray-400 hover:text-gray-600 transition-colors"
-        >
-          Plus tard
-        </button>
+            <button
+              onClick={onLater}
+              className="w-full py-3 text-sm font-bold text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              Plus tard
+            </button>
+
+            <p className="mt-6 text-[11px] text-gray-300 font-medium max-w-[200px]">
+              Vous pourrez retrouver cette evaluation depuis votre espace personnel
+            </p>
+          </>
+        ) : (
+          <button
+            onClick={onLater}
+            className="w-full py-4 bg-gray-200 text-gray-600 rounded-2xl font-extrabold text-base active:scale-[0.98] transition-all"
+          >
+            Retour a l'espace
+          </button>
+        )}
       </div>
-
-      <p className="mt-6 text-[11px] text-gray-300 font-medium max-w-[200px]">
-        Vous pourrez retrouver cette evaluation depuis votre espace personnel
-      </p>
     </motion.div>
   </div>
 );
@@ -2070,6 +2236,13 @@ const EvaluationScreen: React.FC<{
             }
           : undefined,
       });
+      // Bonus +5 pts for giving an evaluation
+      await addPoints(currentUser.uid, 5, {
+        groupeId,
+        groupeTitre,
+        date: new Date(),
+        type: 'evaluation',
+      }).catch(() => {});
       setSubmitted(true);
       setTimeout(onDone, 2000);
     } catch (err) {
@@ -2250,6 +2423,7 @@ export const SalleVocalePage = () => {
   const [isTestGroup, setIsTestGroup] = useState(false);
   const [structureType, setStructureType] = useState<'libre' | 'structuree'>('libre');
   const [structure, setStructure] = useState<StructureEtape[]>([]);
+  const [customDurationMin, setCustomDurationMin] = useState<number | undefined>(undefined);
 
   // Flow state
   const [step, setStep] = useState<FlowStep>('loading');
@@ -2294,6 +2468,7 @@ export const SalleVocalePage = () => {
               ? (data.structure || STRUCTURE_DEFAUT)
               : []
           );
+          if (data.durationMin) setCustomDurationMin(data.durationMin);
           setGroupeParticipants(
             (data.participants || []).map((p: any) => ({
               uid: p.uid || '',
@@ -2303,7 +2478,13 @@ export const SalleVocalePage = () => {
             }))
           );
 
-          // Check if user has a pending evaluation → go straight to evaluation
+          // Test group → skip evaluation check, go to password
+          if (data.isTestGroup && data.passwordVocal) {
+            setStep('password');
+            return;
+          }
+
+          // Normal groups: check if user has a pending evaluation → go straight to evaluation
           const currentUsr = auth.currentUser;
           if (currentUsr) {
             try {
@@ -2313,14 +2494,8 @@ export const SalleVocalePage = () => {
                 return;
               }
             } catch {
-              // Firestore rules may not allow reading evaluations yet — skip silently
+              // Firestore rules may not allow reading evaluations yet
             }
-          }
-
-          // Test group with password → password screen first
-          if (data.isTestGroup && data.passwordVocal) {
-            setStep('password');
-            return;
           }
         }
 
@@ -2419,13 +2594,39 @@ export const SalleVocalePage = () => {
   };
 
   const pointsAwardedRef = useRef(false);
+  const voluntaryLeaveRef = useRef(false);
+  const reconnectAttemptsRef = useRef(0);
+  const sessionElapsedRef = useRef(0);
+  const sessionTotalRef = useRef(0);
+  const [leftEarly, setLeftEarly] = useState(false);
+
+  const handleSessionProgress = useCallback((elapsedMin: number, totalDurationMin: number) => {
+    sessionElapsedRef.current = elapsedMin;
+    sessionTotalRef.current = totalDurationMin;
+  }, []);
+
   const handleLeave = useCallback(() => {
-    // Award +10 points for participation (once)
+    voluntaryLeaveRef.current = true;
+
+    // Determine if session is complete (elapsed >= total or remaining < 2 min)
+    const elapsed = sessionElapsedRef.current;
+    const total = sessionTotalRef.current;
+    const isSessionComplete = total > 0 && (total - elapsed) < 2;
+    const participationRatio = total > 0 ? elapsed / total : 0;
+
+    // Track early leave (< session end) → no evaluation allowed
+    if (!isSessionComplete) {
+      setLeftEarly(true);
+    }
+
+    // Award proportional points for participation (once)
     if (!pointsAwardedRef.current && groupeId) {
       pointsAwardedRef.current = true;
       const user = auth.currentUser;
       if (user) {
-        addPoints(user.uid, 10, {
+        // +10 pts if >50% of session, +5 pts otherwise
+        const points = participationRatio > 0.5 ? 10 : 5;
+        addPoints(user.uid, points, {
           groupeId,
           groupeTitre,
           date: new Date(),
@@ -2436,9 +2637,65 @@ export const SalleVocalePage = () => {
     setStep('end');
   }, [groupeId, groupeTitre]);
 
+  const handleDisconnected = useCallback(() => {
+    if (voluntaryLeaveRef.current) {
+      // Depart volontaire → ecran de fin
+      handleLeave();
+    } else {
+      // Deconnexion technique → tentative de reconnexion
+      console.log('[SalleVocale] Deconnexion technique, tentative de reconnexion...');
+      reconnectAttemptsRef.current = 0;
+      setStep('reconnecting');
+    }
+  }, [handleLeave]);
+
+  const handleReconnect = useCallback(async () => {
+    reconnectAttemptsRef.current += 1;
+    try {
+      await connectToRoom();
+      setStep('room');
+      reconnectAttemptsRef.current = 0;
+    } catch {
+      if (reconnectAttemptsRef.current < 3) {
+        // Reessayer apres 2 secondes
+        setTimeout(() => handleReconnect(), 2000);
+      }
+      // Apres 3 echecs, rester sur l'ecran reconnecting avec boutons manuels
+    }
+  }, []);
+
   const handleNavigateAway = useCallback(() => {
     navigate(`/espace/groupes/${groupeId}`);
   }, [navigate, groupeId]);
+
+  // Presence tracking: marquer present quand dans la salle, cleanup au depart
+  useEffect(() => {
+    const uid = auth.currentUser?.uid;
+    if (!groupeId || !uid) return;
+
+    if (step === 'waiting' || step === 'room') {
+      setPresence(groupeId, uid, { pseudo: sessionPrenom || 'Parent' }).catch(() => {});
+    }
+
+    // Cleanup : retirer la presence quand on quitte ces etapes
+    return () => {
+      if (step === 'waiting' || step === 'room') {
+        removePresence(groupeId, uid).catch(() => {});
+      }
+    };
+  }, [step, groupeId, sessionPrenom]);
+
+  // Cleanup presence au fermeture/navigation du navigateur
+  useEffect(() => {
+    const uid = auth.currentUser?.uid;
+    if (!groupeId || !uid) return;
+
+    const cleanup = () => {
+      removePresence(groupeId, uid).catch(() => {});
+    };
+    window.addEventListener('beforeunload', cleanup);
+    return () => window.removeEventListener('beforeunload', cleanup);
+  }, [groupeId]);
 
   // Determine if user is animateur (before LiveKit connection, based on createurUid)
   const currentUser = auth.currentUser;
@@ -2575,9 +2832,57 @@ export const SalleVocalePage = () => {
         isTestGroup={isTestGroup}
         participants={groupeParticipants}
         createurUid={createurUid}
+        structureType={structureType}
+        structure={structure}
         onEnter={handleEnterRoom}
         onBack={() => setStep('prenom')}
       />
+    );
+  }
+
+  // ===== Reconnecting Screen =====
+  if (step === 'reconnecting') {
+    return (
+      <div
+        className="h-screen flex flex-col items-center justify-center gap-6 px-6"
+        style={{
+          background: 'radial-gradient(ellipse at 50% 30%, #2a3060 0%, #1a1f3a 50%, #12152a 100%)',
+        }}
+      >
+        <div className="relative">
+          <div className="absolute inset-0 bg-orange-500/20 rounded-full animate-ping" />
+          <div className="w-20 h-20 bg-orange-500/10 rounded-full flex items-center justify-center border border-orange-500/30">
+            <Loader2 className="w-10 h-10 animate-spin text-orange-400" />
+          </div>
+        </div>
+        <div className="text-center">
+          <p className="text-lg font-bold text-white">Reconnexion en cours...</p>
+          <p className="text-sm text-white/50 mt-2">
+            {reconnectAttemptsRef.current < 3
+              ? 'Veuillez patienter, nous essayons de vous reconnecter'
+              : 'La connexion a echoue. Vous pouvez reessayer ou quitter.'}
+          </p>
+        </div>
+        {reconnectAttemptsRef.current >= 3 && (
+          <div className="flex gap-3 mt-4">
+            <button
+              onClick={() => {
+                reconnectAttemptsRef.current = 0;
+                handleReconnect();
+              }}
+              className="px-6 py-3 bg-orange-500 text-white rounded-2xl font-bold text-sm active:scale-95 transition-transform"
+            >
+              Reessayer
+            </button>
+            <button
+              onClick={handleLeave}
+              className="px-6 py-3 bg-white/10 text-white/70 rounded-2xl font-bold text-sm active:scale-95 transition-transform"
+            >
+              Quitter
+            </button>
+          </div>
+        )}
+      </div>
     );
   }
 
@@ -2586,6 +2891,7 @@ export const SalleVocalePage = () => {
     return (
       <EndScreen
         groupeTitre={groupeTitre}
+        canEvaluate={!leftEarly}
         onEvaluate={() => setStep('evaluation')}
         onLater={async () => {
           const user = auth.currentUser;
@@ -2645,7 +2951,7 @@ export const SalleVocalePage = () => {
         audio={true}
         video={false}
         connect={true}
-        onDisconnected={handleLeave}
+        onDisconnected={handleDisconnected}
         className="flex-1 flex flex-col max-w-md mx-auto w-full"
       >
         <RoomAudioRenderer />
@@ -2659,6 +2965,8 @@ export const SalleVocalePage = () => {
           animateurNotes={animateurNotes}
           structureType={structureType}
           structure={structure}
+          defaultDurationMin={customDurationMin}
+          onSessionProgress={handleSessionProgress}
         />
       </LiveKitRoom>
     </div>

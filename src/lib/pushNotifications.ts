@@ -168,6 +168,27 @@ export async function registerFcmTokenForParent(tokenId: string, fcmToken: strin
 }
 
 /**
+ * Enregistre le token FCM sur le compte utilisateur (accounts/{uid})
+ * Permet aux Cloud Functions d'envoyer des notifications par uid (rappels groupes vocaux)
+ * @param uid - L'UID Firebase Auth de l'utilisateur
+ * @param fcmToken - Le token FCM à enregistrer
+ */
+export async function registerFcmTokenForAccount(uid: string, fcmToken: string): Promise<boolean> {
+  try {
+    const accountRef = doc(db, 'accounts', uid);
+    await updateDoc(accountRef, {
+      fcmToken: fcmToken,
+      fcmTokenUpdatedAt: new Date()
+    });
+    console.log('[PushNotifications] Token FCM enregistré sur account:', uid);
+    return true;
+  } catch (error) {
+    console.error('[PushNotifications] Erreur enregistrement FCM account:', error);
+    return false;
+  }
+}
+
+/**
  * Configure l'écoute des notifications en premier plan
  * @param callback - Fonction appelée quand une notification arrive
  * @returns Fonction pour arrêter l'écoute
@@ -220,8 +241,9 @@ export function onForegroundNotification(callback: NotificationCallback): () => 
  * Initialise les notifications push pour un parent
  * Demande la permission et enregistre le token FCM
  * @param tokenIds - Liste des tokenIds des enfants du parent
+ * @param uid - UID Firebase Auth (optionnel, pour les rappels groupes vocaux)
  */
-export async function initializePushNotifications(tokenIds: string[]): Promise<boolean> {
+export async function initializePushNotifications(tokenIds: string[], uid?: string): Promise<boolean> {
   try {
     const supported = await isPushSupported();
     if (!supported) {
@@ -235,11 +257,16 @@ export async function initializePushNotifications(tokenIds: string[]): Promise<b
       return false;
     }
 
-    // Enregistrer le token FCM pour chaque enfant
+    // Enregistrer le token FCM pour chaque enfant (notifications médecin)
     let success = true;
     for (const tokenId of tokenIds) {
       const registered = await registerFcmTokenForParent(tokenId, fcmToken);
       if (!registered) success = false;
+    }
+
+    // Enregistrer aussi sur le compte utilisateur (rappels groupes vocaux)
+    if (uid) {
+      await registerFcmTokenForAccount(uid, fcmToken);
     }
 
     return success;
@@ -268,8 +295,11 @@ function showForegroundNotification(payload: PushNotificationPayload): void {
     notification.onclick = () => {
       window.focus();
       notification.close();
-      // Naviguer vers le dashboard
-      if (window.location.pathname !== '/espace/dashboard') {
+      // Deep link : utiliser le lien de la notification si disponible
+      const deepLink = payload.data?.link;
+      if (deepLink) {
+        window.location.href = deepLink;
+      } else if (window.location.pathname !== '/espace/dashboard') {
         window.location.href = '/espace/dashboard';
       }
     };
@@ -316,6 +346,7 @@ export default {
   requestPermission,
   getFcmToken,
   registerFcmTokenForParent,
+  registerFcmTokenForAccount,
   onForegroundNotification,
   initializePushNotifications,
   updateAppBadge,
