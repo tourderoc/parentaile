@@ -249,33 +249,48 @@ export const SlideContact = () => {
   // ========== HAS CHILDREN: Show composer or manage view ==========
   return (
     <div className="h-full bg-[#FFFBF0] flex flex-col overflow-hidden">
-      {/* Header with toggle */}
-      <div className="bg-white/80 backdrop-blur-md sticky top-0 z-40 border-b border-orange-100">
-        <div className="max-w-md mx-auto px-6 py-3">
-          <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
-            <button
-              onClick={() => setView('compose')}
-              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-bold transition-all ${
-                view === 'compose'
-                  ? 'text-orange-600 bg-white shadow-sm'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              <MessageSquarePlus size={16} />
-              Ecrire
-            </button>
-            <button
-              onClick={() => setView('manage')}
-              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-bold transition-all ${
-                view === 'manage'
-                  ? 'text-orange-600 bg-white shadow-sm'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              <Users size={16} />
-              Mes Enfants
-            </button>
+      {/* Hero Header - same style as Forum */}
+      <div className="sticky top-0 z-40 px-6 pt-3 pb-2">
+        <div className="relative border border-white/60 shadow-premium overflow-hidden bg-white/30 backdrop-blur-xl rounded-[2rem]">
+          <div className="absolute inset-0 bg-gradient-to-br from-blue-500/10 via-transparent to-orange-500/10 mix-blend-overlay" />
+          <div className="absolute inset-0 bg-gradient-to-t from-white/90 via-white/40 to-white/10 pointer-events-none" />
+          <div className="relative px-5 py-3 flex items-center gap-4">
+            <div className="w-10 h-10 bg-white/50 backdrop-blur-md rounded-2xl flex flex-shrink-0 items-center justify-center shadow-sm border border-white/80">
+              <MessageSquarePlus size={20} className="text-blue-600 drop-shadow-sm" />
+            </div>
+            <div className="flex-1">
+              <h1 className="text-lg font-extrabold text-gray-800 tracking-tight leading-tight">Contact</h1>
+              <p className="text-[10px] text-gray-500 font-bold uppercase tracking-[0.15em]">Echanges avec le cabinet</p>
+            </div>
           </div>
+        </div>
+      </div>
+
+      {/* Toggle tabs */}
+      <div className="max-w-md mx-auto px-6 pb-1 pt-1 w-full">
+        <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
+          <button
+            onClick={() => setView('compose')}
+            className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-bold transition-all ${
+              view === 'compose'
+                ? 'text-orange-600 bg-white shadow-sm'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <MessageSquarePlus size={14} />
+            Ecrire
+          </button>
+          <button
+            onClick={() => setView('manage')}
+            className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-bold transition-all ${
+              view === 'manage'
+                ? 'text-orange-600 bg-white shadow-sm'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <Users size={14} />
+            Mes Enfants
+          </button>
         </div>
       </div>
 

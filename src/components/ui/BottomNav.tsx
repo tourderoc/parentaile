@@ -5,18 +5,19 @@ import { motion } from 'framer-motion';
 import { auth, db } from '../../lib/firebase';
 import { collection, query, where, orderBy, getDocs, onSnapshot } from 'firebase/firestore';
 import { useSwiperMode } from '../../lib/swiperContext';
+import { onUnreadParentNotifCount } from '../../lib/parentNotificationService';
 
 export const BottomNav: React.FC = () => {
   const { isSwiperMode } = useSwiperMode();
   const navigate = useNavigate();
   const location = useLocation();
-  const [unreadCount, setUnreadCount] = useState(0);
+  const [unreadDoctorCount, setUnreadDoctorCount] = useState(0);
+  const [unreadParentCount, setUnreadParentCount] = useState(0);
+  const unreadCount = unreadDoctorCount + unreadParentCount;
 
-  // Écouter les messages avec réponse non consultés
+  // Écouter les notifications médecin (via token)
   useEffect(() => {
-    // Skip listeners in swiper mode (BottomNavSwiper handles badges)
     if (isSwiperMode) return;
-
     const user = auth.currentUser;
     if (!user) return;
 
@@ -24,14 +25,12 @@ export const BottomNav: React.FC = () => {
 
     const setupListeners = async () => {
       try {
-        // Récupérer les enfants du parent
         const childrenRef = collection(db, 'accounts', user.uid, 'children');
         const childrenSnap = await getDocs(query(childrenRef, orderBy('addedAt', 'desc')));
         const tokenIds = childrenSnap.docs.map(d => d.id);
 
         if (tokenIds.length === 0) return;
 
-        // Écouter les notifications non lues (temps réel)
         const chunks: string[][] = [];
         for (let i = 0; i < tokenIds.length; i += 10) {
           chunks.push(tokenIds.slice(i, i + 10));
@@ -46,23 +45,24 @@ export const BottomNav: React.FC = () => {
           );
 
           const unsub = onSnapshot(q, (snapshot) => {
-            setUnreadCount(snapshot.docs.length);
-          }, () => {
-            // Silently ignore errors
-          });
+            setUnreadDoctorCount(snapshot.docs.length);
+          }, () => {});
 
           unsubscribes.push(unsub);
         }
-      } catch {
-        // Silently ignore
-      }
+      } catch {}
     };
 
     setupListeners();
+    return () => unsubscribes.forEach(unsub => unsub());
+  }, [isSwiperMode]);
 
-    return () => {
-      unsubscribes.forEach(unsub => unsub());
-    };
+  // Écouter les notifications parentales (groupes, badges, etc.)
+  useEffect(() => {
+    if (isSwiperMode) return;
+    const user = auth.currentUser;
+    if (!user) return;
+    return onUnreadParentNotifCount(user.uid, setUnreadParentCount);
   }, [isSwiperMode]);
 
   // Hide when in swiper mode (BottomNavSwiper handles navigation)

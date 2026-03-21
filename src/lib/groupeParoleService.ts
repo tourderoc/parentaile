@@ -19,7 +19,8 @@ import {
   deleteField,
 } from 'firebase/firestore';
 import type { GroupeParole, MessageGroupe, ThemeGroupe, StructureEtape, EvaluationGroupe, EvaluationPendante, BadgeLevel, ParticipationEntry, UserProgression } from '../types/groupeParole';
-import { getBadgeForPoints } from '../types/groupeParole';
+import { getBadgeForPoints, BADGE_THRESHOLDS } from '../types/groupeParole';
+import { sendParentNotification } from './parentNotificationService';
 
 export interface CreateGroupeData {
   titre: string;
@@ -73,6 +74,15 @@ export async function createGroupeParole(data: CreateGroupeData): Promise<string
     date: new Date(),
     type: 'creation',
   }).catch(() => {}); // fire and forget
+
+  // Notification de confirmation
+  sendParentNotification(
+    data.createurUid,
+    'group_created',
+    'Groupe créé',
+    `Votre groupe "${data.titre}" est prêt. Partagez-le pour inviter d'autres parents !`,
+    { groupeId: docRef.id, groupeTitre: data.titre }
+  );
 
   return docRef.id;
 }
@@ -254,6 +264,25 @@ export async function rejoindreGroupe(
       dateInscription: Timestamp.now(),
     }),
   });
+
+  // Notifier le créateur du groupe
+  try {
+    const groupeSnap = await getDoc(doc(db, 'groupes', groupeId));
+    if (groupeSnap.exists()) {
+      const data = groupeSnap.data();
+      if (data.createurUid && data.createurUid !== participant.uid) {
+        sendParentNotification(
+          data.createurUid,
+          'group_join',
+          'Nouveau participant',
+          `${participant.pseudo} a rejoint votre groupe "${data.titre}"`,
+          { groupeId, groupeTitre: data.titre }
+        );
+      }
+    }
+  } catch {
+    // Non-bloquant
+  }
 }
 
 /**
@@ -346,6 +375,25 @@ export async function submitEvaluation(
     doc(db, 'groupes', evaluation.groupeId, 'evaluations', evaluation.participantUid),
     evalDoc
   );
+
+  // Notifier le créateur du groupe
+  try {
+    const groupeSnap = await getDoc(doc(db, 'groupes', evaluation.groupeId));
+    if (groupeSnap.exists()) {
+      const data = groupeSnap.data();
+      if (data.createurUid && data.createurUid !== evaluation.participantUid) {
+        sendParentNotification(
+          data.createurUid,
+          'evaluation_received',
+          'Nouvel avis reçu',
+          `${evaluation.participantPseudo} a donné son avis sur "${data.titre}"`,
+          { groupeId: evaluation.groupeId, groupeTitre: data.titre }
+        );
+      }
+    }
+  } catch {
+    // Non-bloquant
+  }
 }
 
 /**
@@ -519,6 +567,16 @@ export async function addPoints(
       const currentBadge = snap.data().badge || 'none';
       if (newBadge !== currentBadge) {
         await updateDoc(ref, { badge: newBadge });
+        // Notifier le badge obtenu
+        const badgeInfo = BADGE_THRESHOLDS.find(b => b.level === newBadge);
+        if (badgeInfo) {
+          sendParentNotification(
+            uid,
+            'badge_earned',
+            `Badge "${badgeInfo.label}" obtenu !`,
+            `Félicitations ! Vous avez atteint ${newPoints} points et obtenu le badge ${badgeInfo.label}.`
+          );
+        }
       }
     }
   } catch {

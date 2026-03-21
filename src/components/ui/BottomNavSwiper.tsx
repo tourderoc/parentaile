@@ -5,6 +5,7 @@ import { motion } from 'framer-motion';
 import { auth, db } from '../../lib/firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { collection, query, where, orderBy, getDocs, onSnapshot } from 'firebase/firestore';
+import { onUnreadParentNotifCount } from '../../lib/parentNotificationService';
 
 interface BottomNavSwiperProps {
   activeIndex: number;
@@ -12,7 +13,9 @@ interface BottomNavSwiperProps {
 }
 
 export const BottomNavSwiper: React.FC<BottomNavSwiperProps> = ({ activeIndex, onNavigate }) => {
-  const [unreadCount, setUnreadCount] = useState(0);
+  const [unreadDoctorCount, setUnreadDoctorCount] = useState(0);
+  const [unreadParentCount, setUnreadParentCount] = useState(0);
+  const unreadCount = unreadDoctorCount + unreadParentCount;
   const [currentUser, setCurrentUser] = useState<User | null>(auth.currentUser);
   const navigate = useNavigate();
 
@@ -23,6 +26,7 @@ export const BottomNavSwiper: React.FC<BottomNavSwiperProps> = ({ activeIndex, o
     return () => unsubscribe();
   }, []);
 
+  // Notifications médecin (via token)
   useEffect(() => {
     if (!currentUser) return;
 
@@ -50,22 +54,23 @@ export const BottomNavSwiper: React.FC<BottomNavSwiperProps> = ({ activeIndex, o
           );
 
           const unsub = onSnapshot(q, (snapshot) => {
-            setUnreadCount(snapshot.docs.length);
+            setUnreadDoctorCount(snapshot.docs.length);
           }, () => {});
 
           unsubscribes.push(unsub);
         }
-      } catch {
-        // Silently ignore
-      }
+      } catch {}
     };
 
     setupListeners();
+    return () => unsubscribes.forEach(unsub => unsub());
+  }, [currentUser]);
 
-    return () => {
-      unsubscribes.forEach(unsub => unsub());
-    };
-  }, []);
+  // Notifications parentales (groupes, badges, etc.)
+  useEffect(() => {
+    if (!currentUser) return;
+    return onUnreadParentNotifCount(currentUser.uid, setUnreadParentCount);
+  }, [currentUser]);
 
   const navItems = [
     { id: 'accueil', label: 'Accueil', icon: Home },

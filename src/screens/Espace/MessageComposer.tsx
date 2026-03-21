@@ -2,10 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { auth, db } from '../../lib/firebase';
 import { collection, getDocs, query, orderBy, addDoc, serverTimestamp } from 'firebase/firestore';
-import { BottomNav } from '../../components/ui/BottomNav';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  ArrowLeft,
   Mic,
   MicOff,
   Sparkles,
@@ -325,27 +323,8 @@ export const MessageComposer: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-[#FFFBF0] pb-32">
-      <div className="bg-white/80 backdrop-blur-md sticky top-0 z-40 border-b border-orange-100">
-        <div className="max-w-md mx-auto px-6 py-4 flex items-center gap-4">
-          <button
-            onClick={() => navigate(-1)}
-            className="p-2 hover:bg-orange-50 rounded-xl transition-colors text-gray-500"
-          >
-            <ArrowLeft size={20} />
-          </button>
-          <div>
-            <h1 className="text-lg font-extrabold text-gray-800 tracking-tight">Nouveau Message</h1>
-            {selectedChild && (
-              <span className="text-[10px] font-bold text-orange-500 uppercase tracking-widest">
-                Pour {selectedChild.nickname}
-              </span>
-            )}
-          </div>
-        </div>
-      </div>
-
-      <main className="max-w-md mx-auto px-6 pt-6 space-y-6">
+    <div className="bg-[#FFFBF0] pb-8">
+      <main className="max-w-md mx-auto px-4 pt-3 space-y-3">
         {children.length > 1 && (
           <div className="space-y-2">
              <label className="text-[10px] font-bold text-gray-500 uppercase ml-1 tracking-widest font-sans">Enfant concerné</label>
@@ -440,7 +419,7 @@ export const MessageComposer: React.FC = () => {
 
         <div className="space-y-2 relative">
           <label className="text-[10px] font-bold text-gray-400 uppercase ml-1 tracking-widest">Votre Message</label>
-          <div className={`glass rounded-[2rem] p-4 border-2 transition-all duration-300 shadow-glass min-h-[240px] flex flex-col ${isRecording ? 'border-red-400 bg-red-50/30' : 'border-white focus-within:border-orange-200 focus-within:bg-orange-50/10'}`}>
+          <div className={`glass rounded-2xl p-3 border-2 transition-all duration-300 shadow-glass min-h-[180px] flex flex-col ${isRecording ? 'border-red-400 bg-red-50/30' : 'border-white focus-within:border-orange-200 focus-within:bg-orange-50/10'}`}>
             <textarea
               ref={textareaRef}
               value={message}
@@ -453,7 +432,7 @@ export const MessageComposer: React.FC = () => {
                 }
               }}
               placeholder={isMobile ? "Écrivez votre message ici..." : "Écrivez ici ou utilisez la dictée vocale..."}
-              className="flex-1 w-full bg-transparent resize-none focus:outline-none font-medium text-gray-700 placeholder:text-gray-300 leading-relaxed min-h-[160px] text-base"
+              className="flex-1 w-full bg-transparent resize-none focus:outline-none font-medium text-gray-700 placeholder:text-gray-300 leading-relaxed min-h-[120px] text-base"
               style={{ fontSize: '16px' }}
             />
 
@@ -472,7 +451,7 @@ export const MessageComposer: React.FC = () => {
               {message.length} caractère{message.length > 1 ? 's' : ''}
             </div>
             
-            <div className="flex items-center justify-between pt-4 border-t border-black/5">
+            <div className="flex items-center justify-between pt-2 border-t border-black/5">
               <div className="flex gap-2">
                 {voiceSupported ? (
                   <button
@@ -541,7 +520,7 @@ export const MessageComposer: React.FC = () => {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-indigo-600 rounded-[2rem] p-6 shadow-premium relative overflow-hidden"
+              className="bg-indigo-600 rounded-2xl p-4 shadow-premium relative overflow-hidden"
             >
               <div className="absolute top-[-20%] right-[-10%] w-32 h-32 bg-white/10 rounded-full blur-2xl" />
               <div className="relative z-10 space-y-4">
@@ -549,8 +528,8 @@ export const MessageComposer: React.FC = () => {
                   <Sparkles size={16} className="text-indigo-200" />
                   <span className="text-indigo-100 text-[10px] font-bold uppercase tracking-widest">Suggestion de Parent'aile</span>
                 </div>
-                <p className="text-white font-medium leading-relaxed italic">"{reformulatedMessage}"</p>
-                <div className="flex gap-2 pt-2">
+                <p className="text-white font-medium leading-relaxed italic text-sm">"{reformulatedMessage}"</p>
+                <div className="flex gap-2 pt-1">
                   <button
                     onClick={useReformulated}
                     className="flex-1 h-12 bg-white text-indigo-600 rounded-2xl font-bold text-sm shadow-lg hover:bg-indigo-50 transition-colors"
@@ -579,11 +558,11 @@ export const MessageComposer: React.FC = () => {
           </motion.div>
         )}
 
-        <div className="pt-4">
+        <div className="pt-2">
           <button
             onClick={handleSend}
             disabled={isSending || !selectedChild || !message.trim()}
-            className="w-full h-16 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 disabled:bg-gray-300 rounded-[1.5rem] shadow-premium flex items-center justify-center gap-3 transition-all group"
+            className="w-full h-14 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 disabled:bg-gray-300 rounded-2xl shadow-premium flex items-center justify-center gap-3 transition-all group"
           >
             {isSending ? (
               <Loader2 className="animate-spin text-white" />
@@ -594,13 +573,11 @@ export const MessageComposer: React.FC = () => {
               </>
             )}
           </button>
-          <p className="text-center text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-4">
+          <p className="text-center text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-2">
             Le médecin vous répondra par email.
           </p>
         </div>
       </main>
-
-      <BottomNav />
     </div>
   );
 };

@@ -11,17 +11,20 @@ import {
   getDocs,
   onSnapshot,
 } from 'firebase/firestore';
-import { MessageSquare, Users, ChevronRight, Sparkles, LayoutGrid, Loader2, Heart, Feather, Wind, Home, X, Star } from 'lucide-react';
+import { Bell, Users, ChevronRight, Sparkles, LayoutGrid, Loader2, Heart, Feather, Wind, Home, X, Star } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { onGroupesParole, onPendingEvaluations, onUserProgression } from '../../../lib/groupeParoleService';
 import type { GroupeParole, EvaluationPendante, UserProgression, BadgeLevel } from '../../../types/groupeParole';
 import { getNextBadge, BADGE_THRESHOLDS, THEME_COLORS, THEME_LABELS } from '../../../types/groupeParole';
+import { onUnreadParentNotifCount } from '../../../lib/parentNotificationService';
 
 export const SlideMonEspace = () => {
   const navigate = useNavigate();
   const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(auth.currentUser);
   const [showAuthModal, setShowAuthModal] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(0);
+  const [unreadDoctorCount, setUnreadDoctorCount] = useState(0);
+  const [unreadParentCount, setUnreadParentCount] = useState(0);
+  const unreadCount = unreadDoctorCount + unreadParentCount;
   const [myGroupsCount, setMyGroupsCount] = useState(0);
   const [pendingEvals, setPendingEvals] = useState<EvaluationPendante[]>([]);
   const [progression, setProgression] = useState<UserProgression | null>(null);
@@ -37,10 +40,10 @@ export const SlideMonEspace = () => {
     return () => unsub();
   }, []);
 
-  // Unread notifications count (same logic as BottomNavSwiper)
+  // Unread doctor notifications count (via token)
   useEffect(() => {
     if (!currentUser) {
-      setUnreadCount(0);
+      setUnreadDoctorCount(0);
       return;
     }
 
@@ -52,10 +55,7 @@ export const SlideMonEspace = () => {
         const childrenSnap = await getDocs(query(childrenRef, orderBy('addedAt', 'desc')));
         const tokenIds = childrenSnap.docs.map((d) => d.id);
 
-        if (tokenIds.length === 0) {
-          setUnreadCount(0);
-          return;
-        }
+        if (tokenIds.length === 0) return;
 
         const chunks: string[][] = [];
         for (let i = 0; i < tokenIds.length; i += 10) {
@@ -65,20 +65,23 @@ export const SlideMonEspace = () => {
         for (const chunk of chunks) {
           const notifRef = collection(db, 'notifications');
           const q = query(notifRef, where('tokenId', 'in', chunk), where('read', '==', false));
-          const unsub = onSnapshot(
-            q,
-            (snapshot) => setUnreadCount(snapshot.docs.length),
-            () => {}
-          );
+          const unsub = onSnapshot(q, (snapshot) => setUnreadDoctorCount(snapshot.docs.length), () => {});
           unsubscribes.push(unsub);
         }
-      } catch {
-        // Silently ignore
-      }
+      } catch {}
     };
 
     setup();
     return () => unsubscribes.forEach((u) => u());
+  }, [currentUser]);
+
+  // Unread parent notifications count (groupes, badges, etc.)
+  useEffect(() => {
+    if (!currentUser) {
+      setUnreadParentCount(0);
+      return;
+    }
+    return onUnreadParentNotifCount(currentUser.uid, setUnreadParentCount);
   }, [currentUser]);
 
   // My groups count
@@ -164,7 +167,7 @@ export const SlideMonEspace = () => {
 
       {/* Cards */}
       <div className="px-6 max-w-md mx-auto space-y-4">
-        {/* Card: Mes Messages */}
+        {/* Card: Notifications */}
         <motion.button
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -172,12 +175,12 @@ export const SlideMonEspace = () => {
           onClick={() => handleCardClick('/espace/mes-messages')}
           className="w-full glass rounded-3xl p-5 flex items-center gap-4 shadow-glass text-left active:scale-[0.98] transition-transform"
         >
-          <div className="w-14 h-14 bg-gradient-to-br from-blue-400 to-blue-500 rounded-2xl flex items-center justify-center flex-shrink-0 shadow-lg shadow-blue-500/20">
-            <MessageSquare size={24} className="text-white" />
+          <div className="w-14 h-14 bg-gradient-to-br from-orange-400 to-pink-500 rounded-2xl flex items-center justify-center flex-shrink-0 shadow-lg shadow-orange-500/20">
+            <Bell size={24} className="text-white" />
           </div>
           <div className="flex-1 min-w-0">
-            <h3 className="text-base font-extrabold text-gray-800 tracking-tight">Mes Messages</h3>
-            <p className="text-xs text-gray-400 font-medium mt-0.5">Échanges avec le médecin</p>
+            <h3 className="text-base font-extrabold text-gray-800 tracking-tight">Notifications</h3>
+            <p className="text-xs text-gray-400 font-medium mt-0.5">Messages et activite</p>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
             {unreadCount > 0 && (

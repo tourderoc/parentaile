@@ -1,0 +1,139 @@
+import { db } from './firebase';
+import {
+  collection,
+  addDoc,
+  query,
+  where,
+  orderBy,
+  onSnapshot,
+  updateDoc,
+  doc,
+  serverTimestamp,
+  writeBatch,
+  getDocs,
+} from 'firebase/firestore';
+
+// ========== TYPES ==========
+
+export type ParentNotifType =
+  | 'group_join'        // Un parent a rejoint votre groupe
+  | 'badge_earned'      // Vous avez obtenu un nouveau badge
+  | 'evaluation_received' // Un participant a évalué votre groupe
+  | 'session_ended'     // La session vocale est terminée
+  | 'group_created';    // Votre groupe a été créé
+
+export interface ParentNotification {
+  id: string;
+  type: ParentNotifType;
+  recipientUid: string;
+  title: string;
+  body: string;
+  read: boolean;
+  createdAt: Date;
+  // Contexte pour la navigation
+  groupeId?: string;
+  groupeTitre?: string;
+}
+
+// ========== ICÔNES ET COULEURS PAR TYPE ==========
+
+export const NOTIF_CONFIG: Record<ParentNotifType, { icon: string; color: string; bg: string }> = {
+  group_join:          { icon: '👤', color: 'text-orange-600', bg: 'bg-orange-50' },
+  badge_earned:        { icon: '⭐', color: 'text-amber-600',  bg: 'bg-amber-50' },
+  evaluation_received: { icon: '💬', color: 'text-pink-600',   bg: 'bg-pink-50' },
+  session_ended:       { icon: '🎙️', color: 'text-violet-600', bg: 'bg-violet-50' },
+  group_created:       { icon: '✅', color: 'text-emerald-600', bg: 'bg-emerald-50' },
+};
+
+// ========== ÉCRITURE ==========
+
+export async function sendParentNotification(
+  recipientUid: string,
+  type: ParentNotifType,
+  title: string,
+  body: string,
+  context?: { groupeId?: string; groupeTitre?: string }
+): Promise<void> {
+  try {
+    await addDoc(collection(db, 'parentNotifications'), {
+      type,
+      recipientUid,
+      title,
+      body,
+      read: false,
+      createdAt: serverTimestamp(),
+      ...(context?.groupeId ? { groupeId: context.groupeId } : {}),
+      ...(context?.groupeTitre ? { groupeTitre: context.groupeTitre } : {}),
+    });
+  } catch (err) {
+    console.error('Erreur envoi notification parent:', err);
+  }
+}
+
+// ========== LECTURE ==========
+
+export function onParentNotifications(
+  uid: string,
+  callback: (notifications: ParentNotification[]) => void
+): () => void {
+  const q = query(
+    collection(db, 'parentNotifications'),
+    where('recipientUid', '==', uid),
+    orderBy('createdAt', 'desc')
+  );
+
+  return onSnapshot(q, (snapshot) => {
+    const notifs: ParentNotification[] = snapshot.docs.map((d) => ({
+      id: d.id,
+      ...d.data(),
+      createdAt: d.data().createdAt?.toDate?.() || new Date(),
+    })) as ParentNotification[];
+    callback(notifs);
+  }, () => {
+    // Silently handle permission errors
+    callback([]);
+  });
+}
+
+export function onUnreadParentNotifCount(
+  uid: string,
+  callback: (count: number) => void
+): () => void {
+  const q = query(
+    collection(db, 'parentNotifications'),
+    where('recipientUid', '==', uid),
+    where('read', '==', false)
+  );
+
+  return onSnapshot(q, (snapshot) => {
+    callback(snapshot.docs.length);
+  }, () => {
+    callback(0);
+  });
+}
+
+export async function markParentNotifAsRead(notifId: string): Promise<void> {
+  try {
+    await updateDoc(doc(db, 'parentNotifications', notifId), { read: true });
+  } catch (err) {
+    console.error('Erreur marquage notification:', err);
+  }
+}
+
+export async function markAllParentNotifsAsRead(uid: string): Promise<void> {
+  try {
+    const q = query(
+      collection(db, 'parentNotifications'),
+      where('recipientUid', '==', uid),
+      where('read', '==', false)
+    );
+    const snap = await getDocs(q);
+    if (snap.empty) return;
+
+    const batch = writeBatch(db);
+    snap.docs.forEach((d) => batch.update(d.ref, { read: true }));
+    await batch.commit();
+  } catch (err) {
+    console.error('Erreur marquage toutes notifs:', err);
+  }
+}
