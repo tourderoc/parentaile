@@ -83,8 +83,9 @@ const GroupeRatingBadge: React.FC<{ groupeId: string }> = ({ groupeId }) => {
 const GroupeCard: React.FC<{
   groupe: GroupeParole;
   index: number;
+  total: number;
   onClick?: () => void;
-}> = ({ groupe, index, onClick }) => {
+}> = ({ groupe, index, total, onClick }) => {
   const navigate = useNavigate();
   const colors = THEME_COLORS[groupe.theme];
   const jours = joursRestants(groupe.dateExpiration);
@@ -125,6 +126,9 @@ const GroupeCard: React.FC<{
             {THEME_SHORT_LABELS[groupe.theme]}
           </span>
           <div className="relative z-10 flex items-center gap-2">
+            <span className="text-[10px] font-extrabold bg-white/25 text-white px-2 py-0.5 rounded-full backdrop-blur-md shadow-sm">
+              {index + 1}/{total}
+            </span>
             {groupe.isTestGroup && (
               <button
                 onClick={(e) => {
@@ -512,7 +516,7 @@ export const SlideForum = () => {
                           filter: isActive ? 'drop-shadow(0 12px 24px rgba(0,0,0,0.06))' : 'drop-shadow(0 4px 8px rgba(0,0,0,0.02))'
                         }}
                       >
-                        <GroupeCard groupe={groupe} index={i} onClick={() => navigate(`/espace/groupes/${groupe.id}`)} />
+                        <GroupeCard groupe={groupe} index={i} total={groupesFiltres.length} onClick={() => navigate(`/espace/groupes/${groupe.id}`)} />
                       </div>
                     )}
                   </SwiperSlide>

@@ -2940,17 +2940,38 @@ export const SalleVocalePage = () => {
             return;
           }
 
-          // Normal groups: check if user has a pending evaluation → go straight to evaluation
+          // Check if session is still active (not ended by animateur)
+          const sessionActive = data.sessionState?.sessionActive !== false;
+
+          // Normal groups: check if user has a pending evaluation
+          // BUT only redirect to evaluation if session is no longer active
           const currentUsr = auth.currentUser;
           if (currentUsr) {
             try {
               const evalStatus = await getEvaluationStatus(groupeId, currentUsr.uid);
-              if (evalStatus === 'pending') {
+              if (evalStatus === 'pending' && !sessionActive) {
                 setStep('evaluation');
                 return;
               }
             } catch {
               // Firestore rules may not allow reading evaluations yet
+            }
+
+            // If session is still active and user is a participant, go directly to room
+            if (sessionActive) {
+              const isParticipant = (data.participants || []).some(
+                (p: any) => p.uid === currentUsr.uid
+              );
+              if (isParticipant) {
+                // Pre-fill pseudo and skip charte/waiting
+                const accSnap = await getDoc(doc(db, 'accounts', currentUsr.uid));
+                if (accSnap.exists()) {
+                  setSessionPrenom(accSnap.data()?.pseudo || currentUsr.displayName || '');
+                }
+                await connectToRoom(data.passwordVocal || undefined);
+                setStep('room');
+                return;
+              }
             }
           }
         }
