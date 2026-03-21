@@ -7,7 +7,6 @@ import {
   updateDoc,
   getDoc
 } from 'firebase/firestore';
-import { BottomNav } from '../../components/ui/BottomNav';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft,
@@ -24,7 +23,8 @@ import {
   EyeOff,
   Bell,
   Volume2,
-  Smile
+  Smile,
+  Settings
 } from 'lucide-react';
 import {
   getUserPreferences,
@@ -300,19 +300,26 @@ export const EspaceSettings = () => {
 
   return (
     <div className="min-h-full flex flex-col">
-      {/* Header + Tab Bar - Transparent Glass */}
-      <div className="bg-white/40 backdrop-blur-xl sticky top-0 z-40 border-b border-white/40 shadow-sm">
-        <div className="max-w-md mx-auto px-6 py-4 flex items-center gap-4">
-          <button
-            onClick={() => navigate('/espace/dashboard')}
-            className="p-2 hover:bg-orange-50 rounded-xl transition-colors text-gray-500"
-          >
-            <ArrowLeft size={20} />
-          </button>
-          <h1 className="text-lg font-extrabold text-gray-800 tracking-tight">Parametres</h1>
+      {/* Hero Header - same style as Forum/Groupes/Contact */}
+      <div className="sticky top-0 z-40 px-6 pt-3 pb-2">
+        <div className="relative border border-white/60 shadow-premium overflow-hidden bg-white/30 backdrop-blur-xl rounded-[2rem]">
+          <div className="absolute inset-0 bg-gradient-to-br from-orange-500/10 via-transparent to-blue-500/10 mix-blend-overlay" />
+          <div className="absolute inset-0 bg-gradient-to-t from-white/90 via-white/40 to-white/10 pointer-events-none" />
+          <div className="relative px-5 py-3 flex items-center gap-4">
+            <div className="w-10 h-10 bg-white/50 backdrop-blur-md rounded-2xl flex flex-shrink-0 items-center justify-center shadow-sm border border-white/80">
+              <Settings size={20} className="text-orange-600 drop-shadow-sm" />
+            </div>
+            <div className="flex-1">
+              <h1 className="text-lg font-extrabold text-gray-800 tracking-tight leading-tight">Parametres</h1>
+              <p className="text-[10px] text-gray-500 font-bold uppercase tracking-[0.15em]">Compte, avatar et notifications</p>
+            </div>
+          </div>
         </div>
-        {/* Tab Bar */}
-        <div className="flex gap-1 px-6 pb-3 max-w-md mx-auto">
+      </div>
+
+      {/* Tab Bar */}
+      <div className="max-w-md mx-auto px-6 pb-1 pt-1 w-full">
+        <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
           {[
             { icon: User, label: 'Compte' },
             { icon: Smile, label: 'Avatar' },
@@ -321,13 +328,13 @@ export const EspaceSettings = () => {
             <button
               key={index}
               onClick={() => setActiveTab(index)}
-              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold transition-colors ${
+              className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-bold transition-all ${
                 activeTab === index
-                  ? 'text-orange-600 bg-orange-100'
-                  : 'text-gray-700 hover:text-gray-900'
+                  ? 'text-orange-600 bg-white shadow-sm'
+                  : 'text-gray-500 hover:text-gray-700'
               }`}
             >
-              <tab.icon size={16} />
+              <tab.icon size={14} />
               {tab.label}
             </button>
           ))}
@@ -869,7 +876,6 @@ export const EspaceSettings = () => {
         )}
       </AnimatePresence>
 
-      <BottomNav />
     </div>
   );
 };
