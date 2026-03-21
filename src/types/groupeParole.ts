@@ -27,9 +27,10 @@ export interface StructureEtape {
 
 export const STRUCTURE_DEFAUT: StructureEtape[] = [
   { label: 'Présentations', dureeMinutes: 5 },
-  { label: 'Partage du vécu', dureeMinutes: 15 },
+  { label: 'Partage du vécu', dureeMinutes: 10 },
   { label: 'Tour de parole', dureeMinutes: 15 },
   { label: 'Discussion libre', dureeMinutes: 10 },
+  { label: 'Clôture', dureeMinutes: 5 },
 ];
 
 export interface GroupeParole {
@@ -50,6 +51,7 @@ export interface GroupeParole {
   messageCount?: number;
   passwordVocal?: string;
   isTestGroup?: boolean;
+  sessionState?: SessionState;
 }
 
 export const THEME_LABELS: Record<ThemeGroupe, string> = {
@@ -60,12 +62,12 @@ export const THEME_LABELS: Record<ThemeGroupe, string> = {
   autre: 'Autre sujet',
 };
 
-export const THEME_COLORS: Record<ThemeGroupe, { bg: string; text: string; light: string }> = {
-  ecole: { bg: 'bg-blue-500', text: 'text-blue-600', light: 'bg-blue-50' },
-  comportement: { bg: 'bg-purple-500', text: 'text-purple-600', light: 'bg-purple-50' },
-  emotions: { bg: 'bg-pink-500', text: 'text-pink-600', light: 'bg-pink-50' },
-  developpement: { bg: 'bg-emerald-500', text: 'text-emerald-600', light: 'bg-emerald-50' },
-  autre: { bg: 'bg-amber-500', text: 'text-amber-600', light: 'bg-amber-50' },
+export const THEME_COLORS: Record<ThemeGroupe, { bg: string; text: string; light: string; glass: string }> = {
+  ecole: { bg: 'bg-blue-500', text: 'text-blue-600', light: 'bg-blue-50', glass: 'bg-blue-500/40' },
+  comportement: { bg: 'bg-purple-500', text: 'text-purple-600', light: 'bg-purple-50', glass: 'bg-purple-500/40' },
+  emotions: { bg: 'bg-pink-500', text: 'text-pink-600', light: 'bg-pink-50', glass: 'bg-pink-500/40' },
+  developpement: { bg: 'bg-emerald-500', text: 'text-emerald-600', light: 'bg-emerald-50', glass: 'bg-emerald-500/40' },
+  autre: { bg: 'bg-amber-500', text: 'text-amber-600', light: 'bg-amber-50', glass: 'bg-amber-500/40' },
 };
 
 // ========== Évaluation post-groupe ==========
@@ -144,3 +146,24 @@ export const THEME_SHORT_LABELS: Record<ThemeGroupe, string> = {
   developpement: 'Développement',
   autre: 'Autre',
 };
+
+// ========== Session vocale en temps réel ==========
+export interface SessionState {
+  currentPhaseIndex: number;
+  extendedMinutes: number;       // 0 ou 5
+  sessionActive: boolean;
+  phaseStartedAt: Date;
+  sessionStartedAt: Date;
+}
+
+export type MicPolicy = 'open' | 'muted_raise_hand' | 'muted_animateur_gives';
+
+export const PHASE_MIC_POLICY: Record<string, MicPolicy> = {
+  'Présentations': 'open',
+  'Partage du vécu': 'muted_raise_hand',
+  'Tour de parole': 'muted_animateur_gives',
+  'Discussion libre': 'open',
+  'Clôture': 'muted_raise_hand',
+};
+
+export const DEFAULT_MIC_POLICY: MicPolicy = 'muted_raise_hand';

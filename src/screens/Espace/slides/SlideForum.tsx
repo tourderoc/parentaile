@@ -111,25 +111,33 @@ const GroupeCard: React.FC<{
       onClick={onClick}
     >
       <div className="glass rounded-3xl border border-white/60 shadow-glass overflow-hidden h-full flex flex-col bg-white/40 hover:bg-white/60 transition-colors duration-300">
-        {/* Bandeau thème avec dégradé subtil */}
-        <div className={`${colors.bg} bg-gradient-to-r from-transparent to-black/10 px-4 py-3 flex items-center justify-between border-b border-white/20`}>
-          <span className="text-[10px] font-extrabold text-white uppercase tracking-[0.15em] drop-shadow-sm">
+        {/* Bandeau thème avec image de fond (micro) et effet verre coloré */}
+        <div className={`relative px-4 py-3 flex items-center justify-between border-b border-white/30 overflow-hidden ${colors.glass} backdrop-blur-md`}>
+          {/* Base image (Microphone) converted to grayscale/luminosity to take the theme color */}
+          <div 
+            className="absolute inset-0 bg-cover bg-center mix-blend-luminosity opacity-40 scale-125 origin-center"
+            style={{ backgroundImage: 'url(/assets/backgrounds/slide_bg_forum.png)' }}
+          />
+          {/* Inner gradient to ensure text readability */}
+          <div className="absolute inset-0 bg-gradient-to-r from-black/20 via-transparent to-black/10" />
+          
+          <span className="relative z-10 text-[10px] font-extrabold text-white uppercase tracking-[0.15em] drop-shadow-md">
             {THEME_SHORT_LABELS[groupe.theme]}
           </span>
-          <div className="flex items-center gap-2">
+          <div className="relative z-10 flex items-center gap-2">
             {groupe.isTestGroup && (
               <button
                 onClick={(e) => {
                   e.stopPropagation();
                   navigate('/espace/test-config');
                 }}
-                className="w-7 h-7 bg-white/25 backdrop-blur-md rounded-lg flex items-center justify-center hover:bg-white/40 transition-colors"
+                className="w-7 h-7 bg-white/25 backdrop-blur-md rounded-lg flex items-center justify-center hover:bg-white/40 transition-colors shadow-sm"
               >
                 <Settings size={14} className="text-white" />
               </button>
             )}
             {estComplet && (
-              <span className="text-[9px] font-bold bg-white/25 text-white px-2 py-0.5 rounded-full uppercase tracking-wider backdrop-blur-md">
+              <span className="text-[9px] font-bold bg-white/25 text-white px-2 py-0.5 rounded-full uppercase tracking-wider backdrop-blur-md shadow-sm">
                 Complet
               </span>
             )}
@@ -310,16 +318,50 @@ export const SlideForum = () => {
   }
 
   return (
-    <div className="h-full bg-[#FFFBF0] overflow-y-auto pb-32">
-      {/* Header sticky */}
-      <div className="bg-white/80 backdrop-blur-md sticky top-0 z-40 border-b border-orange-100">
-        <div className="max-w-md mx-auto px-6 py-4">
-          <h1 className="text-lg font-extrabold text-gray-800 tracking-tight">
-            Groupes de parole
-          </h1>
-          <p className="text-[11px] text-gray-400 font-medium mt-0.5">
-            Petits cercles d'échange entre parents
-          </p>
+    <div className="h-full bg-[#FFFBF0] flex flex-col relative overflow-hidden">
+      {/* Enhanced Decorative floating blobs for deep glass effect */}
+      <div className="absolute top-[-10%] left-[-20%] w-96 h-96 bg-orange-300/60 rounded-full blur-[90px] animate-float pointer-events-none" />
+      <div className="absolute top-[30%] right-[-20%] w-80 h-80 bg-rose-300/50 rounded-full blur-[90px] animate-float pointer-events-none" style={{ animationDelay: '1.5s' }} />
+      <div className="absolute bottom-[-10%] left-[10%] w-72 h-72 bg-purple-300/40 rounded-full blur-[90px] animate-float pointer-events-none" style={{ animationDelay: '3s' }} />
+
+      {/* Full-screen Glass Overlay */}
+      <div className="absolute inset-0 bg-white/30 backdrop-blur-[24px] pointer-events-none z-0" />
+      
+      {/* Scrollable Container Over Glass */}
+      <div className="absolute inset-0 z-10 overflow-y-auto pb-32">
+
+      {/* Hero Header sticky - Floating Cartouche Version */}
+      <div className="sticky top-0 z-40 px-6 pt-5 pb-3">
+        <div className="relative border border-white/60 shadow-premium overflow-hidden bg-white/30 backdrop-blur-xl rounded-[2rem]">
+          {/* Abstract tinted background overlay */}
+          <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/10 via-transparent to-orange-500/10 mix-blend-overlay" />
+          
+          {/* Microscope Image Background */}
+          <div className="absolute inset-[-100%] opacity-[0.25] mix-blend-luminosity">
+            <img 
+              src="/assets/backgrounds/slide_bg_forum.png" 
+              alt="Microphone Wallpaper"
+              className="w-full h-full object-cover transform -scale-x-100 scale-150 translate-x-1/4 -translate-y-[15%]"
+            />
+          </div>
+          
+          {/* Fade gradient for readability */}
+          <div className="absolute inset-0 bg-gradient-to-t from-white/90 via-white/40 to-white/10 pointer-events-none" />
+
+          {/* Compact Flex Content */}
+          <div className="relative px-5 py-4 flex items-center gap-4">
+            <div className="w-12 h-12 bg-white/50 backdrop-blur-md rounded-2xl flex flex-shrink-0 items-center justify-center shadow-sm border border-white/80">
+              <Mic size={24} className="text-purple-600 drop-shadow-sm" />
+            </div>
+            <div className="flex-1">
+              <h1 className="text-[19px] font-extrabold text-gray-800 tracking-tight drop-shadow-sm leading-tight">
+                Groupes de parole
+              </h1>
+              <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mt-0.5 opacity-90 drop-shadow-sm line-clamp-1">
+                Cercles d'échange
+              </p>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -403,7 +445,7 @@ export const SlideForum = () => {
             <div className="-mx-6" onTouchStart={(e: React.TouchEvent) => e.stopPropagation()} onTouchMove={(e: React.TouchEvent) => e.stopPropagation()}>
               <Swiper
                 nested={true}
-                slidesPerView={1.25}
+                slidesPerView={1.4}
                 spaceBetween={16}
                 centeredSlides={true}
                 className="w-full py-6"
@@ -531,6 +573,7 @@ export const SlideForum = () => {
         </div>,
         document.body
       )}
+      </div> {/* End scrollable container */}
     </div>
   );
 };

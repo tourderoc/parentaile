@@ -21,6 +21,10 @@ import {
   Minus,
   Plus,
   RotateCcw,
+  Trash2,
+  Star,
+  ChevronUp,
+  ChevronDown,
 } from 'lucide-react';
 import { auth, db } from '../../../lib/firebase';
 import { doc, getDoc } from 'firebase/firestore';
@@ -266,11 +270,80 @@ export const CreateGroupeParole: React.FC<CreateGroupeParoleProps> = ({ onBack }
   };
 
   // --- Structure helpers ---
+  const MAX_TOTAL_MINUTES = 45;
+  const MIN_PHASE_MINUTES = 3;
+  const MAX_PHASES = 7;
+
+  const PHASES_SUGGEREES = [
+    'Présentations', 'Partage du vécu', 'Tour de parole', 'Discussion libre',
+    'Clôture', 'Questions / Réponses', 'Activité guidée', 'Méditation / Respiration',
+  ];
+
   const updateStructureEtape = (index: number, field: keyof StructureEtape, value: string | number) => {
+    if (field === 'dureeMinutes') {
+      const numValue = value as number;
+      if (numValue < MIN_PHASE_MINUTES) return;
+      // Check if increasing would exceed max
+      const currentTotal = structure.reduce((sum, s, i) => sum + (i === index ? 0 : s.dureeMinutes), 0);
+      if (currentTotal + numValue > MAX_TOTAL_MINUTES) return;
+    }
     setStructure(prev => prev.map((s, i) => i === index ? { ...s, [field]: value } : s));
   };
 
+  const [structureToast, setStructureToast] = useState<string | null>(null);
+
+  const addPhase = (label: string = 'Nouvelle étape') => {
+    if (structure.length >= MAX_PHASES) return;
+    const newPhaseDuration = 5;
+    const currentTotal = structure.reduce((sum, s) => sum + s.dureeMinutes, 0);
+    const remaining = MAX_TOTAL_MINUTES - currentTotal;
+
+    if (remaining >= newPhaseDuration) {
+      // Enough room — just add
+      setStructure(prev => [...prev, { label, dureeMinutes: newPhaseDuration }]);
+    } else {
+      // Need to redistribute: reduce other phases proportionally
+      const deficit = newPhaseDuration - remaining;
+      const reducibleTotal = structure.reduce((sum, s) => sum + Math.max(0, s.dureeMinutes - MIN_PHASE_MINUTES), 0);
+      if (reducibleTotal < deficit) return; // Can't reduce enough
+
+      let toReduce = deficit;
+      const adjusted = structure.map(s => {
+        if (toReduce <= 0) return s;
+        const canReduce = s.dureeMinutes - MIN_PHASE_MINUTES;
+        const reduction = Math.min(canReduce, Math.ceil(toReduce * (canReduce / reducibleTotal)));
+        toReduce -= reduction;
+        return { ...s, dureeMinutes: s.dureeMinutes - reduction };
+      });
+      // Fix rounding: if toReduce > 0, take from the longest phase
+      if (toReduce > 0) {
+        const longestIdx = adjusted.reduce((maxI, s, i, arr) => s.dureeMinutes > arr[maxI].dureeMinutes ? i : maxI, 0);
+        adjusted[longestIdx] = { ...adjusted[longestIdx], dureeMinutes: adjusted[longestIdx].dureeMinutes - toReduce };
+      }
+      setStructure([...adjusted, { label, dureeMinutes: newPhaseDuration }]);
+      setStructureToast('Durées ajustées pour rester à 45 min');
+      setTimeout(() => setStructureToast(null), 3000);
+    }
+  };
+
+  const removePhase = (index: number) => {
+    if (structure.length <= 1) return;
+    setStructure(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const movePhase = (index: number, direction: 'up' | 'down') => {
+    const target = direction === 'up' ? index - 1 : index + 1;
+    if (target < 0 || target >= structure.length) return;
+    setStructure(prev => {
+      const next = [...prev];
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
+  };
+
   const totalMinutes = structure.reduce((sum, s) => sum + s.dureeMinutes, 0);
+  const remainingMinutes = MAX_TOTAL_MINUTES - totalMinutes;
+  const canAddPhase = structure.length < MAX_PHASES;
 
   // --- Submit ---
   const handlePublish = async () => {
@@ -680,8 +753,14 @@ export const CreateGroupeParole: React.FC<CreateGroupeParoleProps> = ({ onBack }
                     }`}>
                       {structureType === 'structuree' && <div className="w-2 h-2 bg-white rounded-full" />}
                     </div>
-                    <div>
-                      <p className="text-sm font-bold text-gray-800">Avec une structure</p>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-bold text-gray-800">Avec une structure</p>
+                        <span className="flex items-center gap-0.5 text-[8px] font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-full uppercase">
+                          <Star size={8} className="fill-amber-500 text-amber-500" />
+                          Recommandé
+                        </span>
+                      </div>
                       <p className="text-[10px] text-gray-400 font-medium">Un cadre proposé pour guider les échanges</p>
                     </div>
                   </button>
@@ -698,36 +777,125 @@ export const CreateGroupeParole: React.FC<CreateGroupeParoleProps> = ({ onBack }
                     >
                       <div className="glass rounded-2xl border-2 border-white shadow-glass p-4 space-y-3">
                         {structure.map((etape, index) => (
-                          <div key={index} className="flex items-center gap-3">
+                          <div key={index} className="flex items-center gap-1.5">
+                            {/* Move up/down */}
+                            <div className="flex flex-col gap-0.5">
+                              <button
+                                onClick={() => movePhase(index, 'up')}
+                                disabled={index === 0}
+                                className={`w-5 h-5 rounded flex items-center justify-center transition-colors ${
+                                  index === 0 ? 'text-gray-200' : 'text-gray-400 hover:bg-gray-100 active:scale-90'
+                                }`}
+                              >
+                                <ChevronUp size={12} />
+                              </button>
+                              <button
+                                onClick={() => movePhase(index, 'down')}
+                                disabled={index === structure.length - 1}
+                                className={`w-5 h-5 rounded flex items-center justify-center transition-colors ${
+                                  index === structure.length - 1 ? 'text-gray-200' : 'text-gray-400 hover:bg-gray-100 active:scale-90'
+                                }`}
+                              >
+                                <ChevronDown size={12} />
+                              </button>
+                            </div>
                             <input
                               type="text"
                               value={etape.label}
                               onChange={(e) => updateStructureEtape(index, 'label', e.target.value)}
                               className="flex-1 bg-white/60 rounded-xl px-3 py-2 text-sm font-semibold text-gray-700 focus:outline-none focus:ring-2 focus:ring-orange-200 border border-gray-100"
                               style={{ fontSize: '14px' }}
+                              placeholder="Nom de l'étape"
                             />
-                            <div className="flex items-center gap-1.5">
+                            <div className="flex items-center gap-1">
                               <button
-                                onClick={() => updateStructureEtape(index, 'dureeMinutes', Math.max(1, etape.dureeMinutes - 5))}
-                                className="w-7 h-7 rounded-lg bg-gray-100 flex items-center justify-center text-gray-500 hover:bg-gray-200 transition-colors"
+                                onClick={() => updateStructureEtape(index, 'dureeMinutes', etape.dureeMinutes - 1)}
+                                disabled={etape.dureeMinutes <= MIN_PHASE_MINUTES}
+                                className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${
+                                  etape.dureeMinutes <= MIN_PHASE_MINUTES ? 'bg-gray-50 text-gray-300 cursor-not-allowed' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                                }`}
                               >
                                 <Minus size={14} />
                               </button>
                               <span className="text-xs font-bold text-gray-600 w-10 text-center">{etape.dureeMinutes}min</span>
                               <button
-                                onClick={() => updateStructureEtape(index, 'dureeMinutes', etape.dureeMinutes + 5)}
-                                className="w-7 h-7 rounded-lg bg-gray-100 flex items-center justify-center text-gray-500 hover:bg-gray-200 transition-colors"
+                                onClick={() => updateStructureEtape(index, 'dureeMinutes', etape.dureeMinutes + 1)}
+                                disabled={remainingMinutes <= 0}
+                                className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${
+                                  remainingMinutes <= 0 ? 'bg-gray-50 text-gray-300 cursor-not-allowed' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                                }`}
                               >
                                 <Plus size={14} />
                               </button>
                             </div>
+                            {structure.length > 1 && (
+                              <button
+                                onClick={() => removePhase(index)}
+                                className="w-7 h-7 rounded-lg bg-red-50 flex items-center justify-center text-red-400 hover:bg-red-100 transition-colors"
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            )}
                           </div>
                         ))}
 
+                        {/* Toast redistribution */}
+                        <AnimatePresence>
+                          {structureToast && (
+                            <motion.p
+                              initial={{ opacity: 0, y: -5 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              exit={{ opacity: 0 }}
+                              className="text-[10px] font-bold text-blue-500 bg-blue-50 px-3 py-1.5 rounded-lg text-center"
+                            >
+                              {structureToast}
+                            </motion.p>
+                          )}
+                        </AnimatePresence>
+
+                        {/* Ajouter une étape */}
+                        {canAddPhase && (
+                          <div className="pt-2 border-t border-gray-100">
+                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Ajouter une étape</p>
+                            <div className="flex flex-wrap gap-1.5">
+                              {PHASES_SUGGEREES
+                                .filter(p => !structure.some(s => s.label === p))
+                                .map(phase => (
+                                  <button
+                                    key={phase}
+                                    onClick={() => addPhase(phase)}
+                                    className="text-[11px] font-semibold text-orange-600 bg-orange-50 px-2.5 py-1 rounded-full hover:bg-orange-100 transition-colors border border-orange-100"
+                                  >
+                                    + {phase}
+                                  </button>
+                                ))}
+                              <button
+                                onClick={() => addPhase('Nouvelle étape')}
+                                className="text-[11px] font-semibold text-gray-500 bg-gray-50 px-2.5 py-1 rounded-full hover:bg-gray-100 transition-colors border border-gray-200"
+                              >
+                                + Personnalisée
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                        {!canAddPhase && structure.length >= MAX_PHASES && (
+                          <p className="text-[10px] text-gray-400 text-center pt-2 border-t border-gray-100">
+                            Maximum {MAX_PHASES} étapes atteint
+                          </p>
+                        )}
+
                         <div className="flex items-center justify-between pt-2 border-t border-gray-100">
-                          <span className={`text-xs font-bold ${totalMinutes >= 35 && totalMinutes <= 55 ? 'text-emerald-600' : 'text-orange-500'}`}>
-                            Total : {totalMinutes} min
-                          </span>
+                          <div>
+                            <span className={`text-xs font-bold ${
+                              totalMinutes === MAX_TOTAL_MINUTES ? 'text-emerald-600' :
+                              totalMinutes > MAX_TOTAL_MINUTES ? 'text-red-500' : 'text-orange-500'
+                            }`}>
+                              Total : {totalMinutes} / {MAX_TOTAL_MINUTES} min
+                            </span>
+                            {remainingMinutes > 0 && (
+                              <span className="text-[10px] text-gray-400 ml-2">({remainingMinutes} min restantes)</span>
+                            )}
+                          </div>
                           <button
                             onClick={() => setStructure(STRUCTURE_DEFAUT.map(s => ({ ...s })))}
                             className="flex items-center gap-1.5 text-[10px] font-bold text-gray-400 hover:text-gray-600 transition-colors"

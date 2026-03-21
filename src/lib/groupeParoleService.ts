@@ -117,6 +117,13 @@ export function onGroupesParole(
           messageCount: d.messageCount || 0,
           passwordVocal: d.passwordVocal,
           isTestGroup: d.isTestGroup || false,
+          sessionState: d.sessionState ? {
+            currentPhaseIndex: d.sessionState.currentPhaseIndex ?? 0,
+            extendedMinutes: d.sessionState.extendedMinutes ?? 0,
+            sessionActive: d.sessionState.sessionActive ?? true,
+            phaseStartedAt: d.sessionState.phaseStartedAt?.toDate?.() || new Date(),
+            sessionStartedAt: d.sessionState.sessionStartedAt?.toDate?.() || new Date(),
+          } : undefined,
         } as GroupeParole;
       })
       .filter((g) => g.dateExpiration > now);
@@ -685,4 +692,35 @@ export async function updateTestGroup(config: {
     updates.createurPseudo = config.createurPseudo || 'Parent';
   }
   await updateDoc(ref, updates);
+}
+
+// ========== Session vocale en temps réel ==========
+
+export async function initSessionState(groupeId: string): Promise<void> {
+  await updateDoc(doc(db, 'groupes', groupeId), {
+    'sessionState.currentPhaseIndex': 0,
+    'sessionState.extendedMinutes': 0,
+    'sessionState.sessionActive': true,
+    'sessionState.phaseStartedAt': serverTimestamp(),
+    'sessionState.sessionStartedAt': serverTimestamp(),
+  });
+}
+
+export async function advancePhase(groupeId: string, newIndex: number): Promise<void> {
+  await updateDoc(doc(db, 'groupes', groupeId), {
+    'sessionState.currentPhaseIndex': newIndex,
+    'sessionState.phaseStartedAt': serverTimestamp(),
+  });
+}
+
+export async function extendSession(groupeId: string, extraMinutes: number): Promise<void> {
+  await updateDoc(doc(db, 'groupes', groupeId), {
+    'sessionState.extendedMinutes': extraMinutes,
+  });
+}
+
+export async function endSession(groupeId: string): Promise<void> {
+  await updateDoc(doc(db, 'groupes', groupeId), {
+    'sessionState.sessionActive': false,
+  });
 }

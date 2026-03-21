@@ -141,12 +141,19 @@ export const SlideAccueil = () => {
 
   return (
     <div className="h-full bg-[#FFFBF0] flex flex-col relative overflow-hidden">
-      {/* Decorative floating blobs */}
-      <div className="absolute top-[5%] right-[-12%] w-56 h-56 bg-orange-200/40 rounded-full blur-3xl animate-float pointer-events-none" />
-      <div className="absolute bottom-[20%] left-[-8%] w-64 h-64 bg-rose-200/30 rounded-full blur-3xl animate-float pointer-events-none" style={{ animationDelay: '1s' }} />
+      {/* Enhanced Decorative floating blobs for deep glass effect */}
+      <div className="absolute top-[-10%] left-[-20%] w-96 h-96 bg-orange-300/60 rounded-full blur-[90px] animate-float pointer-events-none" />
+      <div className="absolute top-[30%] right-[-20%] w-80 h-80 bg-rose-300/50 rounded-full blur-[90px] animate-float pointer-events-none" style={{ animationDelay: '1.5s' }} />
+      <div className="absolute bottom-[-10%] left-[10%] w-72 h-72 bg-purple-300/40 rounded-full blur-[90px] animate-float pointer-events-none" style={{ animationDelay: '3s' }} />
 
-      {/* Logout / Login button top-right */}
-      <div className="absolute top-4 right-4 z-20">
+      {/* Full-screen Glass Overlay */}
+      <div className="absolute inset-0 bg-white/30 backdrop-blur-[24px] pointer-events-none z-0" />
+      
+      {/* Content wrapper to float above the glass depth */}
+      <div className="absolute inset-0 z-10 flex flex-col">
+
+        {/* Logout / Login button top-right */}
+        <div className="absolute top-4 right-4 z-20">
         {currentUser ? (
           <button
             onClick={handleLogout}
@@ -162,15 +169,17 @@ export const SlideAccueil = () => {
         initial={{ scale: 0.7, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         transition={{ duration: 0.6, type: 'spring' }}
-        className="flex items-center justify-center relative z-10"
+        className="flex items-center justify-center relative z-10 mt-4"
         style={{ height: '20%' }}
       >
-        <div className="relative">
-          <div className="absolute inset-[-40%] bg-orange-500/10 rounded-full blur-3xl" />
+        <div className="relative flex items-center justify-center">
+          <div className="absolute inset-[-60%] bg-orange-400/20 rounded-full blur-3xl" />
+          {/* Glass Pedestal for Logo */}
+          <div className="absolute inset-[-15%] bg-white/40 backdrop-blur-md rounded-[2rem] border border-white/60 shadow-glass opacity-90" />
           <img
             src="/frame-8.png"
             alt="Parent'aile"
-            className="w-24 h-24 object-contain relative"
+            className="w-24 h-24 object-contain relative z-10 drop-shadow-[0_8px_16px_rgba(0,0,0,0.15)]"
           />
         </div>
       </motion.div>
@@ -324,10 +333,12 @@ export const SlideAccueil = () => {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 0.8 }}
-        className="text-center text-[10px] text-gray-300 font-bold uppercase tracking-widest pb-4 relative z-10"
+        className="text-center text-[10px] text-gray-500 font-bold uppercase tracking-widest pb-4 relative z-10"
       >
         Balayez pour naviguer
       </motion.p>
+      
+      </div> {/* End content wrapper */}
     </div>
   );
 };

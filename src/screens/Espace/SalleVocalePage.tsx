@@ -7,6 +7,7 @@ import {
   useLocalParticipant,
   useIsSpeaking,
   useConnectionState,
+  useRoomContext,
 } from '@livekit/components-react';
 import {
   Track,
@@ -36,25 +37,30 @@ import {
   Lightbulb,
   Heart,
   ChevronDown,
+  Lock,
+  SkipForward,
+  Plus,
+  Square,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { auth, db } from '../../lib/firebase';
 import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { getLiveKitToken } from '../../lib/liveKitService';
-import { onGroupeMessages, sendGroupeMessage, submitEvaluation, markEvaluationPending, getEvaluationStatus, addPoints, getUserBadge, setPresence, removePresence } from '../../lib/groupeParoleService';
-import type { MessageGroupe, ParticipantGroupe, StructureEtape, BadgeLevel } from '../../types/groupeParole';
-import { STRUCTURE_DEFAUT, getBadgeInfo } from '../../types/groupeParole';
+import { onGroupeMessages, sendGroupeMessage, submitEvaluation, markEvaluationPending, getEvaluationStatus, addPoints, getUserBadge, setPresence, removePresence, initSessionState, advancePhase, extendSession, endSession } from '../../lib/groupeParoleService';
+import type { MessageGroupe, ParticipantGroupe, StructureEtape, BadgeLevel, SessionState, MicPolicy } from '../../types/groupeParole';
+import { STRUCTURE_DEFAUT, getBadgeInfo, PHASE_MIC_POLICY, DEFAULT_MIC_POLICY } from '../../types/groupeParole';
 
 // ========== Timer Component ==========
-const VocalTimer: React.FC<{ dateVocal: Date; durationMin: number }> = ({
+const VocalTimer: React.FC<{ dateVocal: Date; durationMin: number; extendedMinutes?: number }> = ({
   dateVocal,
   durationMin,
+  extendedMinutes = 0,
 }) => {
   const [timeLeft, setTimeLeft] = useState('');
   const [isOvertime, setIsOvertime] = useState(false);
 
   useEffect(() => {
-    const endTime = dateVocal.getTime() + durationMin * 60000;
+    const endTime = dateVocal.getTime() + (durationMin + extendedMinutes) * 60000;
 
     const update = () => {
       const now = Date.now();
@@ -77,7 +83,7 @@ const VocalTimer: React.FC<{ dateVocal: Date; durationMin: number }> = ({
     update();
     const interval = setInterval(update, 1000);
     return () => clearInterval(interval);
-  }, [dateVocal, durationMin]);
+  }, [dateVocal, durationMin, extendedMinutes]);
 
   return (
     <span
@@ -524,6 +530,8 @@ function getSuggestionsForPhase(
 }
 
 // ========== useSessionPhase Hook ==========
+type PhaseTimeStatus = 'ok' | 'warning' | 'danger';
+
 interface SessionPhase {
   currentIndex: number;
   currentLabel: string;
@@ -532,12 +540,15 @@ interface SessionPhase {
   totalDurationMin: number;
   elapsedMin: number;
   isComplete: boolean;
+  phaseTimeStatus: PhaseTimeStatus;
+  phaseElapsedMin: number;
 }
 
 function useSessionPhase(
   dateVocal: Date,
   structureType: 'libre' | 'structuree',
   structure: StructureEtape[],
+  firestoreSession: SessionState | null,
   defaultDurationMin: number = 45
 ): SessionPhase {
   const [phase, setPhase] = useState<SessionPhase>({
@@ -548,12 +559,22 @@ function useSessionPhase(
     totalDurationMin: defaultDurationMin,
     elapsedMin: 0,
     isComplete: false,
+    phaseTimeStatus: 'ok',
+    phaseElapsedMin: 0,
   });
 
   useEffect(() => {
-    const totalMin = structureType === 'structuree' && structure.length > 0
+    const extendedMin = firestoreSession?.extendedMinutes ?? 0;
+    const baseDuration = structureType === 'structuree' && structure.length > 0
       ? structure.reduce((sum, s) => sum + s.dureeMinutes, 0)
       : defaultDurationMin;
+    const totalMin = baseDuration + extendedMin;
+
+    // If session ended by animateur
+    if (firestoreSession && !firestoreSession.sessionActive) {
+      setPhase(prev => ({ ...prev, isComplete: true, totalDurationMin: totalMin }));
+      return;
+    }
 
     const update = () => {
       const elapsed = (Date.now() - dateVocal.getTime()) / 60000;
@@ -562,18 +583,36 @@ function useSessionPhase(
       const isComplete = clampedElapsed >= totalMin;
 
       if (structureType === 'structuree' && structure.length > 0) {
-        let accumulated = 0;
-        let idx = structure.length - 1;
-        for (let i = 0; i < structure.length; i++) {
-          if (clampedElapsed < accumulated + structure[i].dureeMinutes) {
-            idx = i;
-            break;
-          }
-          accumulated += structure[i].dureeMinutes;
-        }
-        const phaseStart = structure.slice(0, idx).reduce((s, e) => s + e.dureeMinutes, 0);
+        // Phase index comes from Firestore (manual control) or fallback to time-based
+        const idx = firestoreSession
+          ? Math.min(firestoreSession.currentPhaseIndex, structure.length - 1)
+          : (() => {
+              let accumulated = 0;
+              for (let i = 0; i < structure.length; i++) {
+                if (clampedElapsed < accumulated + structure[i].dureeMinutes) return i;
+                accumulated += structure[i].dureeMinutes;
+              }
+              return structure.length - 1;
+            })();
+
+        // Phase elapsed from Firestore phaseStartedAt or calculated
+        const phaseElapsedMin = firestoreSession?.phaseStartedAt
+          ? Math.max(0, (Date.now() - firestoreSession.phaseStartedAt.getTime()) / 60000)
+          : (() => {
+              const phaseStart = structure.slice(0, idx).reduce((s, e) => s + e.dureeMinutes, 0);
+              return Math.max(0, clampedElapsed - phaseStart);
+            })();
+
         const phaseDur = structure[idx].dureeMinutes;
-        const inPhase = Math.min(1, Math.max(0, (clampedElapsed - phaseStart) / phaseDur));
+        const inPhase = Math.min(1, phaseElapsedMin / phaseDur);
+
+        // Determine time status based on phase elapsed vs indicative duration
+        let phaseTimeStatus: PhaseTimeStatus = 'ok';
+        if (phaseElapsedMin > phaseDur * 1.5) {
+          phaseTimeStatus = 'danger';
+        } else if (phaseElapsedMin > phaseDur) {
+          phaseTimeStatus = 'warning';
+        }
 
         setPhase({
           currentIndex: idx,
@@ -583,6 +622,8 @@ function useSessionPhase(
           totalDurationMin: totalMin,
           elapsedMin: clampedElapsed,
           isComplete,
+          phaseTimeStatus,
+          phaseElapsedMin,
         });
       } else {
         setPhase({
@@ -593,6 +634,8 @@ function useSessionPhase(
           totalDurationMin: totalMin,
           elapsedMin: clampedElapsed,
           isComplete,
+          phaseTimeStatus: 'ok',
+          phaseElapsedMin: clampedElapsed,
         });
       }
     };
@@ -600,7 +643,7 @@ function useSessionPhase(
     update();
     const interval = setInterval(update, 1000);
     return () => clearInterval(interval);
-  }, [dateVocal, structureType, structure, defaultDurationMin]);
+  }, [dateVocal, structureType, structure, defaultDurationMin, firestoreSession]);
 
   return phase;
 }
@@ -631,8 +674,12 @@ const SessionProgressBar: React.FC<{
                 )}
                 {isCurrent && (
                   <motion.div
-                    className="absolute inset-y-0 left-0 bg-violet-500"
-                    animate={{ width: `${phase.phaseProgress * 100}%` }}
+                    className={`absolute inset-y-0 left-0 ${
+                      phase.phaseTimeStatus === 'danger' ? 'bg-red-500' :
+                      phase.phaseTimeStatus === 'warning' ? 'bg-orange-500' :
+                      'bg-violet-500'
+                    }`}
+                    animate={{ width: `${Math.min(phase.phaseProgress, 1) * 100}%` }}
                     transition={{ duration: 1, ease: 'linear' }}
                   />
                 )}
@@ -649,7 +696,11 @@ const SessionProgressBar: React.FC<{
               <p
                 key={i}
                 className={`text-[9px] font-medium truncate ${
-                  isCurrent ? 'text-violet-300 font-bold' : 'text-white/25'
+                  isCurrent
+                    ? phase.phaseTimeStatus === 'danger' ? 'text-red-300 font-bold'
+                    : phase.phaseTimeStatus === 'warning' ? 'text-orange-300 font-bold'
+                    : 'text-violet-300 font-bold'
+                    : 'text-white/25'
                 }`}
                 style={{ width: `${widthPct}%` }}
               >
@@ -677,6 +728,86 @@ const SessionProgressBar: React.FC<{
   );
 };
 
+// ========== Animateur Phase Controls ==========
+const AnimateurPhaseControls: React.FC<{
+  currentIndex: number;
+  totalPhases: number;
+  currentLabel: string;
+  phaseTimeStatus: PhaseTimeStatus;
+  extendedMinutes: number;
+  onAdvancePhase: () => void;
+  onExtendTime: () => void;
+  onEndSession: () => void;
+}> = ({ currentIndex, totalPhases, currentLabel, phaseTimeStatus, extendedMinutes, onAdvancePhase, onExtendTime, onEndSession }) => {
+  const [showEndConfirm, setShowEndConfirm] = useState(false);
+  const isLastPhase = currentIndex >= totalPhases - 1;
+
+  return (
+    <div className="px-6 py-2">
+      <div className="bg-white/5 backdrop-blur-sm rounded-xl p-3 border border-white/10">
+        {/* Advance phase button */}
+        {!isLastPhase && (
+          <button
+            onClick={onAdvancePhase}
+            className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-lg font-bold text-sm transition-all active:scale-95 ${
+              phaseTimeStatus === 'danger'
+                ? 'bg-red-500/30 text-red-300 border border-red-500/40'
+                : phaseTimeStatus === 'warning'
+                ? 'bg-orange-500/30 text-orange-300 border border-orange-500/40'
+                : 'bg-violet-500/30 text-violet-300 border border-violet-500/40'
+            }`}
+          >
+            <SkipForward size={16} />
+            Passer a l'etape suivante
+          </button>
+        )}
+
+        {isLastPhase && <div className="flex gap-2 mt-2">
+          {/* +5 min */}
+          <button
+            onClick={onExtendTime}
+            disabled={extendedMinutes > 0}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold transition-all active:scale-95 ${
+              extendedMinutes > 0
+                ? 'bg-white/5 text-white/30 cursor-not-allowed'
+                : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+            }`}
+          >
+            <Plus size={14} />
+            {extendedMinutes > 0 ? '+5 min utilise' : '+5 min'}
+          </button>
+
+          {/* Terminer */}
+          {!showEndConfirm ? (
+            <button
+              onClick={() => setShowEndConfirm(true)}
+              className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold bg-red-500/20 text-red-300 border border-red-500/30 transition-all active:scale-95"
+            >
+              <Square size={14} />
+              Terminer
+            </button>
+          ) : (
+            <div className="flex-1 flex gap-1">
+              <button
+                onClick={onEndSession}
+                className="flex-1 py-2 rounded-lg text-xs font-bold bg-red-500 text-white transition-all active:scale-95"
+              >
+                Confirmer
+              </button>
+              <button
+                onClick={() => setShowEndConfirm(false)}
+                className="flex-1 py-2 rounded-lg text-xs font-bold bg-white/10 text-white/60 transition-all active:scale-95"
+              >
+                Annuler
+              </button>
+            </div>
+          )}
+        </div>}
+      </div>
+    </div>
+  );
+};
+
 // ========== Room Content (inside LiveKitRoom) ==========
 const RoomContent: React.FC<{
   isAnimateur: boolean;
@@ -690,10 +821,12 @@ const RoomContent: React.FC<{
   structure: StructureEtape[];
   defaultDurationMin?: number;
   onSessionProgress?: (elapsedMin: number, totalDurationMin: number) => void;
-}> = ({ isAnimateur, groupeId, groupeTitre, groupeTheme, dateVocal, onLeave, animateurNotes, structureType, structure, defaultDurationMin, onSessionProgress }) => {
+  onSessionEnded?: () => void;
+}> = ({ isAnimateur, groupeId, groupeTitre, groupeTheme, dateVocal, onLeave, animateurNotes, structureType, structure, defaultDurationMin, onSessionProgress, onSessionEnded }) => {
   const participants = useParticipants();
   const { localParticipant } = useLocalParticipant();
   const connectionState = useConnectionState();
+  const room = useRoomContext();
   const localIsSpeaking = useIsSpeaking(localParticipant);
   const [localMuted, setLocalMuted] = useState(false);
   const [handRaised, setHandRaised] = useState(false);
@@ -723,9 +856,77 @@ const RoomContent: React.FC<{
     fetchBadges();
   }, [participants.length]); // re-fetch when participant count changes
 
-  // Session phase tracking
-  const sessionPhase = useSessionPhase(dateVocal, structureType, structure, defaultDurationMin);
+  // Firestore session state listener (real-time sync for all participants)
+  const [firestoreSession, setFirestoreSession] = useState<SessionState | null>(null);
+  const [micLocked, setMicLocked] = useState(false);
+
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, 'groupes', groupeId), (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        if (data.sessionState) {
+          setFirestoreSession({
+            currentPhaseIndex: data.sessionState.currentPhaseIndex ?? 0,
+            extendedMinutes: data.sessionState.extendedMinutes ?? 0,
+            sessionActive: data.sessionState.sessionActive ?? true,
+            phaseStartedAt: data.sessionState.phaseStartedAt?.toDate?.() || new Date(),
+            sessionStartedAt: data.sessionState.sessionStartedAt?.toDate?.() || new Date(),
+          });
+        }
+      }
+    });
+    return unsub;
+  }, [groupeId]);
+
+  // Init session state when animateur enters (structured mode)
+  const sessionInitRef = useRef(false);
+  useEffect(() => {
+    if (isAnimateur && structureType === 'structuree' && !sessionInitRef.current) {
+      sessionInitRef.current = true;
+      initSessionState(groupeId);
+    }
+  }, [isAnimateur, structureType, groupeId]);
+
+  // Session phase tracking (now Firestore-driven for structured mode)
+  const sessionPhase = useSessionPhase(dateVocal, structureType, structure, firestoreSession, defaultDurationMin);
   const prevPhaseRef = useRef(0);
+
+  // Handle session end by animateur — notify parent via custom event
+  useEffect(() => {
+    if (firestoreSession && !firestoreSession.sessionActive) {
+      onSessionEnded?.();
+    }
+  }, [firestoreSession?.sessionActive]);
+
+  // Mic policy based on current phase
+  const micPolicy: MicPolicy = useMemo(() => {
+    if (isAnimateur) return 'open';
+    const label = sessionPhase.currentLabel;
+    return PHASE_MIC_POLICY[label] || DEFAULT_MIC_POLICY;
+  }, [sessionPhase.currentLabel, isAnimateur]);
+
+  // Apply mic policy on phase change
+  useEffect(() => {
+    if (!localParticipant || isAnimateur) return;
+    if (sessionPhase.currentIndex === prevPhaseRef.current) return;
+
+    // Apply mic policy after a short delay (don't cut someone mid-sentence)
+    const timer = setTimeout(() => {
+      if (micPolicy === 'open') {
+        setMicLocked(false);
+        setWarnToast('Micros ouverts — vous pouvez parler');
+        setTimeout(() => setWarnToast(null), 3000);
+      } else {
+        localParticipant.setMicrophoneEnabled(false);
+        setLocalMuted(true);
+        setMicLocked(true);
+        setWarnToast('Micros coupes — levez la main pour parler');
+        setTimeout(() => setWarnToast(null), 3000);
+      }
+    }, 2000); // 2 sec delay before applying
+
+    return () => clearTimeout(timer);
+  }, [sessionPhase.currentIndex, micPolicy, localParticipant, isAnimateur]);
 
   // Report session progress to parent (for proportional points)
   useEffect(() => {
@@ -746,6 +947,24 @@ const RoomContent: React.FC<{
     }
     prevPhaseRef.current = sessionPhase.currentIndex;
   }, [sessionPhase.currentIndex, sessionPhase.currentLabel, isAnimateur, showNotes]);
+
+  // Animateur phase control handlers
+  const handleAdvancePhase = useCallback(async () => {
+    if (!firestoreSession) return;
+    const newIndex = firestoreSession.currentPhaseIndex + 1;
+    if (newIndex < structure.length) {
+      await advancePhase(groupeId, newIndex);
+    }
+  }, [firestoreSession, structure.length, groupeId]);
+
+  const handleExtendTime = useCallback(async () => {
+    if (!firestoreSession || firestoreSession.extendedMinutes > 0) return;
+    await extendSession(groupeId, 5);
+  }, [firestoreSession, groupeId]);
+
+  const handleEndSession = useCallback(async () => {
+    await endSession(groupeId);
+  }, [groupeId]);
 
   // Current suggestions for animateur
   const currentSuggestions = useMemo(() => {
@@ -780,12 +999,14 @@ const RoomContent: React.FC<{
 
   const handleToggleMute = useCallback(async () => {
     if (!localParticipant) return;
+    // If mic is locked by phase and user tries to unmute, block it
+    if (micLocked && localMuted && !isAnimateur) return;
     const pub = localParticipant.getTrackPublication(Track.Source.Microphone);
     if (pub) {
       await localParticipant.setMicrophoneEnabled(localMuted);
       setLocalMuted(!localMuted);
     }
-  }, [localParticipant, localMuted]);
+  }, [localParticipant, localMuted, micLocked, isAnimateur]);
 
   const handleRaiseHand = useCallback(async () => {
     if (!localParticipant) return;
@@ -799,7 +1020,7 @@ const RoomContent: React.FC<{
       return next;
     });
     const encoder = new TextEncoder();
-    const data = encoder.encode(JSON.stringify({ action: 'raise_hand', raised: newState }));
+    const data = encoder.encode(JSON.stringify({ action: 'raise_hand', raised: newState, identity: localParticipant.identity }));
     await localParticipant.publishData(data, { reliable: true });
   }, [localParticipant, handRaised]);
 
@@ -851,9 +1072,7 @@ const RoomContent: React.FC<{
 
   // Listen for data messages (mute/kick/raise_hand commands)
   useEffect(() => {
-    if (!localParticipant) return;
-    const room = localParticipant.room;
-    if (!room) return;
+    if (!localParticipant || !room) return;
 
     const handleData = (payload: Uint8Array, participant?: RemoteParticipant) => {
       try {
@@ -861,13 +1080,16 @@ const RoomContent: React.FC<{
         const msg = JSON.parse(decoder.decode(payload));
 
         // Handle raise hand from other participants
-        if (msg.action === 'raise_hand' && participant) {
-          setRaisedHands((prev) => {
-            const next = new Set(prev);
-            if (msg.raised) next.add(participant.identity);
-            else next.delete(participant.identity);
-            return next;
-          });
+        if (msg.action === 'raise_hand') {
+          const senderIdentity = participant?.identity || msg.identity;
+          if (senderIdentity) {
+            setRaisedHands((prev) => {
+              const next = new Set(prev);
+              if (msg.raised) next.add(senderIdentity);
+              else next.delete(senderIdentity);
+              return next;
+            });
+          }
           return;
         }
 
@@ -878,6 +1100,7 @@ const RoomContent: React.FC<{
           } else if (msg.action === 'give_word') {
             localParticipant.setMicrophoneEnabled(true);
             setLocalMuted(false);
+            setMicLocked(false); // animateur override
             setHandRaised(false);
             setWarnToast('L\'animateur vous donne la parole');
             setTimeout(() => setWarnToast(null), 4000);
@@ -897,7 +1120,7 @@ const RoomContent: React.FC<{
     return () => {
       room.off(RoomEvent.DataReceived, handleData);
     };
-  }, [localParticipant, onLeave]);
+  }, [room, localParticipant, onLeave]);
 
   // Track unread chat messages when chat is closed
   useEffect(() => {
@@ -944,7 +1167,7 @@ const RoomContent: React.FC<{
               : 'Session en cours'}
           </span>
           <span className="text-white/40">&middot;</span>
-          <VocalTimer dateVocal={dateVocal} durationMin={sessionPhase.totalDurationMin} />
+          <VocalTimer dateVocal={dateVocal} durationMin={sessionPhase.totalDurationMin} extendedMinutes={firestoreSession?.extendedMinutes} />
           <span className="text-white/40">&middot;</span>
           <span className="text-sm text-white/60 font-medium">restantes</span>
         </div>
@@ -966,6 +1189,20 @@ const RoomContent: React.FC<{
           phase={sessionPhase}
         />
       </div>
+
+      {/* Animateur phase controls */}
+      {isAnimateur && structureType === 'structuree' && structure.length > 0 && (
+        <AnimateurPhaseControls
+          currentIndex={sessionPhase.currentIndex}
+          totalPhases={structure.length}
+          currentLabel={sessionPhase.currentLabel}
+          phaseTimeStatus={sessionPhase.phaseTimeStatus}
+          extendedMinutes={firestoreSession?.extendedMinutes ?? 0}
+          onAdvancePhase={handleAdvancePhase}
+          onExtendTime={handleExtendTime}
+          onEndSession={handleEndSession}
+        />
+      )}
 
       {/* Circular layout */}
       <div className="flex-1 flex items-center justify-center">
@@ -1091,16 +1328,26 @@ const RoomContent: React.FC<{
           <button
             onClick={handleToggleMute}
             className={`flex flex-col items-center gap-1 px-4 py-2 rounded-xl transition-all active:scale-90 ${
-              localMuted ? 'bg-red-500/20' : 'bg-white/10'
+              micLocked && localMuted && !isAnimateur
+                ? 'bg-gray-500/20 cursor-not-allowed'
+                : localMuted ? 'bg-red-500/20' : 'bg-white/10'
             }`}
           >
-            {localMuted ? (
-              <MicOff size={22} className="text-red-400" />
-            ) : (
-              <Mic size={22} className="text-white" />
-            )}
-            <span className={`text-[10px] font-bold ${localMuted ? 'text-red-400' : 'text-white/70'}`}>
-              Muet
+            <div className="relative">
+              {localMuted ? (
+                <MicOff size={22} className={micLocked && !isAnimateur ? 'text-gray-400' : 'text-red-400'} />
+              ) : (
+                <Mic size={22} className="text-white" />
+              )}
+              {micLocked && !isAnimateur && (
+                <Lock size={10} className="absolute -bottom-1 -right-1 text-amber-400" />
+              )}
+            </div>
+            <span className={`text-[10px] font-bold ${
+              micLocked && localMuted && !isAnimateur ? 'text-gray-400'
+              : localMuted ? 'text-red-400' : 'text-white/70'
+            }`}>
+              {micLocked && !isAnimateur ? 'Verrouille' : 'Muet'}
             </span>
           </button>
 
@@ -2605,6 +2852,30 @@ export const SalleVocalePage = () => {
     sessionTotalRef.current = totalDurationMin;
   }, []);
 
+  // Called when animateur ends the session — treated as normal completion
+  const handleSessionEnded = useCallback(() => {
+    voluntaryLeaveRef.current = true;
+    const elapsed = sessionElapsedRef.current;
+    const total = sessionTotalRef.current;
+    const participationRatio = total > 0 ? elapsed / total : 0;
+
+    // Session ended by animateur = normal end, never "left early"
+    if (!pointsAwardedRef.current && groupeId) {
+      pointsAwardedRef.current = true;
+      const user = auth.currentUser;
+      if (user) {
+        const points = participationRatio > 0.5 ? 10 : 5;
+        addPoints(user.uid, points, {
+          groupeId,
+          groupeTitre,
+          date: new Date(),
+          type: 'participation',
+        }).catch(() => {});
+      }
+    }
+    setStep('end');
+  }, [groupeId, groupeTitre]);
+
   const handleLeave = useCallback(() => {
     voluntaryLeaveRef.current = true;
 
@@ -2967,6 +3238,7 @@ export const SalleVocalePage = () => {
           structure={structure}
           defaultDurationMin={customDurationMin}
           onSessionProgress={handleSessionProgress}
+          onSessionEnded={handleSessionEnded}
         />
       </LiveKitRoom>
     </div>

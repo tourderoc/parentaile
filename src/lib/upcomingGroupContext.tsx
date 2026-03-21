@@ -69,6 +69,9 @@ function findUpcomingGroup(groupes: GroupeParole[], uid: string): { group: Group
     if (diff > 30) continue;
     if (diff < -60) continue;
 
+    // Skip if session was ended by animateur
+    if (g.sessionState?.sessionActive === false) continue;
+
     // Prendre le plus proche / le plus urgent
     if (diff < bestMinutes) {
       bestMinutes = diff;
