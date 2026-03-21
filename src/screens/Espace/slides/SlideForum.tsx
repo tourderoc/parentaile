@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Users, Mic, Clock, Plus, MessageCircle, Filter, Loader2, Heart, Settings } from 'lucide-react';
+import { Users, Mic, Clock, Plus, MessageCircle, Filter, Loader2, Heart, Settings, SlidersHorizontal, X, Calendar, Search, Tag } from 'lucide-react';
 import { Swiper, SwiperSlide } from 'swiper/react';
 import 'swiper/css';
 import { auth } from '../../../lib/firebase';
@@ -245,8 +245,12 @@ export const SlideForum = () => {
   const navigate = useNavigate();
   const [showCreate, setShowCreate] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [showFiltersModal, setShowFiltersModal] = useState(false);
   const [selectedTheme, setSelectedTheme] = useState<ThemeGroupe | 'tous'>('tous');
   const [placesDispoOnly, setPlacesDispoOnly] = useState(false);
+  const [filterDate, setFilterDate] = useState<'aujourdhui' | 'demain' | '3jours' | 'toutes'>('toutes');
+  const [filterCreator, setFilterCreator] = useState('');
+  const [filterSort, setFilterSort] = useState<'recents' | 'actifs'>('recents');
   const [groupes, setGroupes] = useState<GroupeParole[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -272,37 +276,72 @@ export const SlideForum = () => {
       );
     }
 
-    // Tri personnalisé : sessions les plus proches et disponibles en premier
-    result.sort((a, b) => {
-      const aPast = isVocalPassé(a.dateVocal);
-      const bPast = isVocalPassé(b.dateVocal);
-      
-      const aPlaces = a.participantsMax - a.participants.length;
-      const bPlaces = b.participantsMax - b.participants.length;
-      
-      const aDispo = !aPast && aPlaces > 0;
-      const bDispo = !bPast && bPlaces > 0;
+    // 3. Filtre par créateur
+    if (filterCreator.trim() !== '') {
+      const search = filterCreator.toLowerCase().trim();
+      result = result.filter(g => g.createurPseudo.toLowerCase().includes(search));
+    }
 
-      // 1. Priorité aux sessions à venir et avec places dispo
-      if (aDispo && !bDispo) return -1;
-      if (!aDispo && bDispo) return 1;
+    // 4. Filtre par date/moment
+    if (filterDate !== 'toutes') {
+      const now = new Date();
+      now.setHours(0, 0, 0, 0);
+      result = result.filter(g => {
+        const sessionDate = new Date(g.dateVocal);
+        sessionDate.setHours(0, 0, 0, 0);
+        const diffDays = Math.round((sessionDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+        
+        // On autorise aussi les sessions "En cours" / passées aujourd'hui si le statut n'est pas terminé
+        // Mais isVocalPassé couvre déjà le côté passé pour "placesDispoOnly".
+        // Ici on filtre juste par jour.
+        if (filterDate === 'aujourdhui') return diffDays <= 0; // Aujourd'hui ou passé récent
+        if (filterDate === 'demain') return diffDays === 1;
+        if (filterDate === '3jours') return diffDays >= 0 && diffDays <= 3;
+        return true;
+      });
+    }
 
-      // 2. Priorité aux sessions à venir vs passées
-      if (!aPast && bPast) return -1;
-      if (aPast && !bPast) return 1;
+    // 5. Tri
+    if (filterSort === 'actifs') {
+      // Trier par activité de chat (messageCount ou longueur du tableau messages)
+      result.sort((a, b) => {
+        const countA = a.messageCount || (a.messages?.length || 0);
+        const countB = b.messageCount || (b.messages?.length || 0);
+        return countB - countA; // Le plus de messages en premier
+      });
+    } else {
+      // Tri par défaut (récents) : sessions les plus proches et disponibles en premier
+      result.sort((a, b) => {
+        const aPast = isVocalPassé(a.dateVocal);
+        const bPast = isVocalPassé(b.dateVocal);
+        
+        const aPlaces = a.participantsMax - a.participants.length;
+        const bPlaces = b.participantsMax - b.participants.length;
+        
+        const aDispo = !aPast && aPlaces > 0;
+        const bDispo = !bPast && bPlaces > 0;
 
-      // 3. Tri par date
-      if (!aPast && !bPast) {
-        // Pour les sessions à venir : la plus proche en premier
-        return a.dateVocal.getTime() - b.dateVocal.getTime();
-      }
+        // 1. Priorité aux sessions à venir et avec places dispo
+        if (aDispo && !bDispo) return -1;
+        if (!aDispo && bDispo) return 1;
 
-      // Pour les sessions passées : la plus récente en premier
-      return b.dateVocal.getTime() - a.dateVocal.getTime();
-    });
+        // 2. Priorité aux sessions à venir vs passées
+        if (!aPast && bPast) return -1;
+        if (aPast && !bPast) return 1;
+
+        // 3. Tri par date temporelle
+        if (!aPast && !bPast) {
+          // Pour les sessions à venir : la plus proche en premier
+          return a.dateVocal.getTime() - b.dateVocal.getTime();
+        }
+
+        // Pour les sessions passées : la plus récente en premier
+        return b.dateVocal.getTime() - a.dateVocal.getTime();
+      });
+    }
 
     return result;
-  }, [groupes, selectedTheme, placesDispoOnly]);
+  }, [groupes, selectedTheme, placesDispoOnly, filterDate, filterCreator, filterSort]);
 
   const themes: Array<{ key: ThemeGroupe | 'tous'; label: string }> = [
     { key: 'tous', label: 'Tous' },
@@ -331,7 +370,7 @@ export const SlideForum = () => {
       <div className="absolute inset-0 z-10 overflow-y-auto pb-32">
 
       {/* Hero Header sticky - Floating Cartouche Version */}
-      <div className="sticky top-0 z-40 px-6 pt-5 pb-3">
+      <div className="sticky top-0 z-40 px-6 pt-3 pb-2">
         <div className="relative border border-white/60 shadow-premium overflow-hidden bg-white/30 backdrop-blur-xl rounded-[2rem]">
           {/* Abstract tinted background overlay */}
           <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/10 via-transparent to-orange-500/10 mix-blend-overlay" />
@@ -365,23 +404,31 @@ export const SlideForum = () => {
         </div>
       </div>
 
-      <main className="max-w-md mx-auto px-6 pt-5 space-y-5">
-        {/* Toggle places disponibles */}
+      <main className="max-w-md mx-auto px-6 pt-3 space-y-3">
+        {/* Toggle places disponibles et Filtres avancés */}
         <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
+           initial={{ opacity: 0, y: 10 }}
+           animate={{ opacity: 1, y: 0 }}
+           transition={{ delay: 0.1 }}
+           className="flex items-center gap-3"
         >
+          {/* Toggle places disponibles (prend l'espace restant) */}
           <button
             onClick={() => setPlacesDispoOnly(!placesDispoOnly)}
             className={`
-              flex items-center gap-2.5 w-full px-4 py-3 rounded-2xl transition-all
+              flex-1 flex items-center justify-between px-4 py-3 rounded-2xl transition-all
               ${placesDispoOnly
                 ? 'bg-emerald-50 border-2 border-emerald-200 shadow-sm'
                 : 'bg-white/50 border-2 border-gray-100/60'
               }
             `}
           >
+            <div className="flex items-center gap-2">
+              <Filter size={14} className={placesDispoOnly ? 'text-emerald-600' : 'text-gray-400'} />
+              <span className={`text-[11px] font-bold ${placesDispoOnly ? 'text-emerald-700' : 'text-gray-500'}`}>
+                Places dispo.
+              </span>
+            </div>
             <div className={`
               w-8 h-5 rounded-full relative transition-all flex-shrink-0
               ${placesDispoOnly ? 'bg-emerald-500' : 'bg-gray-300'}
@@ -391,12 +438,16 @@ export const SlideForum = () => {
                 ${placesDispoOnly ? 'left-3.5' : 'left-0.5'}
               `} />
             </div>
-            <div className="flex items-center gap-2">
-              <Filter size={14} className={placesDispoOnly ? 'text-emerald-600' : 'text-gray-400'} />
-              <span className={`text-xs font-bold ${placesDispoOnly ? 'text-emerald-700' : 'text-gray-500'}`}>
-                Places disponibles uniquement
-              </span>
-            </div>
+          </button>
+
+          {/* Bouton Plus de filtres */}
+          <button
+            onClick={() => setShowFiltersModal(true)}
+            className="flex-shrink-0 px-4 py-3 bg-white/50 border-2 border-gray-100/60 rounded-2xl flex items-center gap-2 hover:bg-white/80 transition-all text-gray-600 font-bold text-[11px]"
+          >
+            <SlidersHorizontal size={14} className="text-orange-500" />
+            <span className="uppercase tracking-widest hidden xs:inline-block">Filtres</span>
+            <span className="xs:hidden">Filtres</span>
           </button>
         </motion.div>
 
@@ -448,7 +499,7 @@ export const SlideForum = () => {
                 slidesPerView={1.4}
                 spaceBetween={16}
                 centeredSlides={true}
-                className="w-full py-6"
+                className="w-full py-3"
               >
                 {groupesFiltres.map((groupe, i) => (
                   <SwiperSlide key={groupe.id} className="h-auto">
@@ -571,6 +622,157 @@ export const SlideForum = () => {
             </div>
           </motion.div>
         </div>,
+        document.body
+      )}
+
+      {/* Modal Plus de Filtres (Bottom Sheet) */}
+      {createPortal(
+        <AnimatePresence>
+          {showFiltersModal && (
+            <div
+              className="fixed inset-0 z-[9999] bg-black/40 backdrop-blur-sm flex items-end justify-center sm:items-center"
+              onClick={() => setShowFiltersModal(false)}
+            >
+              <motion.div
+                initial={{ y: '100%' }}
+                animate={{ y: 0 }}
+                exit={{ y: '100%' }}
+                transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+                onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                className="bg-white w-full max-w-md rounded-t-[32px] sm:rounded-[32px] p-6 pb-12 sm:pb-6 shadow-2xl relative"
+              >
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-orange-50 rounded-2xl flex items-center justify-center">
+                      <SlidersHorizontal size={20} className="text-orange-500" />
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-extrabold text-gray-800 tracking-tight">Filtres avancés</h3>
+                      <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-0.5">Affiner la recherche</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setShowFiltersModal(false)}
+                    className="p-2.5 bg-gray-50 rounded-2xl text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors border border-gray-100"
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
+
+                {/* Sections de filtres */}
+                <div className="space-y-6">
+                  
+                  {/* 1. Date / Période (Plage révisée pour groupes éphémères) */}
+                  <div className="space-y-3">
+                    <label className="text-[11px] font-bold text-gray-500 uppercase tracking-widest flex items-center gap-2">
+                      <Calendar size={14} className="text-orange-400" /> Moment
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button 
+                        onClick={() => setFilterDate('aujourdhui')}
+                        className={`py-3 px-3 rounded-2xl border-2 font-extrabold text-xs transition-colors shadow-sm
+                          ${filterDate === 'aujourdhui' ? 'border-orange-500 bg-orange-50 text-orange-700' : 'border-gray-100 bg-white text-gray-500 hover:border-gray-200'}
+                        `}
+                      >
+                        Aujourd'hui
+                      </button>
+                      <button 
+                        onClick={() => setFilterDate('demain')}
+                        className={`py-3 px-3 rounded-2xl border-2 font-bold text-xs transition-colors
+                          ${filterDate === 'demain' ? 'border-orange-500 bg-orange-50 text-orange-700' : 'border-gray-100 bg-white text-gray-500 hover:border-gray-200'}
+                        `}
+                      >
+                        Demain
+                      </button>
+                      <button 
+                        onClick={() => setFilterDate('3jours')}
+                        className={`py-3 px-3 rounded-2xl border-2 font-bold text-xs transition-colors
+                          ${filterDate === '3jours' ? 'border-orange-500 bg-orange-50 text-orange-700' : 'border-gray-100 bg-white text-gray-500 hover:border-gray-200'}
+                        `}
+                      >
+                        Dans les 3 jours
+                      </button>
+                      <button 
+                        onClick={() => setFilterDate('toutes')}
+                        className={`py-3 px-3 rounded-2xl border-2 font-bold text-xs transition-colors
+                          ${filterDate === 'toutes' ? 'border-orange-500 bg-orange-50 text-orange-700' : 'border-gray-100 bg-white text-gray-500 hover:border-gray-200'}
+                        `}
+                      >
+                        Toutes dates
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* 2. Animateur / Parent */}
+                  <div className="space-y-3">
+                    <label className="text-[11px] font-bold text-gray-500 uppercase tracking-widest flex items-center gap-2">
+                      <Search size={14} className="text-violet-400" /> Créateur du groupe
+                    </label>
+                    <div className="relative group">
+                      <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-violet-500 transition-colors" />
+                      <input 
+                        type="text" 
+                        value={filterCreator}
+                        onChange={(e) => setFilterCreator(e.target.value)}
+                        placeholder="Rechercher par pseudo..."
+                        className="w-full bg-gray-50 border-2 border-gray-100 rounded-2xl py-3.5 pl-12 pr-4 text-sm font-bold text-gray-700 focus:outline-none focus:border-violet-300 focus:bg-white transition-all placeholder:font-medium"
+                      />
+                    </div>
+                  </div>
+
+                  {/* 3. Tri / Activité (Remplace Format) */}
+                  <div className="space-y-3">
+                    <label className="text-[11px] font-bold text-gray-500 uppercase tracking-widest flex items-center gap-2">
+                      <Tag size={14} className="text-emerald-400" /> Trier par
+                    </label>
+                    <div className="flex gap-2">
+                      <button 
+                        onClick={() => setFilterSort('recents')}
+                        className={`flex-1 py-3 px-3 rounded-2xl border-2 font-bold text-[11px] transition-colors
+                          ${filterSort === 'recents' ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-gray-100 bg-white text-gray-500 hover:border-gray-200'}
+                        `}
+                      >
+                        Plus récents (Dates)
+                      </button>
+                      <button 
+                        onClick={() => setFilterSort('actifs')}
+                        className={`flex-1 py-3 px-3 rounded-2xl border-2 font-bold text-[11px] transition-colors
+                          ${filterSort === 'actifs' ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-gray-100 bg-white text-gray-500 hover:border-gray-200'}
+                        `}
+                      >
+                        Plus actifs (Chat)
+                      </button>
+                    </div>
+                  </div>
+
+                </div>
+
+                {/* Boutons Actions */}
+                <div className="mt-8 pt-4 border-t border-gray-100 space-y-3">
+                  <button
+                    onClick={() => {
+                      setFilterDate('toutes');
+                      setFilterCreator('');
+                      setFilterSort('recents');
+                      setPlacesDispoOnly(false);
+                      setSelectedTheme('tous');
+                    }}
+                    className="w-full py-2 text-xs font-bold text-gray-400 hover:text-gray-600 transition-colors uppercase tracking-widest text-center"
+                  >
+                    Réinitialiser tous les filtres
+                  </button>
+                  <button
+                    onClick={() => setShowFiltersModal(false)}
+                    className="w-full py-4 bg-gray-900 border border-gray-800 text-white rounded-[1.25rem] font-extrabold text-[13px] uppercase tracking-wider shadow-xl shadow-gray-900/20 hover:bg-black active:scale-[0.98] transition-all"
+                  >
+                    Voir {groupesFiltres.length} groupe{groupesFiltres.length !== 1 ? 's' : ''}
+                  </button>
+                </div>
+
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>,
         document.body
       )}
       </div> {/* End scrollable container */}

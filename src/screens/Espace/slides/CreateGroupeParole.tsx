@@ -258,6 +258,12 @@ export const CreateGroupeParole: React.FC<CreateGroupeParoleProps> = ({ onBack }
     return tomorrow.toISOString().split('T')[0];
   };
 
+  const getMaxDate = () => {
+    const nextWeek = new Date();
+    nextWeek.setDate(nextWeek.getDate() + 7);
+    return nextWeek.toISOString().split('T')[0];
+  };
+
   const isFormValid = () => {
     return (
       description.trim().length >= 20 &&
@@ -678,23 +684,52 @@ export const CreateGroupeParole: React.FC<CreateGroupeParoleProps> = ({ onBack }
               className="space-y-8 pb-32"
             >
               {/* ====== SECTION 4 : Date/Heure ====== */}
-              <section className="space-y-3">
-                <label className="text-[10px] font-bold text-gray-400 uppercase ml-1 tracking-widest">Quand organiser le vocal ?</label>
+              <section className="space-y-4">
+                <label className="text-[10px] font-bold text-gray-400 uppercase ml-1 tracking-widest">Quel jour (cette semaine) ?</label>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="glass rounded-2xl border-2 border-white focus-within:border-orange-200 shadow-glass p-3 flex items-center gap-3">
-                    <Calendar size={18} className="text-orange-400 flex-shrink-0" />
-                    <input
-                      type="date"
-                      value={dateVocal}
-                      onChange={(e) => setDateVocal(e.target.value)}
-                      min={getMinDate()}
-                      className="w-full bg-transparent focus:outline-none font-bold text-gray-700 text-sm"
-                      style={{ fontSize: '16px' }}
-                    />
-                  </div>
+                <div 
+                  className="flex gap-2 overflow-x-auto pb-2 snap-x hide-scrollbar -mx-6 px-6"
+                  style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+                >
+                  {Array.from({ length: 7 }, (_, i) => {
+                    const d = new Date();
+                    d.setDate(d.getDate() + 1 + i);
+                    return d;
+                  }).map((d) => {
+                    const dateStr = d.toISOString().split('T')[0];
+                    const isSelected = dateVocal === dateStr;
+                    const dayName = d.toLocaleDateString('fr-FR', { weekday: 'short' }).replace('.', '');
+                    const dayNum = d.getDate();
+                    const monthName = d.toLocaleDateString('fr-FR', { month: 'short' }).replace('.', '');
+                    
+                    return (
+                      <button
+                        key={dateStr}
+                        onClick={() => setDateVocal(dateStr)}
+                        className={`
+                          flex-shrink-0 snap-start w-[72px] h-[88px] rounded-[1.25rem] border-2 transition-all flex flex-col items-center justify-center gap-0.5
+                          ${isSelected 
+                            ? 'bg-orange-50 border-orange-500 shadow-sm' 
+                            : 'bg-white border-white hover:border-orange-200 shadow-glass glass'}
+                        `}
+                      >
+                        <span className={`text-[10px] font-bold uppercase tracking-widest ${isSelected ? 'text-orange-500' : 'text-gray-400'}`}>
+                          {dayName}
+                        </span>
+                        <span className={`text-2xl font-black ${isSelected ? 'text-gray-900' : 'text-gray-700'}`}>
+                          {dayNum}
+                        </span>
+                        <span className={`text-[10px] font-bold uppercase ${isSelected ? 'text-orange-500' : 'text-gray-400'}`}>
+                          {monthName}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
 
-                  <div className="glass rounded-2xl border-2 border-white focus-within:border-orange-200 shadow-glass p-3 flex items-center gap-3">
+                <div className="pt-2">
+                  <label className="text-[10px] font-bold text-gray-400 uppercase ml-1 tracking-widest">À quelle heure ?</label>
+                  <div className="glass rounded-2xl border-2 border-white focus-within:border-orange-200 shadow-glass p-3 flex items-center gap-3 mt-2">
                     <Clock size={18} className="text-orange-400 flex-shrink-0" />
                     <input
                       type="time"
