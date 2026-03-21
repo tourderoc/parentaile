@@ -694,6 +694,24 @@ export async function updateTestGroup(config: {
   await updateDoc(ref, updates);
 }
 
+// ========== Signalement de bannissement ==========
+
+export async function submitBanFeedback(
+  groupeId: string,
+  participantUid: string,
+  participantPseudo: string,
+  feedback: string
+): Promise<void> {
+  await addDoc(collection(db, 'banReports'), {
+    groupeId,
+    participantUid,
+    participantPseudo,
+    feedback,
+    dateReport: serverTimestamp(),
+    reviewed: false,
+  });
+}
+
 // ========== Session vocale en temps réel ==========
 
 export async function initSessionState(groupeId: string): Promise<void> {

@@ -46,7 +46,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { auth, db } from '../../lib/firebase';
 import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { getLiveKitToken } from '../../lib/liveKitService';
-import { onGroupeMessages, sendGroupeMessage, submitEvaluation, markEvaluationPending, getEvaluationStatus, addPoints, getUserBadge, setPresence, removePresence, initSessionState, advancePhase, extendSession, endSession } from '../../lib/groupeParoleService';
+import { submitEvaluation, markEvaluationPending, getEvaluationStatus, addPoints, getUserBadge, setPresence, removePresence, initSessionState, advancePhase, extendSession, endSession, submitBanFeedback } from '../../lib/groupeParoleService';
 import type { MessageGroupe, ParticipantGroupe, StructureEtape, BadgeLevel, SessionState, MicPolicy } from '../../types/groupeParole';
 import { STRUCTURE_DEFAUT, getBadgeInfo, PHASE_MIC_POLICY, DEFAULT_MIC_POLICY } from '../../types/groupeParole';
 
@@ -97,43 +97,33 @@ const VocalTimer: React.FC<{ dateVocal: Date; durationMin: number; extendedMinut
 };
 
 // ========== Chat Panel ==========
+interface VocalChatMessage {
+  id: string;
+  auteurUid: string;
+  auteurPseudo: string;
+  contenu: string;
+  timestamp: number;
+}
+
 const ChatPanel: React.FC<{
-  groupeId: string;
+  messages: VocalChatMessage[];
+  onSend: (text: string) => void;
   onClose: () => void;
-  unreadCount: number;
-}> = ({ groupeId, onClose, unreadCount }) => {
-  const [messages, setMessages] = useState<MessageGroupe[]>([]);
+}> = ({ messages, onSend, onClose }) => {
   const [input, setInput] = useState('');
-  const [sending, setSending] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const currentUser = auth.currentUser;
 
   useEffect(() => {
-    const unsub = onGroupeMessages(groupeId, (msgs) => {
-      setMessages(msgs);
-      // Auto-scroll to bottom
-      setTimeout(() => {
-        scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
-      }, 100);
-    });
-    return unsub;
-  }, [groupeId]);
+    setTimeout(() => {
+      scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
+    }, 100);
+  }, [messages.length]);
 
-  const handleSend = async () => {
-    if (!input.trim() || !currentUser || sending) return;
-    setSending(true);
-    try {
-      await sendGroupeMessage(groupeId, {
-        auteurUid: currentUser.uid,
-        auteurPseudo: currentUser.displayName || 'Parent',
-        contenu: input.trim(),
-      });
-      setInput('');
-    } catch (err) {
-      console.error('Erreur envoi message:', err);
-    } finally {
-      setSending(false);
-    }
+  const handleSend = () => {
+    if (!input.trim()) return;
+    onSend(input.trim());
+    setInput('');
   };
 
   return (
@@ -149,7 +139,8 @@ const ChatPanel: React.FC<{
       <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
         <h3 className="text-sm font-extrabold text-white flex items-center gap-2">
           <MessageCircle size={16} className="text-blue-400" />
-          Chat de la salle
+          Chat de la session
+          <span className="text-[9px] text-white/30 font-medium">(ephemere)</span>
         </h3>
         <button onClick={onClose} className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center active:scale-90">
           <X size={16} className="text-white/60" />
@@ -177,7 +168,7 @@ const ChatPanel: React.FC<{
                 )}
                 <p className="text-xs text-white font-medium">{msg.contenu}</p>
                 <p className="text-[9px] text-white/40 mt-0.5 text-right">
-                  {msg.dateEnvoi.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                  {new Date(msg.timestamp).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
                 </p>
               </div>
             </div>
@@ -200,7 +191,7 @@ const ChatPanel: React.FC<{
           />
           <button
             onClick={handleSend}
-            disabled={!input.trim() || sending}
+            disabled={!input.trim()}
             className="w-10 h-10 bg-orange-500 rounded-full flex items-center justify-center shadow-lg disabled:opacity-40 active:scale-90 transition-all"
           >
             <Send size={16} className="text-white" />
@@ -218,6 +209,7 @@ interface ModTarget {
   color: string;
   isMuted: boolean;
   hasHandRaised: boolean;
+  warningCount: number;
 }
 
 const ModeratorSheet: React.FC<{
@@ -255,9 +247,11 @@ const ModeratorSheet: React.FC<{
     },
     {
       label: 'Bannir de la salle',
-      icon: <ShieldAlert size={20} className="text-red-400" />,
-      bg: 'bg-red-500/15',
-      description: 'Exclure definitivement de la session',
+      icon: <ShieldAlert size={20} className={target.warningCount >= 2 ? 'text-red-300' : 'text-red-400'} />,
+      bg: target.warningCount >= 2 ? 'bg-red-500/30 border border-red-500/40' : 'bg-red-500/15',
+      description: target.warningCount >= 2
+        ? `${target.warningCount} avertissements — exclusion recommandee`
+        : 'Exclure definitivement de la session',
       disabled: false,
       onClick: () => { onKick(target.identity); onClose(); },
     },
@@ -301,6 +295,11 @@ const ModeratorSheet: React.FC<{
             <p className="text-xs text-white/40 font-medium">
               {target.isMuted ? 'Micro coupe' : 'Micro actif'}
               {target.hasHandRaised ? ' · Main levee' : ''}
+              {target.warningCount > 0 && (
+                <span className={`ml-1 ${target.warningCount >= 2 ? 'text-red-400' : 'text-amber-400'}`}>
+                  · {target.warningCount} avertissement{target.warningCount > 1 ? 's' : ''}
+                </span>
+              )}
             </p>
           </div>
           <button
@@ -353,13 +352,15 @@ const CircleParticipant: React.FC<{
   isAnimateur: boolean;
   isLocal: boolean;
   hasHandRaised: boolean;
+  warningCount?: number;
+  showWarningBadge?: boolean;
   angle: number;
   radius: number;
   color: string;
   avatarUrl?: string;
   onTap?: () => void;
   badge?: BadgeLevel;
-}> = ({ name, isSpeaking, isMuted, isAnimateur, isLocal, hasHandRaised, angle, radius, color, avatarUrl, onTap, badge = 'none' }) => {
+}> = ({ name, isSpeaking, isMuted, isAnimateur, isLocal, hasHandRaised, warningCount = 0, showWarningBadge = false, angle, radius, color, avatarUrl, onTap, badge = 'none' }) => {
   const x = Math.cos(angle) * radius;
   const y = Math.sin(angle) * radius;
 
@@ -437,6 +438,19 @@ const CircleParticipant: React.FC<{
               className="absolute -top-2 -left-2 w-7 h-7 bg-amber-400 rounded-full flex items-center justify-center shadow-lg border-2 border-[#1a1f3a]"
             >
               <span className="text-sm">✋</span>
+            </motion.div>
+          )}
+
+          {/* Warning badge (visible to warned participant + animateur) */}
+          {showWarningBadge && warningCount > 0 && (
+            <motion.div
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              className={`absolute -bottom-1 -left-1 w-6 h-6 rounded-full flex items-center justify-center shadow-lg border-2 border-[#1a1f3a] ${
+                warningCount >= 2 ? 'bg-red-500' : 'bg-amber-500'
+              }`}
+            >
+              <AlertTriangle size={10} className="text-white" />
             </motion.div>
           )}
         </div>
@@ -728,6 +742,107 @@ const SessionProgressBar: React.FC<{
   );
 };
 
+// ========== Ban Screen ==========
+const BanScreen: React.FC<{
+  groupeTitre: string;
+  groupeId: string;
+  onDone: () => void;
+}> = ({ groupeTitre, groupeId, onDone }) => {
+  const [feedback, setFeedback] = useState('');
+  const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleSubmitFeedback = async () => {
+    const user = auth.currentUser;
+    if (!user || !feedback.trim()) return;
+    setSubmitting(true);
+    try {
+      await submitBanFeedback(groupeId, user.uid, user.displayName || 'Parent', feedback.trim());
+      setSubmitted(true);
+    } catch {
+      // ignore
+    }
+    setSubmitting(false);
+  };
+
+  return (
+    <div className="flex-1 flex flex-col items-center justify-center px-6 text-center gap-6">
+      <motion.div
+        initial={{ scale: 0 }}
+        animate={{ scale: 1 }}
+        className="w-20 h-20 rounded-full bg-red-500/20 flex items-center justify-center"
+      >
+        <ShieldAlert size={36} className="text-red-400" />
+      </motion.div>
+
+      <div>
+        <h2 className="text-xl font-extrabold text-white mb-2">Vous avez ete exclu</h2>
+        <p className="text-sm text-white/50 leading-relaxed max-w-xs mx-auto">
+          L'animateur du groupe "{groupeTitre}" a juge necessaire de vous retirer de la session.
+          Cette decision vise a proteger le bien-etre de tous les participants.
+        </p>
+      </div>
+
+      {!submitted ? (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.5 }}
+          className="w-full max-w-sm space-y-3"
+        >
+          <p className="text-xs text-white/40 font-bold uppercase tracking-wider">
+            Vous pouvez exprimer votre ressenti (transmis uniquement a l'equipe)
+          </p>
+          <textarea
+            value={feedback}
+            onChange={(e) => setFeedback(e.target.value)}
+            placeholder="Votre message (facultatif)..."
+            className="w-full bg-white/10 backdrop-blur-sm rounded-xl px-4 py-3 text-sm text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-white/20 border border-white/10 resize-none"
+            rows={3}
+            maxLength={500}
+          />
+          <div className="flex gap-2">
+            <button
+              onClick={handleSubmitFeedback}
+              disabled={!feedback.trim() || submitting}
+              className={`flex-1 py-3 rounded-xl text-sm font-bold transition-all active:scale-95 ${
+                feedback.trim()
+                  ? 'bg-white/15 text-white border border-white/20'
+                  : 'bg-white/5 text-white/30 cursor-not-allowed'
+              }`}
+            >
+              {submitting ? 'Envoi...' : 'Envoyer'}
+            </button>
+            <button
+              onClick={onDone}
+              className="flex-1 py-3 rounded-xl text-sm font-bold bg-orange-500/20 text-orange-300 border border-orange-500/30 transition-all active:scale-95"
+            >
+              Retour a l'espace
+            </button>
+          </div>
+        </motion.div>
+      ) : (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="space-y-4"
+        >
+          <div className="flex items-center gap-2 justify-center text-emerald-400">
+            <CheckCircle2 size={18} />
+            <p className="text-sm font-bold">Message transmis a l'equipe</p>
+          </div>
+          <button
+            onClick={onDone}
+            className="px-8 py-3 rounded-xl text-sm font-bold bg-orange-500/20 text-orange-300 border border-orange-500/30 transition-all active:scale-95"
+          >
+            Retour a l'espace
+          </button>
+        </motion.div>
+      )}
+    </div>
+  );
+};
+
 // ========== Animateur Phase Controls ==========
 const AnimateurPhaseControls: React.FC<{
   currentIndex: number;
@@ -808,6 +923,40 @@ const AnimateurPhaseControls: React.FC<{
   );
 };
 
+// ========== Wake Lock (keep screen on during vocal) ==========
+function useWakeLock() {
+  const wakeLockRef = useRef<WakeLockSentinel | null>(null);
+
+  useEffect(() => {
+    let active = true;
+
+    const requestLock = async () => {
+      try {
+        if ('wakeLock' in navigator && active) {
+          wakeLockRef.current = await navigator.wakeLock.request('screen');
+        }
+      } catch {
+        // Wake lock denied or not supported — silently ignore
+      }
+    };
+
+    requestLock();
+
+    // Re-acquire on visibility change (released automatically when tab hidden)
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') requestLock();
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    return () => {
+      active = false;
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      wakeLockRef.current?.release().catch(() => {});
+      wakeLockRef.current = null;
+    };
+  }, []);
+}
+
 // ========== Room Content (inside LiveKitRoom) ==========
 const RoomContent: React.FC<{
   isAnimateur: boolean;
@@ -823,6 +972,7 @@ const RoomContent: React.FC<{
   onSessionProgress?: (elapsedMin: number, totalDurationMin: number) => void;
   onSessionEnded?: () => void;
 }> = ({ isAnimateur, groupeId, groupeTitre, groupeTheme, dateVocal, onLeave, animateurNotes, structureType, structure, defaultDurationMin, onSessionProgress, onSessionEnded }) => {
+  useWakeLock(); // Keep screen on during vocal session
   const participants = useParticipants();
   const { localParticipant } = useLocalParticipant();
   const connectionState = useConnectionState();
@@ -831,6 +981,8 @@ const RoomContent: React.FC<{
   const [localMuted, setLocalMuted] = useState(false);
   const [handRaised, setHandRaised] = useState(false);
   const [showChat, setShowChat] = useState(false);
+  const [vocalChatMessages, setVocalChatMessages] = useState<VocalChatMessage[]>([]);
+  const showChatRef = useRef(false);
   const [speakingName, setSpeakingName] = useState<string | null>(null);
   const [raisedHands, setRaisedHands] = useState<Set<string>>(new Set());
   const [chatUnread, setChatUnread] = useState(0);
@@ -842,6 +994,9 @@ const RoomContent: React.FC<{
   const [showAllNotes, setShowAllNotes] = useState(false);
   const [notesPulse, setNotesPulse] = useState(false);
   const [participantBadges, setParticipantBadges] = useState<Record<string, BadgeLevel>>({});
+  const [warningCounts, setWarningCounts] = useState<Record<string, number>>({});
+  const [localWarnings, setLocalWarnings] = useState(0);
+  const [banInfo, setBanInfo] = useState<{ banned: boolean; groupeTitre: string } | null>(null);
 
   // Fetch badges for all participants
   useEffect(() => {
@@ -1053,11 +1208,13 @@ const RoomContent: React.FC<{
   const handleWarnParticipant = useCallback(
     async (identity: string) => {
       if (!localParticipant || !isAnimateur) return;
+      const newCount = (warningCounts[identity] || 0) + 1;
+      setWarningCounts(prev => ({ ...prev, [identity]: newCount }));
       const encoder = new TextEncoder();
-      const data = encoder.encode(JSON.stringify({ action: 'warn', target: identity }));
+      const data = encoder.encode(JSON.stringify({ action: 'warn', target: identity, warningCount: newCount }));
       await localParticipant.publishData(data, { reliable: true });
     },
-    [localParticipant, isAnimateur]
+    [localParticipant, isAnimateur, warningCounts]
   );
 
   const handleKickParticipant = useCallback(
@@ -1093,6 +1250,22 @@ const RoomContent: React.FC<{
           return;
         }
 
+        // Handle ephemeral chat messages
+        if (msg.action === 'chat') {
+          const chatMsg: VocalChatMessage = {
+            id: msg.id || `${Date.now()}-${msg.auteurUid}`,
+            auteurUid: msg.auteurUid,
+            auteurPseudo: msg.auteurPseudo,
+            contenu: msg.contenu,
+            timestamp: msg.timestamp || Date.now(),
+          };
+          setVocalChatMessages((prev) => [...prev, chatMsg]);
+          if (!showChatRef.current) {
+            setChatUnread((prev) => prev + 1);
+          }
+          return;
+        }
+
         if (msg.target === localParticipant.identity) {
           if (msg.action === 'mute') {
             localParticipant.setMicrophoneEnabled(false);
@@ -1105,10 +1278,16 @@ const RoomContent: React.FC<{
             setWarnToast('L\'animateur vous donne la parole');
             setTimeout(() => setWarnToast(null), 4000);
           } else if (msg.action === 'warn') {
-            setWarnToast('L\'animateur vous rappelle les regles de bienveillance');
-            setTimeout(() => setWarnToast(null), 5000);
+            const count = msg.warningCount || 1;
+            setLocalWarnings(count);
+            setWarnToast(
+              count >= 2
+                ? 'Dernier avertissement — Veuillez respecter les regles de bienveillance'
+                : 'L\'animateur vous rappelle les regles de bienveillance'
+            );
+            setTimeout(() => setWarnToast(null), 6000);
           } else if (msg.action === 'kick') {
-            onLeave();
+            setBanInfo({ banned: true, groupeTitre });
           }
         }
       } catch {
@@ -1122,21 +1301,48 @@ const RoomContent: React.FC<{
     };
   }, [room, localParticipant, onLeave]);
 
-  // Track unread chat messages when chat is closed
+  // Sync showChat ref for data channel handler
   useEffect(() => {
-    if (showChat) {
-      setChatUnread(0);
-      return;
-    }
-    const unsub = onGroupeMessages(groupeId, (msgs) => {
-      // Simple: count new messages since we don't track read state
-      // Just show a dot indicator
-      if (msgs.length > 0) {
-        setChatUnread((prev) => prev + 1);
-      }
-    });
-    return unsub;
-  }, [groupeId, showChat]);
+    showChatRef.current = showChat;
+    if (showChat) setChatUnread(0);
+  }, [showChat]);
+
+  // Send ephemeral chat message via data channel
+  const handleSendChatMessage = useCallback((text: string) => {
+    if (!localParticipant || !room) return;
+    const user = auth.currentUser;
+    if (!user) return;
+
+    const chatMsg: VocalChatMessage = {
+      id: `${Date.now()}-${user.uid}`,
+      auteurUid: user.uid,
+      auteurPseudo: user.displayName || 'Anonyme',
+      contenu: text,
+      timestamp: Date.now(),
+    };
+
+    // Add to local state immediately
+    setVocalChatMessages((prev) => [...prev, chatMsg]);
+
+    // Broadcast to others via data channel
+    const encoder = new TextEncoder();
+    const data = encoder.encode(JSON.stringify({
+      action: 'chat',
+      ...chatMsg,
+    }));
+    localParticipant.publishData(data, { reliable: true });
+  }, [localParticipant, room]);
+
+  // ===== Ban Screen =====
+  if (banInfo?.banned) {
+    return (
+      <BanScreen
+        groupeTitre={banInfo.groupeTitre}
+        groupeId={groupeId}
+        onDone={onLeave}
+      />
+    );
+  }
 
   if (connectionState === ConnectionState.Connecting) {
     return (
@@ -1304,6 +1510,8 @@ const RoomContent: React.FC<{
                 isAnimateur={pIsAnimateur}
                 isLocal={isLocal}
                 hasHandRaised={raisedHands.has(p.identity)}
+                warningCount={isLocal ? localWarnings : (warningCounts[p.identity] || 0)}
+                showWarningBadge={isLocal ? localWarnings > 0 : (isAnimateur && (warningCounts[p.identity] || 0) > 0)}
                 angle={angle}
                 radius={circleRadius}
                 color={color}
@@ -1314,6 +1522,7 @@ const RoomContent: React.FC<{
                   color,
                   isMuted: isLocal ? localMuted : isMuted,
                   hasHandRaised: raisedHands.has(p.identity),
+                  warningCount: warningCounts[p.identity] || 0,
                 }) : undefined}
               />
             );
@@ -1562,9 +1771,9 @@ const RoomContent: React.FC<{
       <AnimatePresence>
         {showChat && (
           <ChatPanel
-            groupeId={groupeId}
+            messages={vocalChatMessages}
+            onSend={handleSendChatMessage}
             onClose={() => setShowChat(false)}
-            unreadCount={chatUnread}
           />
         )}
       </AnimatePresence>
