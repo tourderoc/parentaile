@@ -11,11 +11,11 @@ import {
   getDocs,
   onSnapshot,
 } from 'firebase/firestore';
-import { MessageSquare, Users, ChevronRight, Sparkles, LayoutGrid, Loader2, Heart, Feather, Wind, Home } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { MessageSquare, Users, ChevronRight, Sparkles, LayoutGrid, Loader2, Heart, Feather, Wind, Home, X, Star } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { onGroupesParole, onPendingEvaluations, onUserProgression } from '../../../lib/groupeParoleService';
 import type { GroupeParole, EvaluationPendante, UserProgression, BadgeLevel } from '../../../types/groupeParole';
-import { getNextBadge, BADGE_THRESHOLDS } from '../../../types/groupeParole';
+import { getNextBadge, BADGE_THRESHOLDS, THEME_COLORS, THEME_LABELS } from '../../../types/groupeParole';
 
 export const SlideMonEspace = () => {
   const navigate = useNavigate();
@@ -26,6 +26,7 @@ export const SlideMonEspace = () => {
   const [pendingEvals, setPendingEvals] = useState<EvaluationPendante[]>([]);
   const [progression, setProgression] = useState<UserProgression | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [showEvalsModal, setShowEvalsModal] = useState(false);
 
   // Auth listener
   useEffect(() => {
@@ -223,11 +224,7 @@ export const SlideMonEspace = () => {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3 }}
-            onClick={() => {
-              // Navigate to the first pending group's vocal page to show evaluation
-              const first = pendingEvals[0];
-              navigate(`/espace/groupes/${first.groupeId}/vocal`);
-            }}
+            onClick={() => setShowEvalsModal(true)}
             className="w-full glass rounded-3xl p-5 flex items-center gap-4 shadow-glass text-left active:scale-[0.98] transition-transform border-2 border-orange-200/50"
           >
             <div className="w-14 h-14 bg-gradient-to-br from-pink-400 to-orange-400 rounded-2xl flex items-center justify-center flex-shrink-0 shadow-lg shadow-pink-500/20">
@@ -386,6 +383,99 @@ export const SlideMonEspace = () => {
           </div>
         </motion.div>
       )}
+
+      {/* Pending Evaluations Bottom Sheet */}
+      {showEvalsModal &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[9999]"
+            onClick={() => setShowEvalsModal(false)}
+          >
+            {/* Backdrop */}
+            <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+
+            {/* Bottom Sheet */}
+            <motion.div
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+              onClick={(e: React.MouseEvent) => e.stopPropagation()}
+              className="absolute bottom-0 inset-x-0 bg-white rounded-t-[32px] max-h-[70vh] flex flex-col shadow-2xl"
+            >
+              {/* Handle bar */}
+              <div className="flex justify-center pt-3 pb-1">
+                <div className="w-10 h-1 bg-gray-200 rounded-full" />
+              </div>
+
+              {/* Header */}
+              <div className="flex items-center justify-between px-6 py-3 border-b border-gray-100">
+                <div className="flex items-center gap-2">
+                  <Heart size={18} className="text-pink-500 fill-pink-500" />
+                  <h3 className="text-base font-extrabold text-gray-800 tracking-tight">Donner mon avis</h3>
+                </div>
+                <button
+                  onClick={() => setShowEvalsModal(false)}
+                  className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center active:scale-90 transition-transform"
+                >
+                  <X size={16} className="text-gray-400" />
+                </button>
+              </div>
+
+              {/* Subtitle */}
+              <p className="px-6 pt-3 pb-1 text-xs text-gray-400 font-medium">
+                {pendingEvals.length} evaluation{pendingEvals.length > 1 ? 's' : ''} en attente — choisissez un groupe
+              </p>
+
+              {/* Cards list */}
+              <div className="flex-1 overflow-y-auto px-6 pb-8 pt-2 space-y-3">
+                {pendingEvals.map((ev, i) => {
+                  const colors = THEME_COLORS[ev.groupeTheme] || THEME_COLORS.autre;
+                  const themeLabel = THEME_LABELS[ev.groupeTheme] || 'Autre';
+                  return (
+                    <motion.button
+                      key={ev.groupeId}
+                      initial={{ opacity: 0, y: 15 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: i * 0.08 }}
+                      onClick={() => {
+                        setShowEvalsModal(false);
+                        navigate(`/espace/groupes/${ev.groupeId}/vocal`);
+                      }}
+                      className="w-full rounded-2xl p-4 flex items-center gap-4 text-left active:scale-[0.97] transition-transform border border-gray-100 shadow-sm bg-white hover:bg-gray-50"
+                    >
+                      {/* Theme color icon */}
+                      <div className={`w-12 h-12 ${colors.bg} rounded-xl flex items-center justify-center flex-shrink-0 shadow-md`}>
+                        <Star size={20} className="text-white fill-white" />
+                      </div>
+
+                      {/* Info */}
+                      <div className="flex-1 min-w-0">
+                        <h4 className="text-sm font-extrabold text-gray-800 truncate">{ev.groupeTitre}</h4>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className={`text-[10px] font-bold ${colors.text} px-1.5 py-0.5 rounded-md ${colors.light}`}>
+                            {themeLabel}
+                          </span>
+                          <span className="text-[10px] text-gray-400 font-medium">
+                            {ev.dateVocal.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* CTA */}
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        <span className="text-[10px] font-bold text-emerald-500 bg-emerald-50 px-2 py-1 rounded-lg">
+                          +5 pts
+                        </span>
+                        <ChevronRight size={16} className="text-gray-300" />
+                      </div>
+                    </motion.button>
+                  );
+                })}
+              </div>
+            </motion.div>
+          </div>,
+          document.body
+        )}
 
       {/* Auth Modal */}
       {showAuthModal &&

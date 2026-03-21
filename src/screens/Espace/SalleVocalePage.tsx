@@ -3145,8 +3145,8 @@ export const SalleVocalePage = () => {
   }, []);
 
   const handleNavigateAway = useCallback(() => {
-    navigate(`/espace/groupes/${groupeId}`);
-  }, [navigate, groupeId]);
+    navigate('/espace/mon-espace');
+  }, [navigate]);
 
   // Presence tracking: marquer present quand dans la salle, cleanup au depart
   useEffect(() => {
