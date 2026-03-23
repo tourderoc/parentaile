@@ -20,7 +20,8 @@ export type ParentNotifType =
   | 'badge_earned'      // Vous avez obtenu un nouveau badge
   | 'evaluation_received' // Un participant a évalué votre groupe
   | 'session_ended'     // La session vocale est terminée
-  | 'group_created';    // Votre groupe a été créé
+  | 'group_created'     // Votre groupe a été créé
+  | 'group_cancelled';  // Votre groupe a été annulé
 
 export interface ParentNotification {
   id: string;
@@ -43,6 +44,7 @@ export const NOTIF_CONFIG: Record<ParentNotifType, { icon: string; color: string
   evaluation_received: { icon: '💬', color: 'text-pink-600',   bg: 'bg-pink-50' },
   session_ended:       { icon: '🎙️', color: 'text-violet-600', bg: 'bg-violet-50' },
   group_created:       { icon: '✅', color: 'text-emerald-600', bg: 'bg-emerald-50' },
+  group_cancelled:     { icon: '❌', color: 'text-red-600', bg: 'bg-red-50' },
 };
 
 // ========== ÉCRITURE ==========
@@ -89,8 +91,8 @@ export function onParentNotifications(
       createdAt: d.data().createdAt?.toDate?.() || new Date(),
     })) as ParentNotification[];
     callback(notifs);
-  }, () => {
-    // Silently handle permission errors
+  }, (err) => {
+    console.error('Erreur écoute notifications parent:', err);
     callback([]);
   });
 }

@@ -25,8 +25,11 @@ function joursRestants(dateExpiration: Date): number {
   return Math.max(0, Math.ceil(diff / 86400000));
 }
 
-function formatDateVocal(date: Date): string {
-  const isPassé = date.getTime() < Date.now();
+function formatDateVocal(date: Date, status?: string): string {
+  const now = new Date();
+  if (status === 'cancelled') return 'Annulé';
+  if (status === 'reprogrammed') return 'Reprogrammé';
+  const isPassé = date.getTime() < now.getTime() || status === 'completed';
   const jour = date.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' });
   const heure = date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
   if (isPassé) return `Terminé le ${jour}`;
@@ -472,16 +475,32 @@ export const GroupeDetailPage = () => {
 
               {/* Vocal */}
               <div className="flex items-center gap-2">
-                <div className={`w-7 h-7 ${vocalPassé ? 'bg-gray-100' : 'bg-orange-50'} rounded-lg flex items-center justify-center`}>
-                  <Mic size={14} className={vocalPassé ? 'text-gray-400' : 'text-orange-500'} />
+                <div className={`w-7 h-7 ${
+                  groupe.status === 'cancelled' ? 'bg-red-50' :
+                  groupe.status === 'reprogrammed' ? 'bg-blue-50' :
+                  vocalPassé ? 'bg-gray-100' : 'bg-orange-50'
+                } rounded-lg flex items-center justify-center`}>
+                  <Mic size={14} className={
+                    groupe.status === 'cancelled' ? 'text-red-400' :
+                    groupe.status === 'reprogrammed' ? 'text-blue-400' :
+                    vocalPassé ? 'text-gray-400' : 'text-orange-500'
+                  } />
                 </div>
-                <span className={`text-xs font-semibold ${vocalPassé ? 'text-gray-400' : 'text-gray-600'}`}>
-                  {formatDateVocal(groupe.dateVocal)}
+                <span className={`text-xs font-semibold ${
+                  groupe.status === 'cancelled' ? 'text-red-500' :
+                  groupe.status === 'reprogrammed' ? 'text-blue-500' :
+                  vocalPassé ? 'text-gray-400' : 'text-gray-600'
+                }`}>
+                  {formatDateVocal(groupe.dateVocal, groupe.status)}
                 </span>
                 <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ml-auto ${
+                  groupe.status === 'cancelled' ? 'bg-red-50 text-red-500' :
+                  groupe.status === 'reprogrammed' ? 'bg-blue-50 text-blue-500' :
                   vocalPassé ? 'bg-gray-100 text-gray-400' : 'bg-orange-50 text-orange-500'
                 }`}>
-                  {vocalPassé ? 'Passé' : 'À venir'}
+                  {groupe.status === 'cancelled' ? 'Annulé' : 
+                   groupe.status === 'reprogrammed' ? 'Reprogrammé' :
+                   vocalPassé ? 'Passé' : 'À venir'}
                 </span>
               </div>
 
@@ -510,7 +529,7 @@ export const GroupeDetailPage = () => {
               )}
 
               {/* Bouton inscription */}
-              {!isParticipant && !estComplet && (
+              {!isParticipant && !estComplet && groupe.status === 'scheduled' && (
                 <motion.button
                   whileTap={{ scale: 0.97 }}
                   onClick={handleJoinGroupe}
@@ -717,24 +736,41 @@ export const GroupeDetailPage = () => {
               </span>
             </div>
 
-            {/* Description du créateur (sticky) */}
-            <div className="sticky top-0 z-10 px-4 py-2.5 bg-orange-50/90 backdrop-blur-sm border-b border-orange-100/50">
-              <div className="flex items-start gap-2">
-                <div className="w-6 h-6 bg-orange-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                  <span className="text-[9px] font-bold text-orange-500">
-                    {groupe.createurPseudo.charAt(0).toUpperCase()}
-                  </span>
+            {/* Discussion Header */}
+            <div className="sticky top-0 z-10">
+              {/* Alerte groupe annulé */}
+              {(groupe.status === 'cancelled' || groupe.status === 'reprogrammed') && (
+                <div className={`px-4 py-2 border-b flex items-center gap-3 ${
+                  groupe.status === 'cancelled' ? 'bg-red-50 border-red-100/50' : 'bg-blue-50 border-blue-100/50'
+                }`}>
+                  <AlertTriangle size={14} className={groupe.status === 'cancelled' ? 'text-red-400' : 'text-blue-400'} />
+                  <p className={`text-[10px] font-bold ${groupe.status === 'cancelled' ? 'text-red-600' : 'text-blue-600'}`}>
+                    {groupe.status === 'cancelled' 
+                      ? 'SESSION VOCALE ANNULÉE' 
+                      : 'SESSION REPROGRAMMÉE'}
+                  </p>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5 mb-0.5">
-                    <span className="text-[10px] font-bold text-orange-600">{groupe.createurPseudo}</span>
-                    <span className="text-[8px] font-bold bg-orange-200/60 text-orange-600 px-1.5 py-0.5 rounded-full uppercase">
-                      Modérateur
+              )}
+
+              {/* Description du créateur */}
+              <div className="px-4 py-2.5 bg-orange-50/90 backdrop-blur-sm border-b border-orange-100/50">
+                <div className="flex items-start gap-2">
+                  <div className="w-6 h-6 bg-orange-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <span className="text-[9px] font-bold text-orange-500">
+                      {groupe.createurPseudo.charAt(0).toUpperCase()}
                     </span>
                   </div>
-                  <p className="text-[11px] text-gray-600 leading-relaxed whitespace-pre-wrap">
-                    {groupe.description}
-                  </p>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <span className="text-[10px] font-bold text-orange-600">{groupe.createurPseudo}</span>
+                      <span className="text-[8px] font-bold bg-orange-200/60 text-orange-600 px-1.5 py-0.5 rounded-full uppercase">
+                        Modérateur
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-gray-600 leading-relaxed whitespace-pre-wrap">
+                      {groupe.description}
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>

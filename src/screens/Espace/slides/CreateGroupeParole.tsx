@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft,
@@ -57,6 +58,22 @@ export const CreateGroupeParole: React.FC<CreateGroupeParoleProps> = ({ onBack }
     STRUCTURE_DEFAUT.map(s => ({ ...s }))
   );
   const [currentStep, setCurrentStep] = useState(1);
+  const location = useLocation();
+
+  // Handle pre-fill from state (reprogramming)
+  useEffect(() => {
+    const state = location.state as any;
+    if (state?.prefill) {
+      const p = state.prefill;
+      if (p.titre) setTitre(p.titre);
+      if (p.description) setDescription(p.description);
+      if (p.theme) setSelectedTheme(p.theme);
+      if (p.structureType) setStructureType(p.structureType);
+      if (p.structure) setStructure(p.structure.map((s: any) => ({ ...s })));
+      // We don't pre-fill date to force a new choice, but we keep the same hour
+      // if (p.heure) setHeureVocal(p.heure);
+    }
+  }, [location.state]);
 
   // Voice
   const [isRecording, setIsRecording] = useState(false);

@@ -14,9 +14,9 @@ export const sendVocalReminders = functions
     const db = admin.firestore();
     const now = Date.now();
 
-    // Chercher les groupes avec dateVocal dans [now+4min, now+16min]
+    // Chercher les groupes avec dateVocal dans [now+4min, now+32min]
     const minDate = new Date(now + 4 * 60000);
-    const maxDate = new Date(now + 16 * 60000);
+    const maxDate = new Date(now + 32 * 60000);
 
     const snapshot = await db
       .collection('groupes')
@@ -36,8 +36,9 @@ export const sendVocalReminders = functions
       const minutesLeft = Math.round((dateVocal.getTime() - now) / 60000);
 
       // Determiner le type de rappel
-      let reminderType: '15min' | '5min' | null = null;
-      if (minutesLeft >= 13 && minutesLeft <= 16) reminderType = '15min';
+      let reminderType: '30min' | '15min' | '5min' | null = null;
+      if (minutesLeft >= 28 && minutesLeft <= 32) reminderType = '30min';
+      else if (minutesLeft >= 13 && minutesLeft <= 16) reminderType = '15min';
       else if (minutesLeft >= 4 && minutesLeft <= 6) reminderType = '5min';
       else continue;
 
@@ -46,6 +47,45 @@ export const sendVocalReminders = functions
         .collection('notifications_sent').doc(`reminder_${reminderType}`);
       const dedupSnap = await dedupRef.get();
       if (dedupSnap.exists) continue;
+
+      // --- VERIFICATION J-30MIN ET ANNULATION ---
+      if (reminderType === '30min') {
+        const pCount = (data.participants || []).length;
+        if (pCount < 3) {
+          // Annuler le groupe
+          await db.collection('groupes').doc(doc.id).update({ status: 'cancelled' });
+          
+          // Notifier les inscrits de l'annulation
+          for (const p of data.participants || []) {
+            if (!p.uid) continue;
+            
+            // Notification in-app
+            await db.collection('parentNotifications').add({
+              type: 'group_cancelled',
+              recipientUid: p.uid,
+              title: 'Groupe annulé',
+              body: `Le groupe "${data.titre}" n'aura malheureusement pas lieu (pas assez de participants).`,
+              read: false,
+              createdAt: admin.firestore.FieldValue.serverTimestamp(),
+              groupeId: doc.id,
+              groupeTitre: data.titre
+            });
+            
+            // FCM Notification
+            const accSnap = await db.collection('accounts').doc(p.uid).get();
+            const token = accSnap.data()?.fcmToken;
+            if (token) {
+              await admin.messaging().send({
+                token,
+                notification: { title: 'Groupe annulé', body: `Votre groupe "${data.titre}" a été annulé (manque de participants).` }
+              }).catch(() => {});
+            }
+          }
+          
+          await dedupRef.set({ sentAt: admin.firestore.FieldValue.serverTimestamp() });
+          continue; // On passe au groupe suivant, le groupe est annulé
+        }
+      }
 
       // Recuperer les FCM tokens des participants
       const participants: any[] = data.participants || [];
@@ -61,10 +101,15 @@ export const sendVocalReminders = functions
       if (fcmTokens.length === 0) continue;
 
       // Construire le message
-      const title = reminderType === '15min'
+      const title = reminderType === '30min'
+        ? `Votre groupe dans 30 min`
+        : reminderType === '15min'
         ? `Votre groupe dans ${minutesLeft} min`
         : 'Votre groupe commence !';
-      const body = reminderType === '15min'
+        
+      const body = reminderType === '30min'
+        ? `"${data.titre}" aura bien lieu, préparez-vous !`
+        : reminderType === '15min'
         ? `"${data.titre}" — La salle d'attente est ouverte`
         : `"${data.titre}" — ${participants.length} parent${participants.length > 1 ? 's' : ''} vous attendent`;
 
@@ -201,11 +246,14 @@ export const getLiveKitToken = functions.https.onCall(async (data, context) => {
     ? accountSnap.data()?.pseudo || 'Parent'
     : 'Parent';
 
-  // Déterminer si l'utilisateur est l'animateur (créateur du groupe)
-  // Pour le test group, re-lire le doc car on a peut-être mis à jour le createurUid
-  const isAnimateur = isTestGroup
-    ? (await groupeRef.get()).data()?.createurUid === uid
-    : groupe.createurUid === uid;
+  // Déterminer si l'utilisateur est l'animateur (créateur du groupe ou de remplacement)
+  let isAnimateur = false;
+  if (isTestGroup) {
+     const freshGroupe = (await groupeRef.get()).data()!;
+     isAnimateur = freshGroupe.createurUid === uid || freshGroupe.sessionState?.currentAnimateurUid === uid;
+  } else {
+     isAnimateur = groupe.createurUid === uid || groupe.sessionState?.currentAnimateurUid === uid;
+  }
 
   // Générer le token LiveKit
   const apiKey = functions.config().livekit?.api_key || process.env.LIVEKIT_API_KEY;

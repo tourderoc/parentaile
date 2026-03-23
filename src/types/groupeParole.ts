@@ -33,6 +33,8 @@ export const STRUCTURE_DEFAUT: StructureEtape[] = [
   { label: 'Clôture', dureeMinutes: 5 },
 ];
 
+export type GroupeStatus = 'scheduled' | 'cancelled' | 'in_progress' | 'completed' | 'reprogrammed';
+
 export interface GroupeParole {
   id: string;
   titre: string;
@@ -52,6 +54,9 @@ export interface GroupeParole {
   passwordVocal?: string;
   isTestGroup?: boolean;
   sessionState?: SessionState;
+  status?: GroupeStatus;
+  reprogrammedFromId?: string;
+  reprogrammedToId?: string;
 }
 
 export const THEME_LABELS: Record<ThemeGroupe, string> = {
@@ -154,6 +159,14 @@ export interface SessionState {
   sessionActive: boolean;
   phaseStartedAt: Date;
   sessionStartedAt: Date;
+  // Lifecycle extensions
+  suspended?: boolean;
+  suspendedAt?: Date;
+  suspensionReason?: 'animateur_left' | 'below_minimum';
+  suspensionCount?: number;      // max 2
+  replacementUsed?: boolean;
+  currentAnimateurUid?: string;
+  currentAnimateurPseudo?: string;
 }
 
 export type MicPolicy = 'open' | 'muted_raise_hand' | 'muted_animateur_gives';

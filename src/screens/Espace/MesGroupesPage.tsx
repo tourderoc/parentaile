@@ -9,9 +9,11 @@ import type { GroupeParole } from '../../types/groupeParole';
 import { THEME_COLORS, THEME_SHORT_LABELS } from '../../types/groupeParole';
 
 // --- Helpers ---
-function formatDateVocal(date: Date): string {
+function formatDateVocal(date: Date, status?: string): string {
   const now = new Date();
-  const isPassé = date.getTime() < now.getTime();
+  if (status === 'cancelled') return 'Annulé';
+  if (status === 'reprogrammed') return 'Reprogrammé';
+  const isPassé = date.getTime() < now.getTime() || status === 'completed';
   const jour = date.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' });
   const heure = date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
   if (isPassé) return `Terminé le ${jour}`;
@@ -24,16 +26,17 @@ function joursRestants(dateExpiration: Date): number {
 }
 
 /** Calcule le statut vocal par rapport à maintenant */
-function getVocalStatus(dateVocal: Date): {
-  status: 'passed' | 'open' | 'soon' | 'waiting';
+function getVocalStatus(dateVocal: Date, groupStatus?: string): {
+  status: 'passed' | 'open' | 'soon' | 'waiting' | 'cancelled';
   minutesLeft?: number;
 } {
+  if (groupStatus === 'cancelled' || groupStatus === 'reprogrammed') return { status: 'passed' }; // Hide join button
   const now = Date.now();
   const vocalTime = dateVocal.getTime();
   const diff = vocalTime - now;
   const minutesLeft = Math.ceil(diff / 60000);
 
-  if (diff < 0) return { status: 'passed' };
+  if (diff < 0 || groupStatus === 'completed') return { status: 'passed' };
   // Salle ouverte 15 min avant et pendant 45 min après le début
   if (minutesLeft <= 15) return { status: 'open' };
   if (minutesLeft <= 60) return { status: 'soon', minutesLeft };
@@ -47,7 +50,7 @@ const VocalCartouche: React.FC<{
   onRejoindre: () => void;
 }> = ({ groupe, isParticipant, onRejoindre }) => {
   // Groupe test → toujours ouvert
-  const rawStatus = getVocalStatus(groupe.dateVocal);
+  const rawStatus = getVocalStatus(groupe.dateVocal, groupe.status);
   const { status, minutesLeft } = groupe.isTestGroup
     ? { status: 'open' as const, minutesLeft: undefined }
     : rawStatus;
@@ -120,7 +123,7 @@ const VocalCartouche: React.FC<{
           Salle ouverte 15 min avant le vocal
         </p>
         <p className="text-[10px] text-gray-400 font-medium">
-          {formatDateVocal(groupe.dateVocal)}
+          {formatDateVocal(groupe.dateVocal, groupe.status)}
         </p>
       </div>
     </div>
@@ -203,9 +206,17 @@ const MiniGroupeCard: React.FC<{
 
             {/* Vocal */}
             <div className="flex items-center gap-1.5">
-              <Mic size={13} className={vocalPassé ? 'text-gray-400' : 'text-orange-500'} />
-              <span className={`font-semibold ${vocalPassé ? 'text-gray-400' : 'text-gray-600'}`}>
-                {formatDateVocal(groupe.dateVocal)}
+              <Mic size={13} className={
+                groupe.status === 'cancelled' ? 'text-red-400' :
+                groupe.status === 'reprogrammed' ? 'text-blue-400' :
+                vocalPassé ? 'text-gray-400' : 'text-orange-500'
+              } />
+              <span className={`font-semibold ${
+                groupe.status === 'cancelled' ? 'text-red-500' :
+                groupe.status === 'reprogrammed' ? 'text-blue-500' :
+                vocalPassé ? 'text-gray-400' : 'text-gray-600'
+              }`}>
+                {formatDateVocal(groupe.dateVocal, groupe.status)}
               </span>
             </div>
           </div>

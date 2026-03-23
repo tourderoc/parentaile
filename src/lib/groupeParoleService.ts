@@ -17,6 +17,8 @@ import {
   arrayUnion,
   increment,
   deleteField,
+  writeBatch,
+  runTransaction,
 } from 'firebase/firestore';
 import type { GroupeParole, MessageGroupe, ThemeGroupe, StructureEtape, EvaluationGroupe, EvaluationPendante, BadgeLevel, ParticipationEntry, UserProgression } from '../types/groupeParole';
 import { getBadgeForPoints, BADGE_THRESHOLDS } from '../types/groupeParole';
@@ -31,6 +33,7 @@ export interface CreateGroupeData {
   dateVocal: Date;
   structureType: 'libre' | 'structuree';
   structure?: StructureEtape[];
+  reprogrammedFromId?: string;
 }
 
 /**
@@ -66,6 +69,18 @@ export async function createGroupeParole(data: CreateGroupeData): Promise<string
   };
 
   const docRef = await addDoc(collection(db, 'groupes'), groupeDoc);
+
+  // Si c'est une reprogrammation, mettre à jour l'ancien groupe
+  if (data.reprogrammedFromId) {
+    try {
+      await updateDoc(doc(db, 'groupes', data.reprogrammedFromId), {
+        status: 'reprogrammed',
+        reprogrammedToId: docRef.id,
+      });
+    } catch (err) {
+      console.error('Erreur mise à jour groupe original:', err);
+    }
+  }
 
   // +30 points pour la création d'un groupe
   addPoints(data.createurUid, 30, {
@@ -265,19 +280,31 @@ export async function rejoindreGroupe(
     }),
   });
 
-  // Notifier le créateur du groupe
+  // Notifier le créateur du groupe aux jalons importants
   try {
     const groupeSnap = await getDoc(doc(db, 'groupes', groupeId));
     if (groupeSnap.exists()) {
       const data = groupeSnap.data();
+      const currentCount = (data.participants || []).length;
+      
       if (data.createurUid && data.createurUid !== participant.uid) {
-        sendParentNotification(
-          data.createurUid,
-          'group_join',
-          'Nouveau participant',
-          `${participant.pseudo} a rejoint votre groupe "${data.titre}"`,
-          { groupeId, groupeTitre: data.titre }
-        );
+        if (currentCount === 3) {
+          sendParentNotification(
+            data.createurUid,
+            'group_join',
+            'Minimum atteint !',
+            `Bonne nouvelle, 3 parents sont inscrits à "${data.titre}", le groupe aura bien lieu.`,
+            { groupeId, groupeTitre: data.titre }
+          );
+        } else if (currentCount === data.participantsMax) {
+          sendParentNotification(
+            data.createurUid,
+            'group_join',
+            'Groupe complet !',
+            `Le groupe "${data.titre}" est complet (${data.participantsMax} inscrits).`,
+            { groupeId, groupeTitre: data.titre }
+          );
+        }
       }
     }
   } catch {
@@ -348,6 +375,28 @@ export function onPresenceCount(
     collection(db, 'groupes', groupeId, 'presence'),
     (snapshot) => callback(snapshot.size),
     () => callback(0)
+  );
+}
+
+/**
+ * Retourne la liste complète des présences.
+ */
+export function onPresenceList(
+  groupeId: string,
+  callback: (presences: { uid: string; pseudo: string; mood?: string; ready?: boolean }[]) => void
+): () => void {
+  return onSnapshot(
+    collection(db, 'groupes', groupeId, 'presence'),
+    (snapshot) => {
+      const list = snapshot.docs.map((doc) => ({
+        uid: doc.id,
+        pseudo: doc.data().pseudo || '',
+        mood: doc.data().mood,
+        ready: doc.data().ready,
+      }));
+      callback(list);
+    },
+    () => callback([])
   );
 }
 
@@ -665,6 +714,150 @@ export async function getUserBadge(uid: string): Promise<BadgeLevel> {
   }
 }
 
+// ========== ROBUSTESSE ET CYCLE DE VIE (PHASE 1) ==========
+
+/**
+ * Annule un groupe de parole et notifie les inscrits.
+ */
+export async function cancelGroup(groupeId: string, reason: string): Promise<void> {
+  const ref = doc(db, 'groupes', groupeId);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) return;
+
+  const data = snap.data();
+  if (data.status === 'cancelled' || data.status === 'completed') return;
+
+  await updateDoc(ref, {
+    status: 'cancelled',
+    'sessionState.sessionActive': false,
+    cancelReason: reason,
+  });
+
+  // Notifier tous les participants
+  const participants = data.participants || [];
+  for (const p of participants) {
+    sendParentNotification(
+      p.uid,
+      'group_cancelled',
+      'Groupe annulé',
+      `Le groupe "${data.titre}" n'aura malheureusement pas lieu (${reason}).`,
+      { groupeId, groupeTitre: data.titre }
+    ).catch(() => {});
+  }
+}
+
+/**
+ * Suspend une session en cours.
+ */
+export async function suspendSession(
+  groupeId: string,
+  reason: 'animateur_left' | 'below_minimum'
+): Promise<void> {
+  const ref = doc(db, 'groupes', groupeId);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) return;
+
+  const data = snap.data();
+  const state = data.sessionState;
+  if (!state) return;
+
+  if (state.suspended) return; // Déjà suspendu
+
+  const count = state.suspensionCount || 0;
+  
+  if (count >= 2 || (state.replacementUsed && reason === 'animateur_left')) {
+    // Si c'est la 3ème tentative de suspension OU l'animateur de remplacement vient de partir
+    // => Fin automatique pure et simple
+    await updateDoc(ref, {
+      status: 'completed',
+      'sessionState.sessionActive': false,
+    });
+    return;
+  }
+
+  await updateDoc(ref, {
+    'sessionState.suspended': true,
+    'sessionState.suspendedAt': serverTimestamp(),
+    'sessionState.suspensionReason': reason,
+    'sessionState.suspensionCount': count + 1,
+  });
+}
+
+/**
+ * Reprend une session suspendue.
+ */
+export async function resumeSession(groupeId: string): Promise<void> {
+  await updateDoc(doc(db, 'groupes', groupeId), {
+    'sessionState.suspended': false,
+    'sessionState.suspendedAt': deleteField(),
+    'sessionState.suspensionReason': deleteField(),
+  });
+}
+
+/**
+ * Initialisation V2 du state de la salle vocale avec tracking du role d'animateur.
+ */
+export async function initSessionStateV2(
+  groupeId: string,
+  animateurUid: string,
+  animateurPseudo: string
+): Promise<void> {
+  const ref = doc(db, 'groupes', groupeId);
+  await updateDoc(ref, {
+    status: 'in_progress',
+    sessionState: {
+      currentPhaseIndex: 0,
+      extendedMinutes: 0,
+      sessionActive: true,
+      phaseStartedAt: serverTimestamp(),
+      sessionStartedAt: serverTimestamp(),
+      suspended: false,
+      suspensionCount: 0,
+      replacementUsed: false,
+      currentAnimateurUid: animateurUid,
+      currentAnimateurPseudo: animateurPseudo,
+    },
+  });
+}
+
+/**
+ * Transaction pour proposer de reprendre l'animation du groupe.
+ */
+export async function proposeAsAnimateur(
+  groupeId: string,
+  uid: string,
+  pseudo: string
+): Promise<boolean> {
+  const ref = doc(db, 'groupes', groupeId);
+  
+  try {
+    await runTransaction(db, async (transaction) => {
+      const docSnap = await transaction.get(ref);
+      if (!docSnap.exists()) throw new Error('Groupe inexistant');
+
+      const data = docSnap.data();
+      const state = data.sessionState;
+
+      if (!state) throw new Error('Pas de session active');
+      if (state.replacementUsed) throw new Error('Remplacement déjà utilisé');
+
+      // Update the state atomically
+      transaction.update(ref, {
+        'sessionState.currentAnimateurUid': uid,
+        'sessionState.currentAnimateurPseudo': pseudo,
+        'sessionState.replacementUsed': true,
+        'sessionState.suspended': false,
+        'sessionState.suspendedAt': deleteField(),
+        'sessionState.suspensionReason': deleteField(),
+      });
+    });
+    return true; // Sucesss
+  } catch (err) {
+    console.error("ProposeAnimateur echouée:", err);
+    return false; // Transaction ratée
+  }
+}
+
 // ========== GROUPE TEST ==========
 const TEST_GROUP_ID = 'groupe-test-vocal';
 
@@ -702,24 +895,33 @@ export async function seedTestGroup(): Promise<void> {
 }
 
 /**
- * Reset le groupe test : vide les participants et remet le créateur à __test__
- * pour que le prochain qui entre devienne animateur.
+ * Reset complet du groupe test : participants, sessionState, presence, evaluations, status.
  */
 export async function resetTestGroup(): Promise<void> {
   const ref = doc(db, 'groupes', TEST_GROUP_ID);
   const snap = await getDoc(ref);
   if (!snap.exists()) return;
 
+  // Clear subcollections: presence, evaluations, notifications_sent
+  const batch = writeBatch(db);
+  for (const sub of ['presence', 'evaluations', 'notifications_sent']) {
+    const subSnap = await getDocs(collection(db, 'groupes', TEST_GROUP_ID, sub));
+    subSnap.docs.forEach((d) => batch.delete(d.ref));
+  }
+  await batch.commit();
+
   await updateDoc(ref, {
     participants: [],
     createurUid: '__test__',
     createurPseudo: 'Systeme',
+    status: deleteField(),
+    sessionState: deleteField(),
   });
-  console.log('[RESET] Groupe test vocal réinitialisé');
+  console.log('[RESET] Groupe test vocal réinitialisé (complet)');
 }
 
 /**
- * Met à jour la configuration du groupe test (thème, structure, durée, titre).
+ * Met à jour la configuration du groupe test.
  */
 export async function updateTestGroup(config: {
   theme: ThemeGroupe;
@@ -729,13 +931,14 @@ export async function updateTestGroup(config: {
   titre?: string;
   createurUid?: string;
   createurPseudo?: string;
+  dateVocal?: Date;
+  status?: string;
+  fakeParticipantCount?: number;
 }): Promise<void> {
   const ref = doc(db, 'groupes', TEST_GROUP_ID);
   const updates: Record<string, unknown> = {
     theme: config.theme,
     structureType: config.structureType,
-    // Reset participants so role assignment works fresh
-    participants: [],
   };
   if (config.structureType === 'structuree' && config.structure) {
     updates.structure = config.structure;
@@ -749,7 +952,71 @@ export async function updateTestGroup(config: {
     updates.createurUid = config.createurUid;
     updates.createurPseudo = config.createurPseudo || 'Parent';
   }
+  if (config.dateVocal) {
+    updates.dateVocal = Timestamp.fromDate(config.dateVocal);
+  }
+  if (config.status) {
+    updates.status = config.status;
+  } else {
+    updates.status = deleteField();
+  }
+
+  // Build participants array with fakes
+  const fakeCount = config.fakeParticipantCount ?? 0;
+  const fakeParticipants = Array.from({ length: fakeCount }, (_, i) => ({
+    uid: `fake-parent-${i + 1}`,
+    pseudo: `Parent ${i + 1}`,
+    inscritVocal: true,
+    dateInscription: new Date(),
+  }));
+  updates.participants = fakeParticipants;
+
   await updateDoc(ref, updates);
+}
+
+/**
+ * Ajoute des presences fictives dans la subcollection presence du groupe test.
+ */
+export async function addFakePresences(count: number): Promise<void> {
+  // Clear existing presences first
+  const presSnap = await getDocs(collection(db, 'groupes', TEST_GROUP_ID, 'presence'));
+  const batch = writeBatch(db);
+  presSnap.docs.forEach((d) => batch.delete(d.ref));
+  await batch.commit();
+
+  // Add fake presences
+  for (let i = 0; i < count; i++) {
+    const uid = `fake-parent-${i + 1}`;
+    await setDoc(doc(db, 'groupes', TEST_GROUP_ID, 'presence', uid), {
+      uid,
+      pseudo: `Parent ${i + 1}`,
+      joinedAt: serverTimestamp(),
+      mood: ['😊', '😐', '😔', '💪', '🤗'][i % 5],
+    });
+  }
+}
+
+/**
+ * Simule un sessionState specifique sur le groupe test.
+ */
+export async function simulateSessionState(state: {
+  suspended?: boolean;
+  suspensionReason?: 'animateur_left' | 'below_minimum';
+  suspensionCount?: number;
+  sessionActive?: boolean;
+}): Promise<void> {
+  const updates: Record<string, unknown> = {
+    'sessionState.currentPhaseIndex': 0,
+    'sessionState.extendedMinutes': 0,
+    'sessionState.sessionActive': state.sessionActive ?? true,
+    'sessionState.phaseStartedAt': serverTimestamp(),
+    'sessionState.sessionStartedAt': serverTimestamp(),
+  };
+  if (state.suspended !== undefined) updates['sessionState.suspended'] = state.suspended;
+  if (state.suspensionReason) updates['sessionState.suspensionReason'] = state.suspensionReason;
+  if (state.suspensionCount !== undefined) updates['sessionState.suspensionCount'] = state.suspensionCount;
+
+  await updateDoc(doc(db, 'groupes', TEST_GROUP_ID), updates);
 }
 
 // ========== Signalement de bannissement ==========
@@ -798,5 +1065,7 @@ export async function extendSession(groupeId: string, extraMinutes: number): Pro
 export async function endSession(groupeId: string): Promise<void> {
   await updateDoc(doc(db, 'groupes', groupeId), {
     'sessionState.sessionActive': false,
+    status: 'completed',
   });
 }
+

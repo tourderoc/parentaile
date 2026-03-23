@@ -46,9 +46,21 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { auth, db } from '../../lib/firebase';
 import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { getLiveKitToken } from '../../lib/liveKitService';
-import { submitEvaluation, markEvaluationPending, getEvaluationStatus, addPoints, getUserBadge, setPresence, removePresence, initSessionState, advancePhase, extendSession, endSession, submitBanFeedback } from '../../lib/groupeParoleService';
+import { 
+  submitEvaluation, markEvaluationPending, getEvaluationStatus, addPoints, 
+  getUserBadge, setPresence, removePresence, initSessionState, advancePhase, 
+  extendSession, endSession, submitBanFeedback,
+  initSessionStateV2, suspendSession, resumeSession, proposeAsAnimateur, onPresenceList,
+  cancelGroup
+} from '../../lib/groupeParoleService';
 import type { MessageGroupe, ParticipantGroupe, StructureEtape, BadgeLevel, SessionState, MicPolicy } from '../../types/groupeParole';
 import { STRUCTURE_DEFAUT, getBadgeInfo, PHASE_MIC_POLICY, DEFAULT_MIC_POLICY } from '../../types/groupeParole';
+import { useEffectiveAnimateur } from '../../hooks/useEffectiveAnimateur';
+import { useAnimateurWait } from '../../hooks/useAnimateurWait';
+import { useSessionSuspension } from '../../hooks/useSessionSuspension';
+import { SuspensionOverlay } from '../../components/vocal/SuspensionOverlay';
+import { AnimateurWaitOverlay } from '../../components/vocal/AnimateurWaitOverlay';
+import { CancellationScreen } from '../../components/vocal/CancellationScreen';
 
 // ========== Timer Component ==========
 const VocalTimer: React.FC<{ dateVocal: Date; durationMin: number; extendedMinutes?: number }> = ({
@@ -971,7 +983,10 @@ const RoomContent: React.FC<{
   defaultDurationMin?: number;
   onSessionProgress?: (elapsedMin: number, totalDurationMin: number) => void;
   onSessionEnded?: () => void;
-}> = ({ isAnimateur, groupeId, groupeTitre, groupeTheme, dateVocal, onLeave, animateurNotes, structureType, structure, defaultDurationMin, onSessionProgress, onSessionEnded }) => {
+  sessionPrenom: string;
+  isTestGroup: boolean;
+  createurUid: string;
+}> = ({ isAnimateur, groupeId, groupeTitre, groupeTheme, dateVocal, onLeave, animateurNotes, structureType, structure, defaultDurationMin, onSessionProgress, onSessionEnded, sessionPrenom, isTestGroup, createurUid }) => {
   useWakeLock(); // Keep screen on during vocal session
   const participants = useParticipants();
   const { localParticipant } = useLocalParticipant();
@@ -1026,21 +1041,68 @@ const RoomContent: React.FC<{
             sessionActive: data.sessionState.sessionActive ?? true,
             phaseStartedAt: data.sessionState.phaseStartedAt?.toDate?.() || new Date(),
             sessionStartedAt: data.sessionState.sessionStartedAt?.toDate?.() || new Date(),
+            suspended: data.sessionState.suspended || false,
+            suspensionReason: data.sessionState.suspensionReason,
+            suspensionCount: data.sessionState.suspensionCount || 0,
+            replacementUsed: data.sessionState.replacementUsed || false,
+            currentAnimateurUid: data.sessionState.currentAnimateurUid || createurUid,
+            currentAnimateurPseudo: data.sessionState.currentAnimateurPseudo,
           });
         }
       }
     });
     return unsub;
-  }, [groupeId]);
+  }, [groupeId, createurUid]);
 
-  // Init session state when animateur enters (structured mode)
+  // Init session state when animateur enters
   const sessionInitRef = useRef(false);
   useEffect(() => {
-    if (isAnimateur && structureType === 'structuree' && !sessionInitRef.current) {
+    if (isAnimateur && !sessionInitRef.current) {
       sessionInitRef.current = true;
-      initSessionState(groupeId);
+      initSessionStateV2(groupeId, auth.currentUser!.uid, sessionPrenom || 'Parent');
     }
-  }, [isAnimateur, structureType, groupeId]);
+  }, [isAnimateur, groupeId, sessionPrenom]);
+
+  const { effectiveAnimateurUid, isEffectiveAnimateur, isReplacementAnimateur } = useEffectiveAnimateur({
+    firestoreSession: firestoreSession || undefined,
+    createurUid,
+    localUid: localParticipant?.identity || auth.currentUser?.uid || ''
+  });
+
+  const { waitingForAnimateur, waitCountdownSec, canPropose: waitCanPropose } = useAnimateurWait({
+    groupeId,
+    liveKitParticipants: participants,
+    firestoreSession: firestoreSession || undefined,
+    createurUid,
+    sessionStarted: firestoreSession?.sessionActive ?? false,
+    isTestGroup,
+    onTimedOut: async () => {
+       await cancelGroup(groupeId, 'Animateur absent');
+    }
+  });
+
+  const handleProposeAnimateur = async () => {
+    if (!auth.currentUser) return;
+    await proposeAsAnimateur(groupeId, auth.currentUser.uid, sessionPrenom || 'Parent');
+  };
+
+  const { suspended, suspensionReason, countdownSec: suspCountdownSec, canPropose: suspCanPropose } = useSessionSuspension({
+    groupeId,
+    localUid: localParticipant?.identity || auth.currentUser?.uid || '',
+    liveKitParticipants: participants,
+    firestoreSession: firestoreSession || undefined,
+    effectiveAnimateurUid,
+    isEffectiveAnimateur,
+    onSuspend: async (reason) => {
+      await suspendSession(groupeId, reason);
+    },
+    onResume: async () => {
+      await resumeSession(groupeId);
+    },
+    onAutoEnd: async () => {
+      await endSession(groupeId);
+    }
+  });
 
   // Session phase tracking (now Firestore-driven for structured mode)
   const sessionPhase = useSessionPhase(dateVocal, structureType, structure, firestoreSession, defaultDurationMin);
@@ -1367,6 +1429,11 @@ const RoomContent: React.FC<{
         <h2 className="text-xl font-extrabold text-white tracking-tight">{groupeTitre}</h2>
         <div className="w-16 h-[2px] bg-gradient-to-r from-transparent via-orange-400 to-transparent mx-auto mt-2" />
         <div className="flex items-center justify-center gap-2 mt-2">
+          {isReplacementAnimateur && (
+            <span className="bg-orange-500/20 text-orange-400 border border-orange-500/30 px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wider mr-1">
+              ANIMATEUR DE REMPLACEMENT
+            </span>
+          )}
           <span className="text-sm text-white/60 font-medium">
             {structureType === 'structuree' && sessionPhase.currentLabel
               ? sessionPhase.currentLabel
@@ -1397,7 +1464,7 @@ const RoomContent: React.FC<{
       </div>
 
       {/* Animateur phase controls */}
-      {isAnimateur && structureType === 'structuree' && structure.length > 0 && (
+      {isEffectiveAnimateur && structureType === 'structuree' && structure.length > 0 && (
         <AnimateurPhaseControls
           currentIndex={sessionPhase.currentIndex}
           totalPhases={structure.length}
@@ -1409,6 +1476,25 @@ const RoomContent: React.FC<{
           onEndSession={handleEndSession}
         />
       )}
+
+      <AnimatePresence>
+        {waitingForAnimateur && (
+          <AnimateurWaitOverlay
+            countdownSec={waitCountdownSec}
+            canPropose={waitCanPropose}
+            onPropose={handleProposeAnimateur}
+          />
+        )}
+        {suspended && (
+          <SuspensionOverlay
+            reason={suspensionReason}
+            countdownSec={suspCountdownSec}
+            canPropose={suspCanPropose}
+            onPropose={handleProposeAnimateur}
+            suspensionCount={firestoreSession?.suspensionCount || 0}
+          />
+        )}
+      </AnimatePresence>
 
       {/* Circular layout */}
       <div className="flex-1 flex items-center justify-center">
@@ -1492,8 +1578,7 @@ const RoomContent: React.FC<{
           {/* Participants around the circle */}
           {participants.map((p, index) => {
             const isLocal = p.identity === localParticipant?.identity;
-            const metadata = p.metadata ? JSON.parse(p.metadata) : {};
-            const pIsAnimateur = metadata.isAnimateur === true;
+            const pIsAnimateur = p.identity === effectiveAnimateurUid;
             const micPub = p.getTrackPublication(Track.Source.Microphone);
             const isMuted = !micPub || micPub.isMuted;
             const count = participants.length;
@@ -1516,7 +1601,7 @@ const RoomContent: React.FC<{
                 radius={circleRadius}
                 color={color}
                 badge={participantBadges[p.identity] || 'none'}
-                onTap={isAnimateur && !isLocal ? () => setModTarget({
+                onTap={isEffectiveAnimateur && !isLocal ? () => setModTarget({
                   identity: p.identity,
                   name: p.name || 'Parent',
                   color,
@@ -2012,8 +2097,13 @@ const WaitingRoom: React.FC<{
   const currentUser = auth.currentUser;
   const [countdown, setCountdown] = useState('');
   const [sessionStarted, setSessionStarted] = useState(false);
+  const [presences, setPresences] = useState<{uid:string, pseudo:string, mood?:string, avatarUrl?:string}[]>([]);
   // For test group: fake 15min countdown starting from now
   const [testStartTime] = useState(() => new Date(Date.now() + 15 * 60 * 1000));
+
+  useEffect(() => {
+    return onPresenceList(groupeId, setPresences);
+  }, [groupeId]);
 
   // Countdown to session start
   useEffect(() => {
@@ -2083,17 +2173,47 @@ const WaitingRoom: React.FC<{
       {/* Status cards */}
       <div className="w-full max-w-xs space-y-3">
         {/* Participants */}
-        <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4 flex items-center gap-3">
-          <div className="w-10 h-10 bg-blue-500/20 rounded-full flex items-center justify-center shrink-0">
-            <Users size={18} className="text-blue-400" />
+        <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-10 h-10 bg-blue-500/20 rounded-full flex items-center justify-center shrink-0">
+              <Users size={18} className="text-blue-400" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold text-white">
+                {participants.length} participant{participants.length > 1 ? 's' : ''} inscrit{participants.length > 1 ? 's' : ''}
+              </p>
+              <p className="text-[11px] text-white/40 font-medium truncate">
+                Inscrits de la premiere heure et arrivants
+              </p>
+            </div>
           </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-bold text-white">
-              {participants.length} participant{participants.length > 1 ? 's' : ''} inscrit{participants.length > 1 ? 's' : ''}
-            </p>
-            <p className="text-[11px] text-white/40 font-medium truncate">
-              {participants.map((p) => p.pseudo).join(', ')}
-            </p>
+          <p className="text-xs font-bold text-white/50 mb-2 mt-4 px-1 flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
+            Dejà present dans le salon :
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <AnimatePresence>
+            {presences.map((p) => {
+              const nameInitial = p.pseudo ? p.pseudo.charAt(0).toUpperCase() : 'P';
+              const hash = p.uid.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+              const color = AVATAR_COLORS[hash % AVATAR_COLORS.length];
+              return (
+                <motion.div
+                  key={p.uid}
+                  initial={{ opacity: 0, scale: 0.5 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.5 }}
+                  className="flex items-center gap-1.5 bg-white/5 rounded-full pl-1 pr-3 py-1 border border-white/10"
+                >
+                  <div className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold text-white shadow-sm" style={{ backgroundColor: color }}>
+                    {nameInitial}
+                  </div>
+                  <span className="text-[11px] font-medium text-white/80">{p.pseudo}</span>
+                  {p.mood && <span className="text-[10px] ml-0.5">{p.mood}</span>}
+                </motion.div>
+              );
+            })}
+            </AnimatePresence>
           </div>
         </div>
 
@@ -2149,9 +2269,9 @@ const WaitingRoom: React.FC<{
               <button
                 key={emoji}
                 onClick={() => {
-                  const uid = currentUser?.uid;
+                  const uid = auth.currentUser?.uid;
                   if (uid && groupeId) {
-                    setPresence(groupeId, uid, { mood: emoji }).catch(() => {});
+                    setPresence(groupeId, uid, { mood: emoji, pseudo: auth.currentUser?.displayName || 'Parent' }).catch(() => {});
                   }
                 }}
                 className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center text-xl hover:bg-white/20 active:scale-90 transition-all"
@@ -2554,8 +2674,71 @@ const PrepAnimateurScreen: React.FC<{
   );
 };
 
+// ========== Too Early Screen ==========
+const TooEarlyScreen: React.FC<{
+  groupeTitre: string;
+  participantsCount: number;
+  dateVocal: Date;
+  onBack: () => void;
+}> = ({ groupeTitre, participantsCount, dateVocal, onBack }) => (
+  <div className="h-screen bg-[#FFFBF0] flex flex-col items-center justify-center px-6 text-center">
+    <motion.div
+      initial={{ scale: 0.8, opacity: 0 }}
+      animate={{ scale: 1, opacity: 1 }}
+      transition={{ type: 'spring', damping: 20 }}
+      className="flex flex-col items-center w-full"
+    >
+      <div className="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center mb-6">
+        <Clock size={36} className="text-blue-400" />
+      </div>
+
+      <h2 className="text-xl font-extrabold text-gray-800">Encore un peu de patience...</h2>
+      <p className="text-sm text-gray-500 font-medium mt-3 max-w-xs leading-relaxed">
+        La salle d'attente pour "{groupeTitre}" ouvrira 15 minutes avant le debut de la session.
+      </p>
+      <p className="text-sm font-bold text-gray-700 mt-2">
+        ({dateVocal.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })})
+      </p>
+
+      <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 w-full max-w-xs mt-8">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-blue-500/10 rounded-full flex items-center justify-center shrink-0">
+            <Users size={18} className="text-blue-500" />
+          </div>
+          <div className="flex-1 text-left min-w-0">
+            <p className="text-base font-extrabold text-gray-800">
+              {participantsCount} inscrit{participantsCount > 1 ? 's' : ''}
+            </p>
+            <p className="text-[11px] text-gray-400 font-medium truncate">
+              Actuellement
+            </p>
+          </div>
+        </div>
+        
+        {participantsCount < 3 && (
+          <div className="mt-4 bg-red-50 p-3 rounded-xl border border-red-100 flex items-start text-left gap-2">
+            <AlertTriangle size={16} className="text-red-500 shrink-0 mt-0.5" />
+            <p className="text-[11px] font-medium text-red-600 leading-relaxed">
+              S'il n'y a pas assez de monde (min. 3) au moment de l'ouverture de la salle, le groupe risque d'etre annule automatiquement.
+            </p>
+          </div>
+        )}
+      </div>
+
+      <div className="mt-10 w-full max-w-xs">
+        <button
+          onClick={onBack}
+          className="w-full py-4 bg-gray-200 text-gray-600 rounded-2xl font-extrabold text-base active:scale-[0.98] transition-all"
+        >
+          Retour a mon espace
+        </button>
+      </div>
+    </motion.div>
+  </div>
+);
+
 // ========== Flow steps ==========
-type FlowStep = 'loading' | 'password' | 'charte' | 'prenom' | 'waiting' | 'room' | 'reconnecting' | 'end' | 'evaluation';
+type FlowStep = 'loading' | 'too_early' | 'password' | 'charte' | 'prenom' | 'waiting' | 'room' | 'reconnecting' | 'end' | 'evaluation';
 
 // ========== Heart Rating ==========
 const HeartRating: React.FC<{
@@ -2697,7 +2880,7 @@ const EvaluationScreen: React.FC<{
         groupeId,
         groupeTitre,
         date: new Date(),
-        type: 'evaluation',
+        type: 'participation',
       }).catch(() => {});
       setSubmitted(true);
       setTimeout(onDone, 2000);
@@ -2880,9 +3063,10 @@ export const SalleVocalePage = () => {
   const [structureType, setStructureType] = useState<'libre' | 'structuree'>('libre');
   const [structure, setStructure] = useState<StructureEtape[]>([]);
   const [customDurationMin, setCustomDurationMin] = useState<number | undefined>(undefined);
+  const [groupeStatus, setGroupeStatus] = useState<'scheduled'|'cancelled'|'in_progress'|'completed'>('scheduled');
 
   // Flow state
-  const [step, setStep] = useState<FlowStep>('loading');
+  const [step, setStep] = useState<FlowStep | 'cancelled'>('loading');
   const [connectingToRoom, setConnectingToRoom] = useState(false);
 
   // Session data
@@ -2933,6 +3117,21 @@ export const SalleVocalePage = () => {
               dateInscription: p.dateInscription?.toDate?.() || new Date(),
             }))
           );
+          setGroupeStatus(data.status || 'scheduled');
+
+          if (data.status === 'cancelled') {
+             setStep('cancelled');
+             return;
+          }
+
+          const now = Date.now();
+          const vocalTime = data.dateVocal?.toDate?.() || new Date();
+          const minutesBefore = (vocalTime.getTime() - now) / 60000;
+
+          if (minutesBefore > 15 && !data.isTestGroup) {
+            setStep('too_early');
+            return;
+          }
 
           // Test group → skip evaluation check, go to password
           if (data.isTestGroup && data.passwordVocal) {
@@ -2958,7 +3157,14 @@ export const SalleVocalePage = () => {
             }
 
             // If session is still active and user is a participant, go directly to room
-            if (sessionActive) {
+            if (sessionActive && minutesBefore <= 0) {
+              // Logic check: if not test group and < 3 registered, cancel instead of joining
+              if (!data.isTestGroup && (data.participants || []).length < 3) {
+                 await cancelGroup(groupeId, 'Nombre de participants insuffisant (minimum 3)');
+                 setStep('cancelled');
+                 return;
+              }
+
               const isParticipant = (data.participants || []).some(
                 (p: any) => p.uid === currentUsr.uid
               );
@@ -3054,6 +3260,13 @@ export const SalleVocalePage = () => {
 
   // Enter room from waiting room
   const handleEnterRoom = async () => {
+    // Logic check: if not test group and < 3 registered, cancel instead of joining
+    if (!isTestGroup && groupeParticipants.length < 3) {
+       await cancelGroup(groupeId!, 'Nombre de participants insuffisant (minimum 3)');
+       setStep('cancelled');
+       return;
+    }
+
     if (token && wsUrl) {
       setStep('room');
       return;
@@ -3209,6 +3422,43 @@ export const SalleVocalePage = () => {
         <Loader2 className="w-12 h-12 animate-spin text-orange-400" />
         <p className="text-sm font-bold text-gray-400">Chargement...</p>
       </div>
+    );
+  }
+
+  // ===== Too Early =====
+  if (step === 'too_early') {
+    return (
+      <TooEarlyScreen
+        groupeTitre={groupeTitre}
+        participantsCount={groupeParticipants.length}
+        dateVocal={dateVocal}
+        onBack={handleNavigateAway}
+      />
+    );
+  }
+
+  // ===== Cancelled =====
+  if (step === 'cancelled') {
+    return (
+      <CancellationScreen
+        reason="Ce groupe n'a pas atteint le nombre de participants minimum (3 personnes) ou a du etre annule par l'animateur."
+        theme={groupeTheme}
+        onGoHome={handleNavigateAway}
+        onDiscussForum={() => navigate(`/espace/groupes/${groupeId}`)}
+        isCreator={currentUser?.uid === createurUid}
+        onReschedule={currentUser?.uid === createurUid ? () => navigate('/espace/creer', { 
+          state: { 
+            prefill: {
+              id: groupeId,
+              titre: groupeTitre,
+              description: groupeDescription,
+              theme: groupeTheme,
+              structureType: structureType,
+              structure: structure
+            } 
+          } 
+        }) : undefined}
+      />
     );
   }
 
@@ -3446,6 +3696,7 @@ export const SalleVocalePage = () => {
         background: 'radial-gradient(ellipse at 50% 30%, #2a3060 0%, #1a1f3a 50%, #12152a 100%)',
       }}
     >
+      {/* @ts-ignore LiveKit types mismatch with React 18 */}
       <LiveKitRoom
         serverUrl={wsUrl}
         token={token}
@@ -3469,6 +3720,9 @@ export const SalleVocalePage = () => {
           defaultDurationMin={customDurationMin}
           onSessionProgress={handleSessionProgress}
           onSessionEnded={handleSessionEnded}
+          sessionPrenom={sessionPrenom}
+          isTestGroup={isTestGroup}
+          createurUid={createurUid}
         />
       </LiveKitRoom>
     </div>

@@ -18,9 +18,11 @@ function joursRestants(dateExpiration: Date): number {
   return Math.max(0, Math.ceil(diff / 86400000));
 }
 
-function formatDateVocal(date: Date): string {
+function formatDateVocal(date: Date, status?: string): string {
   const now = new Date();
-  const isPassé = date.getTime() < now.getTime();
+  if (status === 'cancelled') return 'Annulé';
+  if (status === 'reprogrammed') return 'Reprogrammé';
+  const isPassé = date.getTime() < now.getTime() || status === 'completed';
 
   const jour = date.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' });
   const heure = date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
@@ -126,6 +128,16 @@ const GroupeCard: React.FC<{
             {THEME_SHORT_LABELS[groupe.theme]}
           </span>
           <div className="relative z-10 flex items-center gap-2">
+            {groupe.status === 'cancelled' && (
+              <span className="text-[9px] font-bold bg-red-500 text-white px-2 py-0.5 rounded-full uppercase tracking-wider shadow-sm">
+                Annulé
+              </span>
+            )}
+            {groupe.status === 'reprogrammed' && (
+              <span className="text-[9px] font-bold bg-blue-500 text-white px-2 py-0.5 rounded-full uppercase tracking-wider shadow-sm">
+                Reprogrammé
+              </span>
+            )}
             <span className="text-[10px] font-extrabold bg-white/25 text-white px-2 py-0.5 rounded-full backdrop-blur-md shadow-sm">
               {index + 1}/{total}
             </span>
@@ -190,11 +202,23 @@ const GroupeCard: React.FC<{
 
             {/* Vocal */}
             <div className="flex items-center gap-2">
-              <div className={`w-7 h-7 ${vocalPassé ? 'bg-gray-100' : 'bg-orange-50'} rounded-lg flex items-center justify-center`}>
-                <Mic size={14} className={vocalPassé ? 'text-gray-400' : 'text-orange-500'} />
+              <div className={`w-7 h-7 ${
+                groupe.status === 'cancelled' ? 'bg-red-50' :
+                groupe.status === 'reprogrammed' ? 'bg-blue-50' :
+                vocalPassé ? 'bg-gray-100' : 'bg-orange-50'
+              } rounded-lg flex items-center justify-center`}>
+                <Mic size={14} className={
+                  groupe.status === 'cancelled' ? 'text-red-400' :
+                  groupe.status === 'reprogrammed' ? 'text-blue-400' :
+                  vocalPassé ? 'text-gray-400' : 'text-orange-500'
+                } />
               </div>
-              <span className={`text-xs font-semibold ${vocalPassé ? 'text-gray-400' : 'text-gray-600'}`}>
-                {formatDateVocal(groupe.dateVocal)}
+              <span className={`text-xs font-semibold ${
+                groupe.status === 'cancelled' ? 'text-red-500' :
+                groupe.status === 'reprogrammed' ? 'text-blue-500' :
+                vocalPassé ? 'text-gray-400' : 'text-gray-600'
+              }`}>
+                {formatDateVocal(groupe.dateVocal, groupe.status)}
               </span>
               {vocalPassé && (
                 <span className="text-[9px] font-bold bg-gray-100 text-gray-400 px-2 py-0.5 rounded-full ml-auto">

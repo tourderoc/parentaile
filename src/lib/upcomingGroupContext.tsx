@@ -53,9 +53,10 @@ function getUrgency(minutesLeft: number): Urgency {
 function findUpcomingGroup(groupes: GroupeParole[], uid: string): { group: GroupeParole | null; minutesLeft: number } {
   const now = Date.now();
 
-  // Filtrer : groupes ou le user est participant, pas un test group
+  // Filtrer : groupes ou le user est participant, pas un test group, ET non annulés
   const myGroups = groupes.filter(g =>
     !g.isTestGroup &&
+    g.status !== 'cancelled' &&
     g.participants.some(p => p.uid === uid)
   );
 
