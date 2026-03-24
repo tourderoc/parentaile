@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft,
@@ -34,8 +33,17 @@ import { createGroupeParole } from '../../../lib/groupeParoleService';
 import type { ThemeGroupe, StructureEtape } from '../../../types/groupeParole';
 import { THEME_LABELS, THEME_COLORS, THEME_SHORT_LABELS, STRUCTURE_DEFAUT } from '../../../types/groupeParole';
 
+interface GroupePrefill {
+  titre?: string;
+  description?: string;
+  theme?: ThemeGroupe;
+  structureType?: 'libre' | 'structuree';
+  structure?: StructureEtape[];
+}
+
 interface CreateGroupeParoleProps {
   onBack: () => void;
+  prefill?: GroupePrefill;
 }
 
 const THEME_ICONS: Record<ThemeGroupe, React.ElementType> = {
@@ -46,7 +54,7 @@ const THEME_ICONS: Record<ThemeGroupe, React.ElementType> = {
   autre: HelpCircle,
 };
 
-export const CreateGroupeParole: React.FC<CreateGroupeParoleProps> = ({ onBack }) => {
+export const CreateGroupeParole: React.FC<CreateGroupeParoleProps> = ({ onBack, prefill }) => {
   // Form state
   const [description, setDescription] = useState('');
   const [selectedTheme, setSelectedTheme] = useState<ThemeGroupe | null>(null);
@@ -58,22 +66,16 @@ export const CreateGroupeParole: React.FC<CreateGroupeParoleProps> = ({ onBack }
     STRUCTURE_DEFAUT.map(s => ({ ...s }))
   );
   const [currentStep, setCurrentStep] = useState(1);
-  const location = useLocation();
-
-  // Handle pre-fill from state (reprogramming)
+  // Handle pre-fill from prop (reprogramming a cancelled group)
   useEffect(() => {
-    const state = location.state as any;
-    if (state?.prefill) {
-      const p = state.prefill;
-      if (p.titre) setTitre(p.titre);
-      if (p.description) setDescription(p.description);
-      if (p.theme) setSelectedTheme(p.theme);
-      if (p.structureType) setStructureType(p.structureType);
-      if (p.structure) setStructure(p.structure.map((s: any) => ({ ...s })));
-      // We don't pre-fill date to force a new choice, but we keep the same hour
-      // if (p.heure) setHeureVocal(p.heure);
+    if (prefill) {
+      if (prefill.titre) setTitre(prefill.titre);
+      if (prefill.description) setDescription(prefill.description);
+      if (prefill.theme) setSelectedTheme(prefill.theme);
+      if (prefill.structureType) setStructureType(prefill.structureType);
+      if (prefill.structure) setStructure(prefill.structure.map((s) => ({ ...s })));
     }
-  }, [location.state]);
+  }, [prefill]);
 
   // Voice
   const [isRecording, setIsRecording] = useState(false);

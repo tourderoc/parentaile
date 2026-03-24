@@ -7,6 +7,7 @@ import {
   orderBy,
   onSnapshot,
   updateDoc,
+  deleteDoc,
   doc,
   serverTimestamp,
   writeBatch,
@@ -119,6 +120,31 @@ export async function markParentNotifAsRead(notifId: string): Promise<void> {
     await updateDoc(doc(db, 'parentNotifications', notifId), { read: true });
   } catch (err) {
     console.error('Erreur marquage notification:', err);
+  }
+}
+
+export async function deleteParentNotification(notifId: string): Promise<void> {
+  try {
+    await deleteDoc(doc(db, 'parentNotifications', notifId));
+  } catch (err) {
+    console.error('Erreur suppression notification:', err);
+  }
+}
+
+export async function deleteAllParentNotifs(uid: string): Promise<void> {
+  try {
+    const q = query(
+      collection(db, 'parentNotifications'),
+      where('recipientUid', '==', uid)
+    );
+    const snap = await getDocs(q);
+    if (snap.empty) return;
+
+    const batch = writeBatch(db);
+    snap.docs.forEach((d) => batch.delete(d.ref));
+    await batch.commit();
+  } catch (err) {
+    console.error('Erreur suppression toutes notifs:', err);
   }
 }
 

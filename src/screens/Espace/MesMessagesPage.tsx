@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Bell, Stethoscope, CheckCheck } from 'lucide-react';
+import { ArrowLeft, Bell, Stethoscope, CheckCheck, Trash2, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { auth, db } from '../../lib/firebase';
 import { collection, query, where, orderBy, getDocs, onSnapshot } from 'firebase/firestore';
-import { onParentNotifications, markParentNotifAsRead, markAllParentNotifsAsRead, NOTIF_CONFIG } from '../../lib/parentNotificationService';
+import { onParentNotifications, markParentNotifAsRead, markAllParentNotifsAsRead, deleteParentNotification, deleteAllParentNotifs, NOTIF_CONFIG } from '../../lib/parentNotificationService';
 import type { ParentNotification } from '../../lib/parentNotificationService';
 import { MessageHistory } from './MessageHistory';
 
@@ -93,15 +93,26 @@ export const MesMessagesPage = () => {
               <h1 className="text-lg font-extrabold text-gray-800 tracking-tight">Notifications</h1>
             </div>
           </div>
-          {unreadCount > 0 && (
-            <button
-              onClick={handleMarkAllRead}
-              className="flex items-center gap-1 px-3 py-1.5 bg-orange-50 rounded-xl active:scale-95 transition-transform"
-            >
-              <CheckCheck size={14} className="text-orange-500" />
-              <span className="text-[10px] font-bold text-orange-600">Tout lire</span>
-            </button>
-          )}
+          <div className="flex items-center gap-2">
+            {parentNotifs.length > 0 && (
+              <button
+                onClick={() => { if (user) deleteAllParentNotifs(user.uid); }}
+                className="flex items-center gap-1 px-3 py-1.5 bg-red-50 rounded-xl active:scale-95 transition-transform"
+              >
+                <Trash2 size={12} className="text-red-400" />
+                <span className="text-[10px] font-bold text-red-500">Effacer</span>
+              </button>
+            )}
+            {unreadCount > 0 && (
+              <button
+                onClick={handleMarkAllRead}
+                className="flex items-center gap-1 px-3 py-1.5 bg-orange-50 rounded-xl active:scale-95 transition-transform"
+              >
+                <CheckCheck size={14} className="text-orange-500" />
+                <span className="text-[10px] font-bold text-orange-600">Tout lire</span>
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Tabs */}
@@ -137,41 +148,52 @@ export const MesMessagesPage = () => {
                 {parentNotifs.map((notif, i) => {
                   const config = NOTIF_CONFIG[notif.type];
                   return (
-                    <motion.button
+                    <motion.div
                       key={notif.id}
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, x: -100, height: 0 }}
                       transition={{ delay: i * 0.03 }}
-                      onClick={() => handleNotifClick(notif)}
-                      className={`w-full rounded-2xl p-4 flex items-start gap-3 text-left transition-all active:scale-[0.98] ${
+                      className={`w-full rounded-2xl p-4 flex items-start gap-3 text-left transition-all relative ${
                         notif.read
                           ? 'bg-white/60 border border-gray-100/60'
                           : 'bg-white border-2 border-orange-100 shadow-sm'
                       }`}
                     >
-                      {/* Icon */}
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 text-lg ${config.bg}`}>
-                        {config.icon}
-                      </div>
+                      {/* Delete button */}
+                      <button
+                        onClick={(e) => { e.stopPropagation(); deleteParentNotification(notif.id); }}
+                        className="absolute top-2 right-2 w-7 h-7 rounded-full bg-gray-100 hover:bg-red-50 flex items-center justify-center text-gray-300 hover:text-red-400 transition-colors"
+                      >
+                        <X size={14} />
+                      </button>
 
-                      {/* Content */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between mb-0.5">
-                          <h4 className={`text-sm font-extrabold truncate ${notif.read ? 'text-gray-500' : 'text-gray-800'}`}>
-                            {notif.title}
-                          </h4>
-                          {!notif.read && (
-                            <div className="w-2 h-2 bg-orange-500 rounded-full flex-shrink-0 ml-2" />
-                          )}
+                      {/* Clickable area */}
+                      <button onClick={() => handleNotifClick(notif)} className="flex items-start gap-3 w-full text-left">
+                        {/* Icon */}
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 text-lg ${config.bg}`}>
+                          {config.icon}
                         </div>
-                        <p className={`text-xs font-medium line-clamp-2 ${notif.read ? 'text-gray-400' : 'text-gray-600'}`}>
-                          {notif.body}
-                        </p>
-                        <span className="text-[10px] text-gray-400 font-medium mt-1 block">
-                          {formatDate(notif.createdAt)}
-                        </span>
-                      </div>
-                    </motion.button>
+
+                        {/* Content */}
+                        <div className="flex-1 min-w-0 pr-6">
+                          <div className="flex items-center justify-between mb-0.5">
+                            <h4 className={`text-sm font-extrabold truncate ${notif.read ? 'text-gray-500' : 'text-gray-800'}`}>
+                              {notif.title}
+                            </h4>
+                            {!notif.read && (
+                              <div className="w-2 h-2 bg-orange-500 rounded-full flex-shrink-0 ml-2" />
+                            )}
+                          </div>
+                          <p className={`text-xs font-medium line-clamp-2 ${notif.read ? 'text-gray-400' : 'text-gray-600'}`}>
+                            {notif.body}
+                          </p>
+                          <span className="text-[10px] text-gray-400 font-medium mt-1 block">
+                            {formatDate(notif.createdAt)}
+                          </span>
+                        </div>
+                      </button>
+                    </motion.div>
                   );
                 })}
               </AnimatePresence>

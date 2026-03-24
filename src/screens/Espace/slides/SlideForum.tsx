@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Users, Mic, Clock, Plus, MessageCircle, Filter, Loader2, Heart, Settings, SlidersHorizontal, X, Calendar, Search, Tag } from 'lucide-react';
@@ -271,7 +271,9 @@ const GroupeCard: React.FC<{
 // --- Page principale ---
 export const SlideForum = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [showCreate, setShowCreate] = useState(false);
+  const [createPrefill, setCreatePrefill] = useState<any>(undefined);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showFiltersModal, setShowFiltersModal] = useState(false);
   const [selectedTheme, setSelectedTheme] = useState<ThemeGroupe | 'tous'>('tous');
@@ -281,6 +283,17 @@ export const SlideForum = () => {
   const [filterSort, setFilterSort] = useState<'recents' | 'actifs'>('recents');
   const [groupes, setGroupes] = useState<GroupeParole[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Ouvrir la création avec prefill si on arrive via navigate state (reprogrammer)
+  useEffect(() => {
+    const state = location.state as any;
+    if (state?.openCreate) {
+      setCreatePrefill(state.prefill || undefined);
+      setShowCreate(true);
+      // Nettoyer le state pour éviter de réouvrir au retour
+      window.history.replaceState({}, '', location.pathname);
+    }
+  }, [location.state]);
 
   useEffect(() => {
     const unsubscribe = onGroupesParole((data) => {
@@ -381,7 +394,7 @@ export const SlideForum = () => {
   ];
 
   if (showCreate) {
-    return <CreateGroupeParole onBack={() => setShowCreate(false)} />;
+    return <CreateGroupeParole onBack={() => { setShowCreate(false); setCreatePrefill(undefined); }} prefill={createPrefill} />;
   }
 
   return (

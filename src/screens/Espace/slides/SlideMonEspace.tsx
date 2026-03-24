@@ -13,7 +13,7 @@ import {
 } from 'firebase/firestore';
 import { Bell, Users, ChevronRight, Sparkles, LayoutGrid, Loader2, Heart, Feather, Wind, Home, X, Star } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { onGroupesParole, onPendingEvaluations, onUserProgression } from '../../../lib/groupeParoleService';
+import { onGroupesParole, onPendingEvaluations, onUserProgression, dismissEvaluation } from '../../../lib/groupeParoleService';
 import type { GroupeParole, EvaluationPendante, UserProgression, BadgeLevel } from '../../../types/groupeParole';
 import { getNextBadge, BADGE_THRESHOLDS, THEME_COLORS, THEME_LABELS } from '../../../types/groupeParole';
 import { onUnreadParentNotifCount } from '../../../lib/parentNotificationService';
@@ -435,43 +435,59 @@ export const SlideMonEspace = () => {
                   const colors = THEME_COLORS[ev.groupeTheme] || THEME_COLORS.autre;
                   const themeLabel = THEME_LABELS[ev.groupeTheme] || 'Autre';
                   return (
-                    <motion.button
+                    <motion.div
                       key={ev.groupeId}
                       initial={{ opacity: 0, y: 15 }}
                       animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, x: -100, height: 0 }}
                       transition={{ delay: i * 0.08 }}
-                      onClick={() => {
-                        setShowEvalsModal(false);
-                        navigate(`/espace/groupes/${ev.groupeId}/vocal`);
-                      }}
-                      className="w-full rounded-2xl p-4 flex items-center gap-4 text-left active:scale-[0.97] transition-transform border border-gray-100 shadow-sm bg-white hover:bg-gray-50"
+                      className="w-full rounded-2xl p-4 flex items-center gap-4 text-left border border-gray-100 shadow-sm bg-white relative"
                     >
-                      {/* Theme color icon */}
-                      <div className={`w-12 h-12 ${colors.bg} rounded-xl flex items-center justify-center flex-shrink-0 shadow-md`}>
-                        <Star size={20} className="text-white fill-white" />
-                      </div>
-
-                      {/* Info */}
-                      <div className="flex-1 min-w-0">
-                        <h4 className="text-sm font-extrabold text-gray-800 truncate">{ev.groupeTitre}</h4>
-                        <div className="flex items-center gap-2 mt-0.5">
-                          <span className={`text-[10px] font-bold ${colors.text} px-1.5 py-0.5 rounded-md ${colors.light}`}>
-                            {themeLabel}
-                          </span>
-                          <span className="text-[10px] text-gray-400 font-medium">
-                            {ev.dateVocal.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
-                          </span>
+                      {/* Evaluer */}
+                      <button
+                        onClick={() => {
+                          setShowEvalsModal(false);
+                          navigate(`/espace/groupes/${ev.groupeId}/vocal?eval=true`);
+                        }}
+                        className="flex items-center gap-4 flex-1 min-w-0 active:scale-[0.97] transition-transform"
+                      >
+                        <div className={`w-12 h-12 ${colors.bg} rounded-xl flex items-center justify-center flex-shrink-0 shadow-md`}>
+                          <Star size={20} className="text-white fill-white" />
                         </div>
-                      </div>
+                        <div className="flex-1 min-w-0">
+                          <h4 className="text-sm font-extrabold text-gray-800 truncate">{ev.groupeTitre}</h4>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <span className={`text-[10px] font-bold ${colors.text} px-1.5 py-0.5 rounded-md ${colors.light}`}>
+                              {themeLabel}
+                            </span>
+                            <span className="text-[10px] text-gray-400 font-medium">
+                              {ev.dateVocal.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1.5 flex-shrink-0">
+                          <span className="text-[10px] font-bold text-emerald-500 bg-emerald-50 px-2 py-1 rounded-lg">
+                            +5 pts
+                          </span>
+                          <ChevronRight size={16} className="text-gray-300" />
+                        </div>
+                      </button>
 
-                      {/* CTA */}
-                      <div className="flex items-center gap-1.5 flex-shrink-0">
-                        <span className="text-[10px] font-bold text-emerald-500 bg-emerald-50 px-2 py-1 rounded-lg">
-                          +5 pts
-                        </span>
-                        <ChevronRight size={16} className="text-gray-300" />
-                      </div>
-                    </motion.button>
+                      {/* Ignorer */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          // Optimistic: remove from local list immediately
+                          const remaining = pendingEvals.filter(p => p.groupeId !== ev.groupeId);
+                          setPendingEvals(remaining);
+                          if (remaining.length === 0) setShowEvalsModal(false);
+                          dismissEvaluation(ev.groupeId, auth.currentUser?.uid || '');
+                        }}
+                        className="absolute top-2 right-2 w-7 h-7 rounded-full bg-gray-100 hover:bg-red-50 flex items-center justify-center text-gray-300 hover:text-red-400 transition-colors"
+                      >
+                        <X size={14} />
+                      </button>
+                    </motion.div>
                   );
                 })}
               </div>

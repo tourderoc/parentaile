@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   LiveKitRoom,
   RoomAudioRenderer,
@@ -2091,19 +2091,42 @@ const WaitingRoom: React.FC<{
   createurUid: string;
   structureType?: 'libre' | 'structuree';
   structure?: StructureEtape[];
+  sessionPrenom: string;
   onEnter: () => void;
   onBack: () => void;
-}> = ({ groupeId, groupeTitre, groupeTheme, dateVocal, isTestGroup, participants, createurUid, structureType, structure, onEnter, onBack }) => {
+}> = ({ groupeId, groupeTitre, groupeTheme, dateVocal, isTestGroup, participants, createurUid, structureType, structure, sessionPrenom, onEnter, onBack }) => {
   const currentUser = auth.currentUser;
   const [countdown, setCountdown] = useState('');
   const [sessionStarted, setSessionStarted] = useState(false);
-  const [presences, setPresences] = useState<{uid:string, pseudo:string, mood?:string, avatarUrl?:string}[]>([]);
+  const [remotePresences, setRemotePresences] = useState<{uid:string, pseudo:string, status?:string, mood?:string}[]>([]);
   // For test group: fake 15min countdown starting from now
   const [testStartTime] = useState(() => new Date(Date.now() + 15 * 60 * 1000));
 
   useEffect(() => {
-    return onPresenceList(groupeId, setPresences);
-  }, [groupeId]);
+    return onPresenceList(groupeId, (list) => {
+      // Only keep OTHER users with status 'waiting' (not self — self is always shown locally)
+      const uid = currentUser?.uid;
+      setRemotePresences(
+        list.filter(p => p.uid !== uid && p.status === 'waiting')
+      );
+    });
+  }, [groupeId, currentUser?.uid]);
+
+  // Build the FINAL display list: current user (guaranteed) + remote presences
+  const displayPresences = useMemo(() => {
+    const me = currentUser ? {
+      uid: currentUser.uid,
+      pseudo: sessionPrenom || currentUser.displayName || 'Parent',
+      isMe: true as const,
+    } : null;
+    
+    const others = remotePresences.map(p => ({
+      ...p,
+      isMe: false as const,
+    }));
+    
+    return me ? [me, ...others] : others;
+  }, [currentUser, sessionPrenom, remotePresences]);
 
   // Countdown to session start
   useEffect(() => {
@@ -2150,30 +2173,28 @@ const WaitingRoom: React.FC<{
 
       <div className="w-16 h-[2px] bg-gradient-to-r from-transparent via-orange-400 to-transparent mx-auto mt-3 mb-4" />
 
-      {/* Countdown */}
-      <div className="bg-white/10 backdrop-blur-md rounded-2xl px-6 py-4 flex flex-col items-center mb-5">
-        {sessionStarted ? (
-          <>
-            <div className="w-10 h-10 bg-emerald-500/20 rounded-full flex items-center justify-center mb-2">
-              <CheckCircle2 size={20} className="text-emerald-400" />
-            </div>
-            <p className="text-sm font-bold text-emerald-400">La session est ouverte !</p>
-          </>
-        ) : (
-          <>
-            <div className="flex items-center gap-2 mb-2">
-              <Clock size={16} className="text-orange-400" />
-              <p className="text-sm font-medium text-white/60">La session commence dans</p>
-            </div>
-            <p className="text-3xl font-mono font-extrabold text-white tracking-wider">{countdown}</p>
-          </>
-        )}
-      </div>
+      {/* Countdown or Enter button */}
+      {sessionStarted || isTestGroup ? (
+        <button
+          onClick={onEnter}
+          className="mb-5 px-10 py-4 rounded-2xl font-extrabold text-base shadow-xl active:scale-95 transition-all bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-orange-500/30 animate-pulse"
+        >
+          {isAnimateur ? '🎙️ Lancer la session' : '🎙️ Entrer dans la salle'}
+        </button>
+      ) : (
+        <div className="bg-white/10 backdrop-blur-md rounded-2xl px-6 py-4 flex flex-col items-center mb-5">
+          <div className="flex items-center gap-2 mb-2">
+            <Clock size={16} className="text-orange-400" />
+            <p className="text-sm font-medium text-white/60">La session commence dans</p>
+          </div>
+          <p className="text-3xl font-mono font-extrabold text-white tracking-wider">{countdown}</p>
+        </div>
+      )}
 
       {/* Status cards */}
-      <div className="w-full max-w-xs space-y-3">
+      <div className="w-full max-w-sm space-y-3">
         {/* Participants */}
-        <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4">
+        <div className="bg-white/10 backdrop-blur-md border border-white/5 rounded-2xl p-4">
           <div className="flex items-center gap-3 mb-3">
             <div className="w-10 h-10 bg-blue-500/20 rounded-full flex items-center justify-center shrink-0">
               <Users size={18} className="text-blue-400" />
@@ -2187,14 +2208,19 @@ const WaitingRoom: React.FC<{
               </p>
             </div>
           </div>
-          <p className="text-xs font-bold text-white/50 mb-2 mt-4 px-1 flex items-center gap-1.5">
+          
+          <div className="w-full h-px bg-white/5 my-3" />
+
+          <p className="text-[10px] uppercase tracking-wider font-extrabold text-white/30 mb-3 px-1 flex items-center gap-1.5">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
-            Dejà present dans le salon :
+            Présents dans la salle d'attente :
           </p>
-          <div className="flex flex-wrap gap-2">
+          
+          <div className="flex flex-wrap gap-2 min-h-[32px]">
             <AnimatePresence>
-            {presences.map((p) => {
-              const nameInitial = p.pseudo ? p.pseudo.charAt(0).toUpperCase() : 'P';
+            {displayPresences.map((p) => {
+              const displayName = p.pseudo || 'Parent';
+              const nameInitial = displayName.charAt(0).toUpperCase();
               const hash = p.uid.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
               const color = AVATAR_COLORS[hash % AVATAR_COLORS.length];
               return (
@@ -2203,13 +2229,16 @@ const WaitingRoom: React.FC<{
                   initial={{ opacity: 0, scale: 0.5 }}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.5 }}
-                  className="flex items-center gap-1.5 bg-white/5 rounded-full pl-1 pr-3 py-1 border border-white/10"
+                  className={`flex items-center gap-1.5 rounded-full pl-1 pr-3 py-1 border ${
+                    p.isMe ? 'bg-orange-500/15 border-orange-400/30' : 'bg-white/5 border-white/10'
+                  }`}
                 >
                   <div className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold text-white shadow-sm" style={{ backgroundColor: color }}>
                     {nameInitial}
                   </div>
-                  <span className="text-[11px] font-medium text-white/80">{p.pseudo}</span>
-                  {p.mood && <span className="text-[10px] ml-0.5">{p.mood}</span>}
+                  <span className={`text-[11px] font-medium ${p.isMe ? 'text-orange-300' : 'text-white/80'}`}>
+                    {displayName}{p.isMe ? ' (vous)' : ''}
+                  </span>
                 </motion.div>
               );
             })}
@@ -2271,7 +2300,7 @@ const WaitingRoom: React.FC<{
                 onClick={() => {
                   const uid = auth.currentUser?.uid;
                   if (uid && groupeId) {
-                    setPresence(groupeId, uid, { mood: emoji, pseudo: auth.currentUser?.displayName || 'Parent' }).catch(() => {});
+                    setPresence(groupeId, uid, { mood: emoji, pseudo: sessionPrenom || auth.currentUser?.displayName || 'Parent' }).catch(() => {});
                   }
                 }}
                 className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center text-xl hover:bg-white/20 active:scale-90 transition-all"
@@ -2283,30 +2312,11 @@ const WaitingRoom: React.FC<{
         </div>
       </div>
 
-      {/* Enter button — always clickable for test groups, otherwise wait for countdown */}
-      <button
-        onClick={onEnter}
-        className={`mt-8 px-10 py-4 rounded-2xl font-extrabold text-base shadow-xl active:scale-95 transition-all ${
-          isTestGroup || sessionStarted
-            ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-orange-500/30'
-            : 'bg-white/10 text-white/30 cursor-not-allowed'
-        }`}
-        disabled={!isTestGroup && !sessionStarted}
-      >
-        {isAnimateur ? 'Lancer la session' : 'Entrer dans la salle'}
-      </button>
-
-      {!isTestGroup && !sessionStarted && (
-        <p className="mt-2 text-[11px] text-white/30 font-medium">
-          Disponible quand le compte a rebours atteint zero
-        </p>
-      )}
-
       <button
         onClick={onBack}
-        className="mt-4 text-xs font-bold text-white/30 hover:text-white/60 transition-colors"
+        className="mt-6 text-xs font-bold text-white/30 hover:text-white/60 transition-colors"
       >
-        Retour au groupe
+        Retour
       </button>
     </div>
   );
@@ -3048,6 +3058,8 @@ const EvaluationScreen: React.FC<{
 export const SalleVocalePage = () => {
   const { groupeId } = useParams<{ groupeId: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const isEvalDirect = searchParams.get('eval') === 'true';
 
   const [token, setToken] = useState<string | null>(null);
   const [wsUrl, setWsUrl] = useState<string>('');
@@ -3141,6 +3153,12 @@ export const SalleVocalePage = () => {
 
           // Check if session is still active (not ended by animateur)
           const sessionActive = data.sessionState?.sessionActive !== false;
+
+          // Direct evaluation access (from "Donner mon avis" bottom sheet)
+          if (isEvalDirect) {
+            setStep('evaluation');
+            return;
+          }
 
           // Normal groups: check if user has a pending evaluation
           // BUT only redirect to evaluation if session is no longer active
@@ -3382,24 +3400,55 @@ export const SalleVocalePage = () => {
     navigate('/espace/mon-espace');
   }, [navigate]);
 
-  // Presence tracking: marquer present quand dans la salle, cleanup au depart
+  // Presence tracking: single unified effect for set/remove
+  // Uses delayed removal to survive React StrictMode double-mount
+  const presenceCleanupRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
+    // 1. ALWAYS clear any pending cleanup first to prevent "disappearing" flicker
+    if (presenceCleanupRef.current) {
+      clearTimeout(presenceCleanupRef.current);
+      presenceCleanupRef.current = null;
+    }
+
     const uid = auth.currentUser?.uid;
     if (!groupeId || !uid) return;
 
-    if (step === 'waiting' || step === 'room') {
-      setPresence(groupeId, uid, { pseudo: sessionPrenom || 'Parent' }).catch(() => {});
+    const inRoom = step === 'waiting' || step === 'room';
+
+    if (!inRoom) {
+      // Not in room — remove presence immediately
+      removePresence(groupeId, uid).catch(() => {});
+      return;
     }
 
-    // Cleanup : retirer la presence quand on quitte ces etapes
-    return () => {
-      if (step === 'waiting' || step === 'room') {
-        removePresence(groupeId, uid).catch(() => {});
-      }
-    };
-  }, [step, groupeId, sessionPrenom]);
+    // 2. Set/Update presence
+    setPresence(groupeId, uid, { 
+      pseudo: sessionPrenom || 'Parent',
+      status: step 
+    }).catch(() => {});
 
-  // Cleanup presence au fermeture/navigation du navigateur
+    // 3. Heartbeat every 30s
+    const interval = setInterval(() => {
+      setPresence(groupeId, uid, { 
+        pseudo: sessionPrenom || 'Parent',
+        status: step 
+      }).catch(() => {});
+    }, 30000);
+
+    return () => {
+      clearInterval(interval);
+      // Delayed removal: survives React StrictMode double-mount and rapid state updates
+      const capturedUid = uid;
+      const capturedGroupeId = groupeId;
+      presenceCleanupRef.current = setTimeout(() => {
+        removePresence(capturedGroupeId, capturedUid).catch(() => {});
+        presenceCleanupRef.current = null;
+      }, 3000); // 3-second grace period for stability
+    };
+  }, [step, groupeId, sessionPrenom, auth.currentUser?.uid]);
+
+  // Cleanup presence on tab/browser close (immediate, no delay needed)
   useEffect(() => {
     const uid = auth.currentUser?.uid;
     if (!groupeId || !uid) return;
@@ -3446,17 +3495,17 @@ export const SalleVocalePage = () => {
         onGoHome={handleNavigateAway}
         onDiscussForum={() => navigate(`/espace/groupes/${groupeId}`)}
         isCreator={currentUser?.uid === createurUid}
-        onReschedule={currentUser?.uid === createurUid ? () => navigate('/espace/creer', { 
-          state: { 
+        onReschedule={currentUser?.uid === createurUid ? () => navigate('/espace/groupes', {
+          state: {
+            openCreate: true,
             prefill: {
-              id: groupeId,
               titre: groupeTitre,
               description: groupeDescription,
               theme: groupeTheme,
               structureType: structureType,
               structure: structure
-            } 
-          } 
+            }
+          }
         }) : undefined}
       />
     );
@@ -3585,6 +3634,7 @@ export const SalleVocalePage = () => {
         createurUid={createurUid}
         structureType={structureType}
         structure={structure}
+        sessionPrenom={sessionPrenom}
         onEnter={handleEnterRoom}
         onBack={() => setStep('prenom')}
       />

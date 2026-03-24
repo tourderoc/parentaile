@@ -12,7 +12,6 @@ import {
   Timestamp,
   query,
   orderBy,
-  where,
   onSnapshot,
   arrayUnion,
   increment,
@@ -339,12 +338,12 @@ export async function quitterGroupe(
 export async function setPresence(
   groupeId: string,
   uid: string,
-  data?: { pseudo?: string; mood?: string; ready?: boolean }
+  data?: { pseudo?: string; mood?: string; ready?: boolean; status?: string }
 ): Promise<void> {
   const presenceRef = doc(db, 'groupes', groupeId, 'presence', uid);
   await setDoc(presenceRef, {
     uid,
-    joinedAt: serverTimestamp(),
+    lastSeen: serverTimestamp(),
     ...data,
   }, { merge: true });
 }
@@ -383,7 +382,7 @@ export function onPresenceCount(
  */
 export function onPresenceList(
   groupeId: string,
-  callback: (presences: { uid: string; pseudo: string; mood?: string; ready?: boolean }[]) => void
+  callback: (presences: { uid: string; pseudo: string; status?: string; mood?: string; ready?: boolean }[]) => void
 ): () => void {
   return onSnapshot(
     collection(db, 'groupes', groupeId, 'presence'),
@@ -391,6 +390,7 @@ export function onPresenceList(
       const list = snapshot.docs.map((doc) => ({
         uid: doc.id,
         pseudo: doc.data().pseudo || '',
+        status: doc.data().status,
         mood: doc.data().mood,
         ready: doc.data().ready,
       }));
@@ -463,6 +463,19 @@ export async function markEvaluationPending(
       status: 'pending',
       dateCreation: serverTimestamp(),
     }
+  );
+}
+
+/**
+ * Ignorer une évaluation pendante (le parent ne souhaite pas donner son avis).
+ */
+export async function dismissEvaluation(
+  groupeId: string,
+  participantUid: string
+): Promise<void> {
+  await updateDoc(
+    doc(db, 'groupes', groupeId, 'evaluations', participantUid),
+    { status: 'dismissed' }
   );
 }
 
