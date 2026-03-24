@@ -529,7 +529,7 @@ export const GroupeDetailPage = () => {
               )}
 
               {/* Bouton inscription */}
-              {!isParticipant && !estComplet && groupe.status === 'scheduled' && (
+              {!isParticipant && !estComplet && (!groupe.status || groupe.status === 'scheduled') && (
                 <motion.button
                   whileTap={{ scale: 0.97 }}
                   onClick={handleJoinGroupe}
