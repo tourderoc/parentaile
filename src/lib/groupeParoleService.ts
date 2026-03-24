@@ -851,18 +851,37 @@ export async function proposeAsAnimateur(
       const data = docSnap.data();
       const state = data.sessionState;
 
-      if (!state) throw new Error('Pas de session active');
-      if (state.replacementUsed) throw new Error('Remplacement déjà utilisé');
+      if (state?.replacementUsed) throw new Error('Remplacement déjà utilisé');
 
-      // Update the state atomically
-      transaction.update(ref, {
-        'sessionState.currentAnimateurUid': uid,
-        'sessionState.currentAnimateurPseudo': pseudo,
-        'sessionState.replacementUsed': true,
-        'sessionState.suspended': false,
-        'sessionState.suspendedAt': deleteField(),
-        'sessionState.suspensionReason': deleteField(),
-      });
+      if (!state) {
+        // L'animateur original n'a jamais lance — on cree le sessionState
+        transaction.update(ref, {
+          sessionState: {
+            currentPhaseIndex: 0,
+            extendedMinutes: 0,
+            sessionActive: true,
+            phaseStartedAt: serverTimestamp(),
+            sessionStartedAt: serverTimestamp(),
+            suspended: false,
+            suspensionCount: 0,
+            replacementUsed: true,
+            currentAnimateurUid: uid,
+            currentAnimateurPseudo: pseudo,
+          },
+          status: 'in_progress',
+        });
+      } else {
+        // Session existante — mise a jour atomique
+        transaction.update(ref, {
+          'sessionState.currentAnimateurUid': uid,
+          'sessionState.currentAnimateurPseudo': pseudo,
+          'sessionState.replacementUsed': true,
+          'sessionState.suspended': false,
+          'sessionState.suspendedAt': deleteField(),
+          'sessionState.suspensionReason': deleteField(),
+          'sessionState.sessionActive': true,
+        });
+      }
     });
     return true; // Sucesss
   } catch (err) {

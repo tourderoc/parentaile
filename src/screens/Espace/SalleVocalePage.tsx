@@ -1069,16 +1069,16 @@ const RoomContent: React.FC<{
     localUid: localParticipant?.identity || auth.currentUser?.uid || ''
   });
 
-  const { waitingForAnimateur, waitCountdownSec, canPropose: waitCanPropose } = useAnimateurWait({
+  // La session "a commence" si dateVocal est passee (pas besoin que l'animateur ait init)
+  const dateVocalPassed = dateVocal.getTime() <= Date.now();
+
+  const { waitingForAnimateur, waitCountdownSec, canPropose: waitCanPropose, timedOut: animateurTimedOut } = useAnimateurWait({
     groupeId,
     liveKitParticipants: participants,
     firestoreSession: firestoreSession || undefined,
     createurUid,
-    sessionStarted: firestoreSession?.sessionActive ?? false,
+    sessionStarted: dateVocalPassed || (firestoreSession?.sessionActive ?? false),
     isTestGroup,
-    onTimedOut: async () => {
-       await cancelGroup(groupeId, 'Animateur absent');
-    }
   });
 
   const handleProposeAnimateur = async () => {
@@ -2107,7 +2107,7 @@ const WaitingRoom: React.FC<{
       // Only keep OTHER users with status 'waiting' (not self — self is always shown locally)
       const uid = currentUser?.uid;
       setRemotePresences(
-        list.filter(p => p.uid !== uid && p.status === 'waiting')
+        list.filter(p => p.uid !== uid && (!p.status || p.status === 'waiting'))
       );
     });
   }, [groupeId, currentUser?.uid]);
@@ -2211,38 +2211,49 @@ const WaitingRoom: React.FC<{
           
           <div className="w-full h-px bg-white/5 my-3" />
 
-          <p className="text-[10px] uppercase tracking-wider font-extrabold text-white/30 mb-3 px-1 flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
-            Présents dans la salle d'attente :
+          {/* Inscrits au groupe */}
+          <p className="text-[10px] uppercase tracking-wider font-extrabold text-white/30 mb-2 px-1">
+            Inscrits :
           </p>
-          
-          <div className="flex flex-wrap gap-2 min-h-[32px]">
-            <AnimatePresence>
-            {displayPresences.map((p) => {
+          <div className="flex flex-wrap gap-2 mb-3">
+            {participants.map((p) => {
+              const presentUids = displayPresences.map(dp => dp.uid);
+              const isPresent = presentUids.includes(p.uid);
+              const isMe = p.uid === currentUser?.uid;
               const displayName = p.pseudo || 'Parent';
               const nameInitial = displayName.charAt(0).toUpperCase();
               const hash = p.uid.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
               const color = AVATAR_COLORS[hash % AVATAR_COLORS.length];
               return (
-                <motion.div
+                <div
                   key={p.uid}
-                  initial={{ opacity: 0, scale: 0.5 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.5 }}
                   className={`flex items-center gap-1.5 rounded-full pl-1 pr-3 py-1 border ${
-                    p.isMe ? 'bg-orange-500/15 border-orange-400/30' : 'bg-white/5 border-white/10'
+                    isMe ? 'bg-orange-500/15 border-orange-400/30' :
+                    isPresent ? 'bg-white/5 border-white/10' :
+                    'bg-white/[0.03] border-white/5'
                   }`}
                 >
-                  <div className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold text-white shadow-sm" style={{ backgroundColor: color }}>
-                    {nameInitial}
+                  <div className="relative">
+                    <div
+                      className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold text-white shadow-sm ${!isPresent && !isMe ? 'opacity-40' : ''}`}
+                      style={{ backgroundColor: color }}
+                    >
+                      {nameInitial}
+                    </div>
+                    {isPresent && (
+                      <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-400 border border-[#1a1f3a] shadow-[0_0_4px_rgba(52,211,153,0.6)]" />
+                    )}
                   </div>
-                  <span className={`text-[11px] font-medium ${p.isMe ? 'text-orange-300' : 'text-white/80'}`}>
-                    {displayName}{p.isMe ? ' (vous)' : ''}
+                  <span className={`text-[11px] font-medium ${
+                    isMe ? 'text-orange-300' :
+                    isPresent ? 'text-white/80' :
+                    'text-white/30'
+                  }`}>
+                    {displayName}{isMe ? ' (vous)' : ''}
                   </span>
-                </motion.div>
+                </div>
               );
             })}
-            </AnimatePresence>
           </div>
         </div>
 
@@ -3495,6 +3506,7 @@ export const SalleVocalePage = () => {
         onGoHome={handleNavigateAway}
         onDiscussForum={() => navigate(`/espace/groupes/${groupeId}`)}
         isCreator={currentUser?.uid === createurUid}
+        onBrowseGroups={() => navigate('/espace/groupes')}
         onReschedule={currentUser?.uid === createurUid ? () => navigate('/espace/groupes', {
           state: {
             openCreate: true,

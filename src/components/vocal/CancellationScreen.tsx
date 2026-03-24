@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { OctagonAlert, CalendarClock, MessageCircle } from 'lucide-react';
+import { OctagonAlert, CalendarClock, MessageCircle, Users } from 'lucide-react';
 import { BottomNav } from '../ui/BottomNav';
 
 interface Props {
@@ -9,6 +9,7 @@ interface Props {
   onGoHome: () => void;
   onDiscussForum: () => void;
   onReschedule?: () => void;
+  onBrowseGroups?: () => void;
   isCreator: boolean;
 }
 
@@ -17,6 +18,7 @@ export const CancellationScreen: React.FC<Props> = ({
   onGoHome,
   onDiscussForum,
   onReschedule,
+  onBrowseGroups,
   isCreator
 }) => {
   return (
@@ -56,6 +58,18 @@ export const CancellationScreen: React.FC<Props> = ({
               <div className="text-sm text-gray-500 font-medium mt-0.5">Continuer l'échange à l'écrit</div>
             </div>
           </button>
+
+          {!isCreator && onBrowseGroups && (
+            <button onClick={onBrowseGroups} className="w-full flex items-center gap-4 p-4 rounded-2xl bg-emerald-50/50 hover:bg-emerald-100/80 transition-all text-left group border border-emerald-100/60">
+              <div className="w-12 h-12 rounded-full bg-white flex items-center justify-center text-emerald-500 shadow-sm group-hover:scale-110 group-active:scale-95 transition-transform">
+                <Users size={22} strokeWidth={2.5} />
+              </div>
+              <div>
+                <div className="font-bold text-gray-800 leading-tight">Rejoindre un autre groupe</div>
+                <div className="text-sm text-gray-500 font-medium mt-0.5">Voir les prochains groupes disponibles</div>
+              </div>
+            </button>
+          )}
 
           {isCreator && onReschedule && (
             <button onClick={onReschedule} className="w-full flex items-center gap-4 p-4 rounded-2xl bg-blue-50/50 hover:bg-blue-100/80 transition-all text-left group border border-blue-100/60">
