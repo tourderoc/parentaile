@@ -45,7 +45,8 @@ export function useSessionSuspension({
       : liveKitParticipants.some(p => p.identity === effectiveAnimateurUid);
 
     const isBelowMinimum = totalCount < 3;
-    const isAnimateurLeft = !animateurPresent;
+    // Don't flag animateur_left if below_minimum — below_minimum takes priority
+    const isAnimateurLeft = !animateurPresent && !isBelowMinimum;
 
     // S'il n'y a PAS de probleme
     if (!isBelowMinimum && !isAnimateurLeft) {

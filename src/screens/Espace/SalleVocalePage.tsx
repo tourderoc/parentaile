@@ -1092,7 +1092,7 @@ const RoomContent: React.FC<{
     }
   }, [groupeId]);
 
-  const { waitingForAnimateur, waitCountdownSec, canPropose: waitCanPropose, timedOut: animateurTimedOut, forceReplacement } = useAnimateurWait({
+  const { waitingForAnimateur, waitCountdownSec, canPropose: waitCanPropose, timedOut: animateurTimedOut, forceReplacement, belowMinimum: waitBelowMinimum } = useAnimateurWait({
     groupeId,
     liveKitParticipants: participants,
     firestoreSession: firestoreSession || undefined,
@@ -1100,6 +1100,10 @@ const RoomContent: React.FC<{
     sessionStarted: dateVocalPassed || (firestoreSession?.sessionActive ?? false),
     isTestGroup,
     onDisconnectCountChanged: handleAnimateurDisconnect,
+    onBelowMinimum: async () => {
+      await cancelGroup(groupeId, 'Nombre de participants insuffisant dans la salle vocale (minimum 3)');
+      setStep('cancelled');
+    },
   });
 
   const handleProposeAnimateur = async () => {

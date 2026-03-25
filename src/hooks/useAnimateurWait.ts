@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Participant } from 'livekit-client';
 import type { SessionState } from '../types/groupeParole';
 
@@ -11,11 +11,13 @@ interface UseAnimateurWaitProps {
   isTestGroup?: boolean;
   onTimedOut?: () => void;
   onDisconnectCountChanged?: (count: number) => void;
+  onBelowMinimum?: () => void; // Called when < 3 participants detected during animateur wait
 }
 
 const GRACE_PERIOD_MS = 15_000;   // 15s network grace before counting a disconnect
 const COUNTDOWN_SEC = 180;        // 3 min wait
 const MAX_DISCONNECTS = 2;        // After 2 disconnects, force replacement
+const MIN_PARTICIPANTS = 3;
 
 export function useAnimateurWait({
   liveKitParticipants,
@@ -25,19 +27,23 @@ export function useAnimateurWait({
   isTestGroup,
   onTimedOut,
   onDisconnectCountChanged,
+  onBelowMinimum,
 }: UseAnimateurWaitProps) {
   const [waitingForAnimateur, setWaitingForAnimateur] = useState(false);
   const [waitCountdownSec, setWaitCountdownSec] = useState(COUNTDOWN_SEC);
   const [canPropose, setCanPropose] = useState(false);
   const [timedOut, setTimedOut] = useState(false);
   const [forceReplacement, setForceReplacement] = useState(false);
+  const [belowMinimum, setBelowMinimum] = useState(false);
 
   const timerRef = useRef<NodeJS.Timeout>();
   const graceTimerRef = useRef<NodeJS.Timeout>();
   const onTimedOutRef = useRef(onTimedOut);
   const onDisconnectRef = useRef(onDisconnectCountChanged);
+  const onBelowMinimumRef = useRef(onBelowMinimum);
   onTimedOutRef.current = onTimedOut;
   onDisconnectRef.current = onDisconnectCountChanged;
+  onBelowMinimumRef.current = onBelowMinimum;
 
   // Track disconnect count from Firestore
   const disconnectCount = firestoreSession?.animateurDisconnectCount || 0;
@@ -90,7 +96,6 @@ export function useAnimateurWait({
   // Effect 2: Check if max disconnects reached → force replacement immediately
   useEffect(() => {
     if (disconnectCount >= MAX_DISCONNECTS && waitingForAnimateur) {
-      // 3rd disconnect — skip countdown, force replacement
       clearInterval(timerRef.current);
       setForceReplacement(true);
       setCanPropose(true);
@@ -98,9 +103,24 @@ export function useAnimateurWait({
     }
   }, [disconnectCount, waitingForAnimateur]);
 
-  // Effect 3: Run the countdown timer when waiting (only if not force replacement)
+  // Effect 3: Monitor participant count — if < 3 connected, cancel
   useEffect(() => {
-    if (!waitingForAnimateur || forceReplacement) {
+    if (!waitingForAnimateur || isTestGroup) return;
+    // total = local user (1) + remote liveKit participants
+    const totalConnected = 1 + liveKitParticipants.length;
+    if (totalConnected < MIN_PARTICIPANTS) {
+      setBelowMinimum(true);
+      clearInterval(timerRef.current);
+      setCanPropose(false);
+      onBelowMinimumRef.current?.();
+    } else {
+      setBelowMinimum(false);
+    }
+  }, [liveKitParticipants.length, waitingForAnimateur, isTestGroup]);
+
+  // Effect 4: Run the countdown timer when waiting (only if not force replacement and not below minimum)
+  useEffect(() => {
+    if (!waitingForAnimateur || forceReplacement || belowMinimum) {
       clearInterval(timerRef.current);
       return;
     }
@@ -123,7 +143,7 @@ export function useAnimateurWait({
     }, 1000);
 
     return () => clearInterval(timerRef.current);
-  }, [waitingForAnimateur, forceReplacement]);
+  }, [waitingForAnimateur, forceReplacement, belowMinimum]);
 
-  return { waitingForAnimateur, waitCountdownSec, canPropose, timedOut, forceReplacement, disconnectCount };
+  return { waitingForAnimateur, waitCountdownSec, canPropose, timedOut, forceReplacement, disconnectCount, belowMinimum };
 }
