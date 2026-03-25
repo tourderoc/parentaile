@@ -1026,18 +1026,6 @@ const RoomContent: React.FC<{
     fetchBadges();
   }, [participants.length]); // re-fetch when participant count changes
 
-  // Warn when exactly 3 participants (1 local + 2 remote) — next departure = cancellation
-  const prevParticipantCountRef = useRef(participants.length);
-  useEffect(() => {
-    const totalCount = 1 + participants.length; // local + remote
-    const prevTotal = 1 + prevParticipantCountRef.current;
-    if (totalCount === 3 && prevTotal > 3 && firestoreSession?.sessionActive) {
-      setWarnToast('Attention : si un participant quitte, le groupe sera annulé (minimum 3)');
-      setTimeout(() => setWarnToast(null), 6000);
-    }
-    prevParticipantCountRef.current = participants.length;
-  }, [participants.length, firestoreSession?.sessionActive]);
-
   // Firestore session state listener (real-time sync for all participants)
   const [firestoreSession, setFirestoreSession] = useState<SessionState | null>(null);
   const [micLocked, setMicLocked] = useState(false);
@@ -1065,6 +1053,18 @@ const RoomContent: React.FC<{
     });
     return unsub;
   }, [groupeId, createurUid]);
+
+  // Warn when exactly 3 participants (1 local + 2 remote) — next departure = cancellation
+  const prevParticipantCountRef = useRef(participants.length);
+  useEffect(() => {
+    const totalCount = 1 + participants.length; // local + remote
+    const prevTotal = 1 + prevParticipantCountRef.current;
+    if (totalCount === 3 && prevTotal > 3 && firestoreSession?.sessionActive) {
+      setWarnToast('Attention : si un participant quitte, le groupe sera annulé (minimum 3)');
+      setTimeout(() => setWarnToast(null), 6000);
+    }
+    prevParticipantCountRef.current = participants.length;
+  }, [participants.length, firestoreSession?.sessionActive]);
 
   // Init session state when animateur enters
   const sessionInitRef = useRef(false);
@@ -2211,15 +2211,6 @@ const WaitingRoom: React.FC<{
     const interval = setInterval(update, 1000);
     return () => clearInterval(interval);
   }, [dateVocal, isTestGroup, testStartTime]);
-
-  // Auto-enter room when session time has passed (or test group)
-  const autoEnteredRef = useRef(false);
-  useEffect(() => {
-    if ((sessionStarted || isTestGroup) && !autoEnteredRef.current) {
-      autoEnteredRef.current = true;
-      onEnter();
-    }
-  }, [sessionStarted, isTestGroup, onEnter]);
 
   const animateurPresent = participants.some((p) => p.uid === createurUid);
   const isAnimateur = currentUser?.uid === createurUid;
