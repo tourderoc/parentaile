@@ -51,7 +51,7 @@ import {
   getUserBadge, setPresence, removePresence, initSessionState, advancePhase, 
   extendSession, endSession, submitBanFeedback,
   initSessionStateV2, suspendSession, resumeSession, proposeAsAnimateur, onPresenceList,
-  cancelGroup
+  cancelGroup, incrementAnimateurDisconnect
 } from '../../lib/groupeParoleService';
 import type { MessageGroupe, ParticipantGroupe, StructureEtape, BadgeLevel, SessionState, MicPolicy } from '../../types/groupeParole';
 import { STRUCTURE_DEFAUT, getBadgeInfo, PHASE_MIC_POLICY, DEFAULT_MIC_POLICY } from '../../types/groupeParole';
@@ -1026,6 +1026,18 @@ const RoomContent: React.FC<{
     fetchBadges();
   }, [participants.length]); // re-fetch when participant count changes
 
+  // Warn when exactly 3 participants (1 local + 2 remote) — next departure = cancellation
+  const prevParticipantCountRef = useRef(participants.length);
+  useEffect(() => {
+    const totalCount = 1 + participants.length; // local + remote
+    const prevTotal = 1 + prevParticipantCountRef.current;
+    if (totalCount === 3 && prevTotal > 3 && firestoreSession?.sessionActive) {
+      setWarnToast('Attention : si un participant quitte, le groupe sera annulé (minimum 3)');
+      setTimeout(() => setWarnToast(null), 6000);
+    }
+    prevParticipantCountRef.current = participants.length;
+  }, [participants.length, firestoreSession?.sessionActive]);
+
   // Firestore session state listener (real-time sync for all participants)
   const [firestoreSession, setFirestoreSession] = useState<SessionState | null>(null);
   const [micLocked, setMicLocked] = useState(false);
@@ -1072,19 +1084,50 @@ const RoomContent: React.FC<{
   // La session "a commence" si dateVocal est passee (pas besoin que l'animateur ait init)
   const dateVocalPassed = dateVocal.getTime() <= Date.now();
 
-  const { waitingForAnimateur, waitCountdownSec, canPropose: waitCanPropose, timedOut: animateurTimedOut } = useAnimateurWait({
+  const handleAnimateurDisconnect = useCallback(async (newCount: number) => {
+    await incrementAnimateurDisconnect(groupeId);
+    if (newCount >= 2) {
+      setWarnToast('L\'animateur s\'est déconnecté trop de fois — remplacement nécessaire');
+      setTimeout(() => setWarnToast(null), 6000);
+    }
+  }, [groupeId]);
+
+  const { waitingForAnimateur, waitCountdownSec, canPropose: waitCanPropose, timedOut: animateurTimedOut, forceReplacement } = useAnimateurWait({
     groupeId,
     liveKitParticipants: participants,
     firestoreSession: firestoreSession || undefined,
     createurUid,
     sessionStarted: dateVocalPassed || (firestoreSession?.sessionActive ?? false),
     isTestGroup,
+    onDisconnectCountChanged: handleAnimateurDisconnect,
   });
 
   const handleProposeAnimateur = async () => {
     if (!auth.currentUser) return;
     await proposeAsAnimateur(groupeId, auth.currentUser.uid, sessionPrenom || 'Parent');
   };
+
+  // Toast when animateur changes (replacement happened)
+  const prevAnimateurUidRef = useRef(firestoreSession?.currentAnimateurUid);
+  useEffect(() => {
+    const currentAnimUid = firestoreSession?.currentAnimateurUid;
+    const prevAnimUid = prevAnimateurUidRef.current;
+
+    if (currentAnimUid && prevAnimUid && currentAnimUid !== prevAnimUid) {
+      const newPseudo = firestoreSession?.currentAnimateurPseudo || 'Un participant';
+      const myUid = auth.currentUser?.uid;
+
+      if (currentAnimUid === myUid) {
+        setPhaseToast('Vous êtes maintenant l\'animateur du groupe');
+      } else if (prevAnimUid === myUid) {
+        setPhaseToast(`${newPseudo} a pris le relais comme animateur`);
+      } else {
+        setPhaseToast(`${newPseudo} prend le relais comme animateur`);
+      }
+      setTimeout(() => setPhaseToast(null), 4000);
+    }
+    prevAnimateurUidRef.current = currentAnimUid;
+  }, [firestoreSession?.currentAnimateurUid, firestoreSession?.currentAnimateurPseudo]);
 
   const { suspended, suspensionReason, countdownSec: suspCountdownSec, canPropose: suspCanPropose } = useSessionSuspension({
     groupeId,
@@ -1095,12 +1138,26 @@ const RoomContent: React.FC<{
     isEffectiveAnimateur,
     onSuspend: async (reason) => {
       await suspendSession(groupeId, reason);
+      if (reason === 'below_minimum') {
+        setWarnToast('Un participant a quitté — moins de 3 personnes, session en pause');
+        setTimeout(() => setWarnToast(null), 6000);
+      } else if (reason === 'animateur_left') {
+        setWarnToast('L\'animateur a quitté la salle');
+        setTimeout(() => setWarnToast(null), 4000);
+      }
     },
     onResume: async () => {
       await resumeSession(groupeId);
+      setPhaseToast('La session reprend !');
+      setTimeout(() => setPhaseToast(null), 3000);
     },
     onAutoEnd: async () => {
-      await endSession(groupeId);
+      if (suspensionReason === 'below_minimum') {
+        await cancelGroup(groupeId, 'Nombre de participants insuffisant en cours de session');
+        setStep('cancelled');
+      } else {
+        await endSession(groupeId);
+      }
     }
   });
 
@@ -1483,6 +1540,7 @@ const RoomContent: React.FC<{
             countdownSec={waitCountdownSec}
             canPropose={waitCanPropose}
             onPropose={handleProposeAnimateur}
+            forceReplacement={forceReplacement}
           />
         )}
         {suspended && (
@@ -2152,6 +2210,15 @@ const WaitingRoom: React.FC<{
     const interval = setInterval(update, 1000);
     return () => clearInterval(interval);
   }, [dateVocal, isTestGroup, testStartTime]);
+
+  // Auto-enter room when session time has passed (or test group)
+  const autoEnteredRef = useRef(false);
+  useEffect(() => {
+    if ((sessionStarted || isTestGroup) && !autoEnteredRef.current) {
+      autoEnteredRef.current = true;
+      onEnter();
+    }
+  }, [sessionStarted, isTestGroup, onEnter]);
 
   const animateurPresent = participants.some((p) => p.uid === createurUid);
   const isAnimateur = currentUser?.uid === createurUid;
@@ -3655,6 +3722,8 @@ export const SalleVocalePage = () => {
 
   // ===== Reconnecting Screen =====
   if (step === 'reconnecting') {
+    const attempts = reconnectAttemptsRef.current;
+    const failed = attempts >= 3;
     return (
       <div
         className="h-screen flex flex-col items-center justify-center gap-6 px-6"
@@ -3663,35 +3732,55 @@ export const SalleVocalePage = () => {
         }}
       >
         <div className="relative">
-          <div className="absolute inset-0 bg-orange-500/20 rounded-full animate-ping" />
-          <div className="w-20 h-20 bg-orange-500/10 rounded-full flex items-center justify-center border border-orange-500/30">
-            <Loader2 className="w-10 h-10 animate-spin text-orange-400" />
+          {!failed && <div className="absolute inset-0 bg-orange-500/20 rounded-full animate-ping" />}
+          <div className={`w-20 h-20 rounded-full flex items-center justify-center border ${
+            failed ? 'bg-red-500/10 border-red-500/30' : 'bg-orange-500/10 border-orange-500/30'
+          }`}>
+            {failed
+              ? <AlertTriangle className="w-10 h-10 text-red-400" />
+              : <Loader2 className="w-10 h-10 animate-spin text-orange-400" />
+            }
           </div>
         </div>
         <div className="text-center">
-          <p className="text-lg font-bold text-white">Reconnexion en cours...</p>
+          <p className="text-lg font-bold text-white">
+            {failed ? 'Problème de connexion' : 'Reconnexion en cours...'}
+          </p>
           <p className="text-sm text-white/50 mt-2">
-            {reconnectAttemptsRef.current < 3
-              ? 'Veuillez patienter, nous essayons de vous reconnecter'
-              : 'La connexion a echoue. Vous pouvez reessayer ou quitter.'}
+            {failed
+              ? 'Impossible de rejoindre la salle après plusieurs tentatives'
+              : `Tentative ${attempts + 1}/3 — veuillez patienter`
+            }
           </p>
         </div>
-        {reconnectAttemptsRef.current >= 3 && (
-          <div className="flex gap-3 mt-4">
+
+        {/* Progress dots */}
+        {!failed && (
+          <div className="flex gap-2">
+            {[0, 1, 2].map(i => (
+              <div key={i} className={`w-2.5 h-2.5 rounded-full transition-all ${
+                i <= attempts ? 'bg-orange-400' : 'bg-white/20'
+              }`} />
+            ))}
+          </div>
+        )}
+
+        {failed && (
+          <div className="flex flex-col gap-3 mt-4 w-full max-w-xs">
             <button
               onClick={() => {
                 reconnectAttemptsRef.current = 0;
                 handleReconnect();
               }}
-              className="px-6 py-3 bg-orange-500 text-white rounded-2xl font-bold text-sm active:scale-95 transition-transform"
+              className="w-full px-6 py-3.5 bg-orange-500 text-white rounded-2xl font-bold text-sm active:scale-95 transition-transform"
             >
-              Reessayer
+              Réessayer la connexion
             </button>
             <button
               onClick={handleLeave}
-              className="px-6 py-3 bg-white/10 text-white/70 rounded-2xl font-bold text-sm active:scale-95 transition-transform"
+              className="w-full px-6 py-3.5 bg-white/10 text-white/70 rounded-2xl font-bold text-sm active:scale-95 transition-transform"
             >
-              Quitter
+              Quitter la session
             </button>
           </div>
         )}

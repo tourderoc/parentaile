@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Participant } from 'livekit-client';
 import type { SessionState } from '../types/groupeParole';
 
@@ -7,10 +7,15 @@ interface UseAnimateurWaitProps {
   liveKitParticipants: Participant[];
   firestoreSession?: SessionState;
   createurUid: string;
-  sessionStarted: boolean; // Salle ouverte (J=0)
+  sessionStarted: boolean;
   isTestGroup?: boolean;
   onTimedOut?: () => void;
+  onDisconnectCountChanged?: (count: number) => void;
 }
+
+const GRACE_PERIOD_MS = 15_000;   // 15s network grace before counting a disconnect
+const COUNTDOWN_SEC = 180;        // 3 min wait
+const MAX_DISCONNECTS = 2;        // After 2 disconnects, force replacement
 
 export function useAnimateurWait({
   liveKitParticipants,
@@ -18,21 +23,30 @@ export function useAnimateurWait({
   createurUid,
   sessionStarted,
   isTestGroup,
-  onTimedOut
+  onTimedOut,
+  onDisconnectCountChanged,
 }: UseAnimateurWaitProps) {
   const [waitingForAnimateur, setWaitingForAnimateur] = useState(false);
-  const [waitCountdownSec, setWaitCountdownSec] = useState(180); // 3 mins max
+  const [waitCountdownSec, setWaitCountdownSec] = useState(COUNTDOWN_SEC);
   const [canPropose, setCanPropose] = useState(false);
   const [timedOut, setTimedOut] = useState(false);
+  const [forceReplacement, setForceReplacement] = useState(false);
 
   const timerRef = useRef<NodeJS.Timeout>();
+  const graceTimerRef = useRef<NodeJS.Timeout>();
   const onTimedOutRef = useRef(onTimedOut);
+  const onDisconnectRef = useRef(onDisconnectCountChanged);
   onTimedOutRef.current = onTimedOut;
+  onDisconnectRef.current = onDisconnectCountChanged;
 
-  // Effect 1: Detect whether we should be waiting for the animateur
+  // Track disconnect count from Firestore
+  const disconnectCount = firestoreSession?.animateurDisconnectCount || 0;
+
+  // Effect 1: Detect animateur presence with 15s grace period
   useEffect(() => {
     if (!sessionStarted || isTestGroup) {
       setWaitingForAnimateur(false);
+      clearTimeout(graceTimerRef.current);
       return;
     }
 
@@ -40,33 +54,59 @@ export function useAnimateurWait({
     const animateurPresent = liveKitParticipants.some(p => p.identity === effectiveUid);
 
     if (animateurPresent) {
-      // Animateur is here — stop waiting
+      // Animateur is here — cancel grace period, stop waiting
+      clearTimeout(graceTimerRef.current);
       setWaitingForAnimateur(false);
-      setWaitCountdownSec(180);
+      setWaitCountdownSec(COUNTDOWN_SEC);
       setCanPropose(false);
-    } else if (!timedOut) {
-      // Animateur absent and not yet timed out — start waiting
-      setWaitingForAnimateur(true);
+      setTimedOut(false);
+      return;
     }
+
+    // Animateur absent — start grace period if not already waiting
+    if (!waitingForAnimateur && !timedOut && !forceReplacement) {
+      clearTimeout(graceTimerRef.current);
+      graceTimerRef.current = setTimeout(() => {
+        // Grace period elapsed — animateur is truly gone
+        setWaitingForAnimateur(true);
+        // Notify parent to increment disconnect count in Firestore
+        onDisconnectRef.current?.(disconnectCount + 1);
+      }, GRACE_PERIOD_MS);
+    }
+
+    return () => clearTimeout(graceTimerRef.current);
   }, [
     sessionStarted,
     liveKitParticipants,
     firestoreSession?.currentAnimateurUid,
     createurUid,
     isTestGroup,
-    timedOut
+    timedOut,
+    forceReplacement,
+    waitingForAnimateur,
+    disconnectCount,
   ]);
 
-  // Effect 2: Run the countdown timer independently when waitingForAnimateur is true
+  // Effect 2: Check if max disconnects reached → force replacement immediately
   useEffect(() => {
-    if (!waitingForAnimateur) {
-      // Reset when no longer waiting
+    if (disconnectCount >= MAX_DISCONNECTS && waitingForAnimateur) {
+      // 3rd disconnect — skip countdown, force replacement
+      clearInterval(timerRef.current);
+      setForceReplacement(true);
+      setCanPropose(true);
+      setWaitCountdownSec(0);
+    }
+  }, [disconnectCount, waitingForAnimateur]);
+
+  // Effect 3: Run the countdown timer when waiting (only if not force replacement)
+  useEffect(() => {
+    if (!waitingForAnimateur || forceReplacement) {
       clearInterval(timerRef.current);
       return;
     }
 
     // Reset countdown at start
-    setWaitCountdownSec(180);
+    setWaitCountdownSec(COUNTDOWN_SEC);
     setCanPropose(false);
 
     timerRef.current = setInterval(() => {
@@ -74,20 +114,16 @@ export function useAnimateurWait({
         if (prev <= 1) {
           clearInterval(timerRef.current);
           setTimedOut(true);
-          setWaitingForAnimateur(false);
+          setCanPropose(true);
           onTimedOutRef.current?.();
           return 0;
-        }
-        if (prev === 60) {
-          // After 2 minutes, allow someone to propose as animateur
-          setCanPropose(true);
         }
         return prev - 1;
       });
     }, 1000);
 
     return () => clearInterval(timerRef.current);
-  }, [waitingForAnimateur]);
+  }, [waitingForAnimateur, forceReplacement]);
 
-  return { waitingForAnimateur, waitCountdownSec, canPropose, timedOut };
+  return { waitingForAnimateur, waitCountdownSec, canPropose, timedOut, forceReplacement, disconnectCount };
 }

@@ -890,6 +890,25 @@ export async function proposeAsAnimateur(
   }
 }
 
+/**
+ * Incrémente le compteur de déconnexions de l'animateur.
+ * Retourne le nouveau count.
+ */
+export async function incrementAnimateurDisconnect(groupeId: string): Promise<number> {
+  const ref = doc(db, 'groupes', groupeId);
+  let newCount = 0;
+  await runTransaction(db, async (transaction) => {
+    const snap = await transaction.get(ref);
+    if (!snap.exists()) return;
+    const state = snap.data().sessionState;
+    newCount = (state?.animateurDisconnectCount || 0) + 1;
+    transaction.update(ref, {
+      'sessionState.animateurDisconnectCount': newCount,
+    });
+  });
+  return newCount;
+}
+
 // ========== GROUPE TEST ==========
 const TEST_GROUP_ID = 'groupe-test-vocal';
 

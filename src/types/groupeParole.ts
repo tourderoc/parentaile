@@ -162,11 +162,12 @@ export interface SessionState {
   // Lifecycle extensions
   suspended?: boolean;
   suspendedAt?: Date;
-  suspensionReason?: 'animateur_left' | 'below_minimum';
+  suspensionReason?: 'animateur_left' | 'below_minimum' | 'technical';
   suspensionCount?: number;      // max 2
   replacementUsed?: boolean;
   currentAnimateurUid?: string;
   currentAnimateurPseudo?: string;
+  animateurDisconnectCount?: number; // max 2, after which replacement is forced
 }
 
 export type MicPolicy = 'open' | 'muted_raise_hand' | 'muted_animateur_gives';

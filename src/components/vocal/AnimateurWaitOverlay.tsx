@@ -1,19 +1,21 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Clock, UserCheck, Mic2 } from 'lucide-react';
+import { Clock, UserCheck, Mic2, AlertTriangle } from 'lucide-react';
 
 interface Props {
   countdownSec: number;
   canPropose: boolean;
   onPropose: () => void;
   message?: string;
+  forceReplacement?: boolean;
 }
 
 export const AnimateurWaitOverlay: React.FC<Props> = ({
   countdownSec,
   canPropose,
   onPropose,
-  message = "La session commencera dès qu'il nous rejoindra. Préparez un endroit calme !"
+  message = "En attendant, vous pouvez discuter entre vous !",
+  forceReplacement = false,
 }) => {
   const formatTime = (sec: number) => {
     const m = Math.floor(sec / 60);
@@ -21,54 +23,88 @@ export const AnimateurWaitOverlay: React.FC<Props> = ({
     return `${m}:${s.toString().padStart(2, '0')}`;
   };
 
+  const title = forceReplacement
+    ? "L'animateur s'est déconnecté plusieurs fois"
+    : canPropose
+      ? "L'animateur n'est pas là"
+      : 'En attente de l\'animateur';
+
+  const subtitle = forceReplacement
+    ? 'Un volontaire doit prendre le relais pour continuer'
+    : canPropose
+      ? 'Quelqu\'un peut prendre le relais !'
+      : message;
+
   return (
     <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="absolute inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-md p-6"
+      initial={{ opacity: 0, y: -30 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -30 }}
+      className="absolute top-3 left-3 right-3 z-[60] pointer-events-none"
     >
-      <div className="bg-white rounded-[2rem] p-8 max-w-sm w-full text-center shadow-[0_20px_50px_-12px_rgba(0,0,0,0.5)] space-y-6">
-        <div className="w-20 h-20 relative mx-auto">
-          {/* Animated rings */}
-          <motion.div
-            animate={{ scale: [1, 1.3, 1], opacity: [0.5, 0, 0.5] }}
-            transition={{ repeat: Infinity, duration: 2, ease: "easeInOut" }}
-            className="absolute inset-0 bg-emerald-200 rounded-full"
-          />
-          <div className="absolute inset-2 bg-emerald-100 rounded-full flex items-center justify-center shadow-inner z-10">
-            <Mic2 className="w-8 h-8 text-emerald-600" />
+      <div className={`backdrop-blur-xl rounded-2xl px-5 py-4 shadow-[0_8px_30px_-8px_rgba(0,0,0,0.3)] pointer-events-auto ${
+        forceReplacement ? 'bg-amber-50/95 border border-amber-200' : 'bg-white/95'
+      }`}>
+        {/* Main banner */}
+        <div className="flex items-center gap-3">
+          {/* Icon */}
+          <div className="w-11 h-11 relative shrink-0">
+            {forceReplacement ? (
+              <div className="w-full h-full bg-amber-100 rounded-full flex items-center justify-center">
+                <AlertTriangle className="w-5 h-5 text-amber-600" />
+              </div>
+            ) : (
+              <>
+                <motion.div
+                  animate={{ scale: [1, 1.3, 1], opacity: [0.5, 0, 0.5] }}
+                  transition={{ repeat: Infinity, duration: 2, ease: "easeInOut" }}
+                  className="absolute inset-0 bg-emerald-200 rounded-full"
+                />
+                <div className="absolute inset-1 bg-emerald-100 rounded-full flex items-center justify-center shadow-inner z-10">
+                  <Mic2 className="w-5 h-5 text-emerald-600" />
+                </div>
+              </>
+            )}
           </div>
+
+          {/* Text */}
+          <div className="flex-1 min-w-0">
+            <p className={`text-sm font-black leading-tight ${forceReplacement ? 'text-amber-800' : 'text-gray-800'}`}>
+              {title}
+            </p>
+            <p className={`text-xs font-medium truncate ${forceReplacement ? 'text-amber-600' : 'text-gray-500'}`}>
+              {subtitle}
+            </p>
+          </div>
+
+          {/* Countdown - only show while counting */}
+          {countdownSec > 0 && (
+            <div className="bg-gray-100 px-3 py-1.5 rounded-xl flex items-center gap-1.5 shrink-0">
+              <Clock className="w-4 h-4 text-gray-400" />
+              <span className="text-lg font-black text-gray-700 font-mono tracking-wider">
+                {formatTime(countdownSec)}
+              </span>
+            </div>
+          )}
         </div>
 
-        <h3 className="text-2xl font-black text-gray-800 tracking-tight">
-          En attente de l'animateur
-        </h3>
-        
-        <p className="text-gray-500 font-medium leading-relaxed">
-          {message}
-        </p>
-
-        <div className="bg-gray-50 py-3 rounded-2xl flex items-center justify-center space-x-3 text-3xl font-black text-gray-700 font-mono tracking-widest shadow-inner">
-          <Clock className="w-7 h-7 text-gray-400" />
-          <span>{formatTime(countdownSec)}</span>
-        </div>
-
+        {/* Propose button */}
         {canPropose && (
           <motion.div
-            initial={{ opacity: 0, y: 15 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="pt-4 border-t border-gray-100"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            className="mt-3 pt-3 border-t border-gray-100"
           >
-            <p className="text-sm font-medium text-gray-500 mb-4 px-2">
-              L'animateur semble bloqué. L'un de vous souhaite-t-il lancer l'échange pour ne pas annuler ce groupe ?
-            </p>
             <button
               onClick={onPropose}
-              className="w-full flex items-center justify-center gap-2 py-4 rounded-2xl bg-gray-900 text-white font-bold hover:bg-gray-800 transition-all hover:scale-[1.02] active:scale-95 shadow-lg shadow-gray-900/20"
+              className={`w-full flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold transition-all active:scale-95 shadow-lg ${
+                forceReplacement
+                  ? 'bg-amber-500 text-white hover:bg-amber-600 shadow-amber-500/20'
+                  : 'bg-gray-900 text-white hover:bg-gray-800 shadow-gray-900/20'
+              }`}
             >
-              <UserCheck size={20} />
-              Je lance la discussion
+              <UserCheck size={16} />
+              Je prends le relais
             </button>
           </motion.div>
         )}
