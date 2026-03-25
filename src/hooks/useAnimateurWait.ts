@@ -24,9 +24,12 @@ export function useAnimateurWait({
   const [waitCountdownSec, setWaitCountdownSec] = useState(180); // 3 mins max
   const [canPropose, setCanPropose] = useState(false);
   const [timedOut, setTimedOut] = useState(false);
-  
-  const timerRef = useRef<NodeJS.Timeout>();
 
+  const timerRef = useRef<NodeJS.Timeout>();
+  const onTimedOutRef = useRef(onTimedOut);
+  onTimedOutRef.current = onTimedOut;
+
+  // Effect 1: Detect whether we should be waiting for the animateur
   useEffect(() => {
     if (!sessionStarted || isTestGroup) {
       setWaitingForAnimateur(false);
@@ -34,53 +37,57 @@ export function useAnimateurWait({
     }
 
     const effectiveUid = firestoreSession?.currentAnimateurUid || createurUid;
-    
-    // Vérifier si l'animateur est dans la salle
     const animateurPresent = liveKitParticipants.some(p => p.identity === effectiveUid);
-    
+
     if (animateurPresent) {
-      if (waitingForAnimateur) {
-        // Animateur arrivé !
-        setWaitingForAnimateur(false);
-        setWaitCountdownSec(180);
-        clearInterval(timerRef.current);
-      }
+      // Animateur is here — stop waiting
+      setWaitingForAnimateur(false);
+      setWaitCountdownSec(180);
+      setCanPropose(false);
+    } else if (!timedOut) {
+      // Animateur absent and not yet timed out — start waiting
+      setWaitingForAnimateur(true);
+    }
+  }, [
+    sessionStarted,
+    liveKitParticipants,
+    firestoreSession?.currentAnimateurUid,
+    createurUid,
+    isTestGroup,
+    timedOut
+  ]);
+
+  // Effect 2: Run the countdown timer independently when waitingForAnimateur is true
+  useEffect(() => {
+    if (!waitingForAnimateur) {
+      // Reset when no longer waiting
+      clearInterval(timerRef.current);
       return;
     }
 
-    // Si on n'attendait pas encore, on démarre
-    if (!waitingForAnimateur && !timedOut) {
-      setWaitingForAnimateur(true);
-      setWaitCountdownSec(180);
-      setCanPropose(false);
-      
-      timerRef.current = setInterval(() => {
-        setWaitCountdownSec(prev => {
-          if (prev <= 1) {
-            clearInterval(timerRef.current);
-            setTimedOut(true);
-            onTimedOut?.();
-            return 0;
-          }
-          if (prev === 60) {
-            // A partir d'1 minute restante (2min écoulées), on permet à qq de se proposer
-            setCanPropose(true);
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    }
-    
+    // Reset countdown at start
+    setWaitCountdownSec(180);
+    setCanPropose(false);
+
+    timerRef.current = setInterval(() => {
+      setWaitCountdownSec(prev => {
+        if (prev <= 1) {
+          clearInterval(timerRef.current);
+          setTimedOut(true);
+          setWaitingForAnimateur(false);
+          onTimedOutRef.current?.();
+          return 0;
+        }
+        if (prev === 60) {
+          // After 2 minutes, allow someone to propose as animateur
+          setCanPropose(true);
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
     return () => clearInterval(timerRef.current);
-  }, [
-    sessionStarted, 
-    liveKitParticipants, 
-    firestoreSession?.currentAnimateurUid, 
-    createurUid, 
-    waitingForAnimateur, 
-    timedOut, 
-    isTestGroup
-  ]);
+  }, [waitingForAnimateur]);
 
   return { waitingForAnimateur, waitCountdownSec, canPropose, timedOut };
 }
