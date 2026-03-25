@@ -1152,7 +1152,8 @@ const RoomContent: React.FC<{
       setTimeout(() => setPhaseToast(null), 3000);
     },
     onAutoEnd: async () => {
-      if (suspensionReason === 'below_minimum') {
+      // Use firestoreSession directly to avoid circular reference with destructured suspensionReason
+      if (firestoreSession?.suspensionReason === 'below_minimum') {
         await cancelGroup(groupeId, 'Nombre de participants insuffisant en cours de session');
         setStep('cancelled');
       } else {
