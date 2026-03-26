@@ -1,7 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { UserPlus, LogIn } from 'lucide-react';
+import { UserPlus, LogIn, Globe, ChevronRight } from 'lucide-react';
 
 export const Welcome: React.FC = () => {
   const navigate = useNavigate();
@@ -79,13 +79,17 @@ export const Welcome: React.FC = () => {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 1 }}
-          className="text-center pt-2"
+          className="flex justify-center pt-6"
         >
           <button
             onClick={() => navigate('/espace/dashboard')}
-            className="text-gray-400 text-xs font-semibold hover:text-orange-500 transition-colors uppercase tracking-widest"
+            className="group flex items-center gap-3 px-6 py-3 bg-white/50 backdrop-blur-sm border border-orange-100 rounded-2xl text-orange-500 text-xs font-bold hover:bg-orange-50 hover:border-orange-200 transition-all shadow-sm active:scale-95 uppercase tracking-widest"
           >
-            Site Internet →
+            <div className="w-6 h-6 bg-orange-100 rounded-lg flex items-center justify-center group-hover:bg-orange-200 transition-colors">
+                <Globe className="w-3.5 h-3.5" />
+            </div>
+            <span>Consulter le site</span>
+            <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
           </button>
         </motion.div>
       </div>
