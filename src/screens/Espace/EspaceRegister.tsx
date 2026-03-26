@@ -11,7 +11,7 @@ import {
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
-import { Eye, EyeOff, Loader2, CheckCircle, User, ArrowRight, ArrowLeft, Mail } from 'lucide-react';
+import { Eye, EyeOff, Loader2, CheckCircle, User, ArrowRight, ArrowLeft, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface EspaceRegisterProps {
@@ -112,36 +112,54 @@ export const EspaceRegister: React.FC<EspaceRegisterProps> = ({ onLoginInstead }
   };
 
   return (
-    <div className="flex items-center justify-center relative overflow-hidden pb-32">
-      <div className="absolute top-[-20%] right-[-20%] w-96 h-96 bg-orange-200/20 rounded-full blur-[100px] animate-float" />
+    <div className="min-h-screen bg-[#FFFBF0] flex flex-col pt-4">
+      <div className="max-w-md mx-auto w-full px-6 flex flex-col min-h-screen">
+        
+        {/* Hero Header - Premium Dark Cartouche matching Login/Settings */}
+        <div className="relative border border-white/20 shadow-premium overflow-hidden bg-gray-900 rounded-[2.5rem] mb-8">
+          <div className="absolute inset-0 opacity-80">
+            <img 
+              src="/assets/backgrounds/slide_bg_settings.png" 
+              alt="Register Background"
+              className="w-full h-full object-cover transform translate-y-[-5%] scale-110"
+            />
+          </div>
+          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-black/10 pointer-events-none" />
 
-      <div className="max-w-md w-full z-10 px-4">
+          <div className="relative px-6 py-8 flex items-center gap-5">
+            <div className="w-16 h-16 bg-white/10 backdrop-blur-md rounded-2xl flex flex-shrink-0 items-center justify-center shadow-glass border border-white/20">
+              <User size={32} className="text-white drop-shadow-md" />
+            </div>
+            <div className="flex-1">
+              <h1 className="text-2xl font-black text-white tracking-tight drop-shadow-md leading-tight">
+                {step === 'auth' ? 'Inscription' : 'Profil'}
+              </h1>
+              <p className="text-[10px] text-white/70 font-bold uppercase tracking-widest mt-1 drop-shadow-sm line-clamp-1">
+                {step === 'auth' ? 'Rejoignez la communauté Parent\'aile' : 'Finalisez votre inscription'}
+              </p>
+            </div>
+          </div>
+        </div>
+
         <AnimatePresence mode="wait">
           {step === 'auth' ? (
             <motion.div
               key="auth"
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="glass p-8 rounded-[2rem] shadow-premium"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="bg-white/40 backdrop-blur-xl rounded-[2.5rem] border border-white/60 shadow-premium p-8 mb-32"
             >
-              <div className="text-center mb-8">
-                <div className="w-16 h-16 mx-auto bg-orange-100 rounded-2xl flex items-center justify-center mb-4 transform -rotate-6 shadow-sm">
-                  <Mail className="w-8 h-8 text-orange-500" />
-                </div>
-                <h1 className="text-3xl font-extrabold text-gray-800 tracking-tight">Créer mon espace</h1>
-                <p className="text-gray-500 mt-2 font-medium">Rejoignez Parent'aile</p>
-              </div>
-
               {error && (
-                <div className="bg-red-50 text-red-600 p-4 rounded-xl text-sm mb-6 font-bold border border-red-100">
+                <div className="bg-red-50 text-red-600 p-4 rounded-2xl text-sm mb-6 font-bold border border-red-100 flex items-center gap-2">
+                  <X size={18} />
                   {error}
                 </div>
               )}
 
               <Button
                 variant="outline"
-                className="w-full h-14 rounded-2xl border-2 hover:bg-gray-50 transition-all mb-4 text-gray-700 font-bold"
+                className="w-full h-14 rounded-2xl border-2 border-gray-100 hover:bg-gray-50 hover:border-gray-200 transition-all font-bold text-gray-700 shadow-sm mb-6"
                 onClick={handleGoogleRegister}
                 disabled={isLoading}
               >
@@ -157,36 +175,33 @@ export const EspaceRegister: React.FC<EspaceRegisterProps> = ({ onLoginInstead }
                 <div className="absolute inset-0 flex items-center">
                   <div className="w-full border-t border-gray-100"></div>
                 </div>
-                <div className="relative flex justify-center text-xs uppercase tracking-widest font-bold">
-                  <span className="px-4 bg-[#FFFBF0] text-gray-400">ou email</span>
+                <div className="relative flex justify-center text-[10px] uppercase font-black tracking-[0.2em]">
+                  <span className="px-4 bg-transparent text-gray-400/60">Ou par email</span>
                 </div>
               </div>
 
-              <form onSubmit={handleEmailRegister} className="space-y-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-bold text-gray-600 ml-1">Email</label>
-                  <div className="relative">
-                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                    <Input
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="votre@email.com"
-                      className="h-14 pl-12 rounded-2xl border-2 focus:ring-orange-500 font-bold text-gray-700"
-                      required
-                    />
-                  </div>
+              <form onSubmit={handleEmailRegister} className="space-y-6">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest ml-1">Email</label>
+                  <Input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="votre@email.com"
+                    className="h-14 pl-5 rounded-2xl border-2 border-gray-100 focus:border-orange-500 font-bold"
+                    required
+                  />
                 </div>
 
-                <div className="space-y-2">
-                  <label className="text-sm font-bold text-gray-600 ml-1">Mot de passe</label>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest ml-1">Mot de passe</label>
                   <div className="relative">
                     <Input
                       type={showPassword ? 'text' : 'password'}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       placeholder="••••••••"
-                      className="h-14 px-4 rounded-2xl border-2 focus:ring-orange-500 font-bold text-gray-700"
+                      className="h-14 pl-5 pr-12 rounded-2xl border-2 border-gray-100 focus:border-orange-500 font-bold"
                       required
                       minLength={6}
                     />
@@ -202,29 +217,29 @@ export const EspaceRegister: React.FC<EspaceRegisterProps> = ({ onLoginInstead }
 
                 <Button
                   type="submit"
-                  className="w-full h-14 bg-orange-500 hover:bg-orange-600 rounded-2xl shadow-premium text-lg font-bold mt-4"
+                  className="w-full h-14 bg-orange-500 hover:bg-orange-600 text-white rounded-2xl font-bold shadow-premium active:scale-[0.98] transition-all text-lg mt-4"
                   disabled={isLoading}
                 >
                   {isLoading ? (
-                    <Loader2 className="w-5 h-5 animate-spin" />
+                    <Loader2 className="w-6 h-6 animate-spin" />
                   ) : (
                     <>
-                      Suivant
+                      Continuer
                       <ArrowRight className="w-5 h-5 ml-2" />
                     </>
                   )}
                 </Button>
               </form>
 
-              <div className="mt-8 text-center space-y-4">
-                <p className="text-sm text-gray-400 font-bold uppercase tracking-wider">
+              <div className="mt-8 text-center space-y-6">
+                <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest">
                   Déjà un compte ?{' '}
                   <button onClick={onLoginInstead} className="text-orange-500 hover:underline">
                     Se connecter
                   </button>
                 </p>
-                <Link to="/welcome" className="inline-flex items-center gap-2 text-gray-400 hover:text-gray-600 font-bold text-xs uppercase tracking-widest transform transition-all active:scale-95">
-                  <ArrowLeft className="w-4 h-4" />
+                <Link to="/welcome" className="inline-flex items-center gap-2 text-gray-400 hover:text-orange-500 font-bold text-[10px] uppercase tracking-widest transition-all active:scale-95 group">
+                  <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
                   Retour
                 </Link>
               </div>
@@ -235,31 +250,25 @@ export const EspaceRegister: React.FC<EspaceRegisterProps> = ({ onLoginInstead }
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="glass p-8 rounded-[2rem] shadow-premium"
+              className="bg-white/40 backdrop-blur-xl rounded-[2.5rem] border border-white/60 shadow-premium p-8 mb-32"
             >
               <div className="text-center mb-8">
-                <div className="w-16 h-16 mx-auto bg-green-100 rounded-2xl flex items-center justify-center mb-4 transform rotate-3 shadow-sm">
-                  <CheckCircle className="w-8 h-8 text-green-500" />
+                <div className="w-16 h-16 mx-auto bg-green-100 rounded-2xl flex items-center justify-center mb-4 transform rotate-3 shadow-sm text-green-500">
+                  <CheckCircle size={32} />
                 </div>
-                <h1 className="text-3xl font-extrabold text-gray-800 tracking-tight">Bienvenue !</h1>
-                <p className="text-gray-500 mt-2 font-medium">Finalisez votre profil</p>
-                {auth.currentUser?.email && (
-                  <p className="text-[10px] text-gray-400 font-bold mt-1 italic opacity-60">
-                    Connecté avec {auth.currentUser.email}
-                  </p>
-                )}
+                <h2 className="text-2xl font-black text-gray-800 tracking-tight leading-tight">Bienvenue !</h2>
+                <p className="text-sm text-gray-500 mt-2 font-medium">Finalisez votre profil Parent'aile</p>
               </div>
 
               {error && (
-                <div className="bg-red-50 text-red-600 p-4 rounded-xl text-sm mb-6 font-bold border border-red-100">
+                <div className="bg-red-50 text-red-600 p-4 rounded-2xl text-sm mb-6 font-bold border border-red-100">
                   {error}
                 </div>
               )}
 
               <form onSubmit={handleCompleteRegistration} className="space-y-6">
-                {/* Parent Pseudo */}
-                <div className="space-y-2">
-                  <label className="text-sm font-bold text-gray-600 ml-1">Votre pseudo</label>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest ml-1">Votre pseudo</label>
                   <div className="relative">
                     <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                     <Input
@@ -267,7 +276,7 @@ export const EspaceRegister: React.FC<EspaceRegisterProps> = ({ onLoginInstead }
                       value={parentPseudo}
                       onChange={(e) => setParentPseudo(e.target.value)}
                       placeholder="Ex: Maman de Théo, Valérie..."
-                      className="h-14 pl-12 rounded-2xl border-2 focus:ring-orange-500 font-bold"
+                      className="h-14 pl-12 rounded-2xl border-2 border-gray-100 focus:border-orange-500 font-bold shadow-sm"
                       required
                       maxLength={20}
                     />
@@ -277,14 +286,14 @@ export const EspaceRegister: React.FC<EspaceRegisterProps> = ({ onLoginInstead }
                 <div className="flex flex-col gap-4 mt-8">
                   <Button
                     type="submit"
-                    className="w-full h-14 bg-orange-500 hover:bg-orange-600 rounded-2xl shadow-premium text-lg font-bold"
+                    className="w-full h-14 bg-orange-500 hover:bg-orange-600 text-white rounded-2xl font-bold shadow-premium active:scale-[0.98] transition-all text-lg"
                     disabled={isLoading || parentPseudo.trim().length < 2}
                   >
                     {isLoading ? (
-                      <Loader2 className="w-5 h-5 animate-spin" />
+                      <Loader2 className="w-6 h-6 animate-spin" />
                     ) : (
                       <>
-                        Terminer
+                        Commencer l'aventure
                         <ArrowRight className="w-5 h-5 ml-2" />
                       </>
                     )}
@@ -297,9 +306,8 @@ export const EspaceRegister: React.FC<EspaceRegisterProps> = ({ onLoginInstead }
                         await signOut(auth);
                         setStep('auth');
                       }}
-                      className="text-gray-400 hover:text-gray-600 text-[10px] font-bold uppercase tracking-widest active:scale-95 transition-all"
+                      className="text-gray-400 hover:text-orange-500 text-[10px] font-black uppercase tracking-[0.2em] active:scale-95 transition-all text-center"
                     >
-                      <ArrowLeft className="w-3 h-3 inline mr-1" />
                       Utiliser un autre email
                     </button>
                   )}

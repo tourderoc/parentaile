@@ -10,7 +10,7 @@ import { auth } from '../../lib/firebase';
 import { signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, sendPasswordResetEmail } from 'firebase/auth';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
-import { Eye, EyeOff, Loader2, Home, Mail, X, CheckCircle, Check } from 'lucide-react';
+import { Eye, EyeOff, Loader2, Home, Mail, X, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 // Clés localStorage
@@ -131,51 +131,76 @@ export const EspaceLogin: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-orange-50 to-white flex items-center justify-center p-4">
-      <div className="max-w-md w-full">
-        {/* Header */}
-        <div className="text-center mb-8">
-          <div className="w-20 h-20 mx-auto bg-orange-100 rounded-full flex items-center justify-center mb-4">
-            <Mail className="w-10 h-10 text-orange-500" />
+    <div className="min-h-screen bg-[#FFFBF0] flex flex-col pt-4">
+      <div className="max-w-md mx-auto w-full px-6 flex flex-col min-h-screen">
+        
+        {/* Hero Header - Premium Dark Cartouche matching EspaceSettings */}
+        <div className="relative border border-white/20 shadow-premium overflow-hidden bg-gray-900 rounded-[2.5rem] mb-8">
+          <div className="absolute inset-0 opacity-80">
+            <img 
+              src="/assets/backgrounds/slide_bg_settings.png" 
+              alt="Login Background"
+              className="w-full h-full object-cover transform translate-y-[-5%] scale-110"
+            />
           </div>
-          <h1 className="text-2xl font-bold text-gray-800">Connexion</h1>
-          <p className="text-gray-600 mt-2">Espace Patient Parent'aile</p>
+          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-black/10 pointer-events-none" />
+
+          <div className="relative px-6 py-8 flex items-center gap-5">
+            <div className="w-16 h-16 bg-white/10 backdrop-blur-md rounded-2xl flex flex-shrink-0 items-center justify-center shadow-glass border border-white/20">
+              <Mail size={32} className="text-white drop-shadow-md" />
+            </div>
+            <div className="flex-1">
+              <h1 className="text-2xl font-black text-white tracking-tight drop-shadow-md leading-tight">
+                Connexion
+              </h1>
+              <p className="text-[10px] text-white/70 font-bold uppercase tracking-widest mt-1 drop-shadow-sm line-clamp-1">
+                Espace Patient Parent'aile
+              </p>
+            </div>
+          </div>
         </div>
 
-        <div className="bg-white rounded-xl shadow-lg p-6">
-          {/* Error message */}
+        {/* Content Card */}
+        <div className="bg-white/40 backdrop-blur-xl rounded-[2.5rem] border border-white/60 shadow-premium p-8 mb-32">
           {error && (
-            <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm mb-4">
+            <motion.div 
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="bg-red-50 text-red-600 p-4 rounded-2xl text-sm mb-6 font-bold border border-red-100 flex items-center gap-2"
+            >
+              <X size={18} className="shrink-0" />
               {error}
-            </div>
+            </motion.div>
           )}
 
-          {/* Email/Password form */}
-          <form onSubmit={handleEmailLogin} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+          <form onSubmit={handleEmailLogin} className="space-y-6">
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest ml-1">
                 Adresse email
               </label>
-              <Input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="votre@email.com"
-                required
-              />
+              <div className="relative">
+                <Input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="votre@email.com"
+                  className="h-14 pl-5 rounded-2xl border-2 border-gray-100 focus:border-orange-500 font-bold transition-all"
+                  required
+                />
+              </div>
             </div>
 
-            <div>
-              <div className="flex justify-between items-center mb-1">
-                <label className="block text-sm font-medium text-gray-700">
+            <div className="space-y-1.5">
+              <div className="flex justify-between items-center px-1">
+                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">
                   Mot de passe
                 </label>
                 <button
                   type="button"
                   onClick={openForgotPassword}
-                  className="text-xs text-orange-500 hover:text-orange-600 hover:underline"
+                  className="text-[10px] font-black text-orange-500 hover:text-orange-600 uppercase tracking-widest"
                 >
-                  Mot de passe oublié ?
+                  Oublié ?
                 </button>
               </div>
               <div className="relative">
@@ -184,83 +209,77 @@ export const EspaceLogin: React.FC = () => {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
+                  className="h-14 pl-5 pr-12 rounded-2xl border-2 border-gray-100 focus:border-orange-500 font-bold transition-all"
                   required
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500"
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-orange-500 transition-colors"
                 >
-                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                 </button>
               </div>
             </div>
 
-            {/* Se souvenir de moi */}
-            <div className="flex items-center">
+            <div className="flex items-center gap-3 px-1 pt-2">
               <button
                 type="button"
                 onClick={() => setRememberMe(!rememberMe)}
-                className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors mr-2 ${
+                className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all ${
                   rememberMe
-                    ? 'bg-orange-500 border-orange-500'
-                    : 'border-gray-300 hover:border-orange-400'
+                    ? 'bg-orange-500 border-orange-500 shadow-sm shadow-orange-500/30 rotate-0'
+                    : 'border-gray-200 hover:border-orange-400 rotate-12'
                 }`}
               >
-                {rememberMe && <Check size={14} className="text-white" />}
+                {rememberMe && <Check size={16} className="text-white" />}
               </button>
-              <label
+              <span
                 onClick={() => setRememberMe(!rememberMe)}
-                className="text-sm text-gray-600 cursor-pointer select-none"
+                className="text-xs font-bold text-gray-600 cursor-pointer select-none"
               >
                 Se souvenir de moi
-              </label>
+              </span>
             </div>
 
             <Button
               type="submit"
-              className="w-full bg-orange-500 hover:bg-orange-600"
+              className="w-full h-14 bg-orange-500 hover:bg-orange-600 text-white rounded-2xl font-bold shadow-premium active:scale-[0.98] transition-all text-lg mt-4"
               disabled={isLoading}
             >
               {isLoading ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Connexion...
-                </>
+                <Loader2 className="w-6 h-6 animate-spin" />
               ) : (
                 'Se connecter'
               )}
             </Button>
           </form>
 
-          {/* Separator */}
-          <div className="relative my-6">
+          <div className="relative my-8">
             <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-gray-200"></div>
+              <div className="w-full border-t border-gray-100"></div>
             </div>
-            <div className="relative flex justify-center text-xs">
-              <span className="px-2 bg-white text-gray-500">ou</span>
+            <div className="relative flex justify-center text-[10px] uppercase font-black tracking-[0.2em]">
+              <span className="px-4 bg-transparent text-gray-400/60">Ou continuer avec</span>
             </div>
           </div>
 
-          {/* Google login */}
           <Button
             variant="outline"
-            className="w-full mb-4"
+            className="w-full h-14 rounded-2xl border-2 border-gray-100 hover:bg-gray-50 hover:border-gray-200 transition-all font-bold text-gray-700 shadow-sm"
             onClick={handleGoogleLogin}
             disabled={isLoading}
           >
-            <img src="https://www.google.com/favicon.ico" alt="Google" className="w-4 h-4 mr-2" />
-            Continuer avec Google
+            <img src="https://www.google.com/favicon.ico" alt="Google" className="w-5 h-5 mr-3" />
+            Google
           </Button>
-        </div>
 
-        {/* Back to home */}
-        <div className="text-center mt-6">
-          <Link to="/" className="text-gray-500 hover:text-gray-700 text-sm inline-flex items-center gap-2">
-            <Home className="w-4 h-4" />
-            Retour à l'accueil
-          </Link>
+          <div className="mt-8 text-center">
+             <Link to="/welcome" className="inline-flex items-center gap-2 text-gray-400 hover:text-orange-500 font-bold text-[10px] uppercase tracking-widest transition-all active:scale-95 group">
+                <Home className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+                Retour au site
+             </Link>
+          </div>
         </div>
       </div>
 

@@ -91,12 +91,7 @@ export const BottomNavSwiper: React.FC<BottomNavSwiperProps> = ({ activeIndex, o
             <button
               key={item.id}
               onClick={() => {
-                const requiresAuth = ['mon-espace', 'contact', 'settings'].includes(item.id);
-                if (requiresAuth && !currentUser) {
-                  navigate('/espace?mode=login');
-                } else {
                   onNavigate(index);
-                }
               }}
               className="relative flex flex-col items-center gap-0.5 p-1.5 min-w-[56px] transition-colors"
             >
