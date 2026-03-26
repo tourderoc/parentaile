@@ -11,12 +11,61 @@ import {
   getDocs,
   onSnapshot,
 } from 'firebase/firestore';
-import { Bell, Users, ChevronRight, Sparkles, LayoutGrid, Loader2, Heart, Feather, Wind, Home, X, Star } from 'lucide-react';
+import { Bell, Users, ChevronRight, LayoutGrid, Loader2, Heart, X, Star } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { onGroupesParole, onPendingEvaluations, onUserProgression, dismissEvaluation } from '../../../lib/groupeParoleService';
-import type { GroupeParole, EvaluationPendante, UserProgression, BadgeLevel } from '../../../types/groupeParole';
+import type { GroupeParole, EvaluationPendante, UserProgression } from '../../../types/groupeParole';
 import { getNextBadge, BADGE_THRESHOLDS, THEME_COLORS, THEME_LABELS } from '../../../types/groupeParole';
 import { onUnreadParentNotifCount } from '../../../lib/parentNotificationService';
+
+const SquareCard = ({ icon: Icon, label, description, count, bgImage, onClick, colorClasses, isBadge }: any) => (
+  <motion.button
+    whileHover={{ scale: 1.02 }}
+    whileTap={{ scale: 0.98 }}
+    onClick={onClick}
+    className="relative aspect-square rounded-[2rem] overflow-hidden shadow-premium group"
+  >
+    {/* Background Image Layer */}
+    {bgImage && (
+      <img 
+        src={bgImage} 
+        alt={label}
+        className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+      />
+    )}
+    
+    {/* Color Overlay / Gradient */}
+    <div className={`absolute inset-0 ${colorClasses} opacity-60 mix-blend-overlay`} />
+    
+    {/* Dark Overlay (Less opaque for badges to see the icon better) */}
+    <div className={`absolute inset-0 bg-gradient-to-t ${isBadge ? 'from-black/60 to-transparent' : 'from-black/80 via-black/20 to-transparent'} pointer-events-none`} />
+
+    {/* Content */}
+    <div className="absolute inset-0 p-5 flex flex-col justify-between items-start z-10 text-left">
+      <div className="w-12 h-12 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center border border-white/30 shadow-glass overflow-hidden">
+        {Icon ? (
+           <Icon size={24} className="text-white drop-shadow-md" />
+        ) : isBadge ? (
+           <img src={bgImage} className="w-full h-full object-cover p-2 scale-150 rotate-6" />
+        ) : (
+           <Star size={24} className="text-white drop-shadow-md" />
+        )}
+      </div>
+      
+      <div>
+        <div className="flex items-center gap-2">
+            <h3 className="text-lg font-black text-white tracking-tight drop-shadow-md leading-tight">{label}</h3>
+            {count > 0 && (
+                <span className="min-w-[20px] h-5 bg-white text-orange-600 text-[10px] font-black rounded-full flex items-center justify-center px-1 shadow-sm">
+                    {count > 9 ? '9+' : count}
+                </span>
+            )}
+        </div>
+        <p className="text-[10px] text-white/80 font-bold uppercase tracking-widest mt-0.5 line-clamp-1">{description}</p>
+      </div>
+    </div>
+  </motion.button>
+);
 
 export const SlideMonEspace = () => {
   const navigate = useNavigate();
@@ -129,6 +178,7 @@ export const SlideMonEspace = () => {
     });
     return () => unsub();
   }, [currentUser]);
+  const [showBadgeModal, setShowBadgeModal] = useState(false);
 
   const handleCardClick = (path: string) => {
     if (!currentUser) {
@@ -147,245 +197,220 @@ export const SlideMonEspace = () => {
   }
 
   return (
-    <div className="h-full bg-[#FFFBF0] overflow-y-auto pb-32">
-      {/* Header */}
-      <div className="pt-10 pb-6 px-6 max-w-md mx-auto">
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="flex items-center gap-3 mb-2"
-        >
-          <div className="w-10 h-10 bg-gradient-to-br from-orange-400 to-orange-500 rounded-2xl flex items-center justify-center shadow-lg shadow-orange-500/20">
-            <LayoutGrid size={20} className="text-white" />
+    <div className="h-full bg-[#FFFBF0] overflow-y-auto pb-32 no-scrollbar">
+      {/* Hero Header sticky - Premium Dark Cartouche Version matching SlideAccueil */}
+      <div className="sticky top-0 z-40 px-6 pt-3 pb-2">
+        <div className="relative border border-white/20 shadow-premium overflow-hidden bg-gray-900 rounded-[2rem]">
+          {/* Background Image - Full color like the Accueil card */}
+          <div className="absolute inset-0 opacity-80">
+            <img 
+              src="/assets/backgrounds/slide_bg_messages.png" 
+              alt="Messages Wallpaper"
+              className="w-full h-full object-cover transform translate-y-[-10%] scale-110"
+            />
           </div>
-          <div>
-            <h1 className="text-2xl font-extrabold text-gray-800 tracking-tight">Mon Espace</h1>
-            <p className="text-xs text-gray-400 font-medium">Votre espace personnel</p>
-          </div>
-        </motion.div>
-      </div>
+          
+          {/* Dark Overlay gradient matching SlideAccueil card */}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-black/10 pointer-events-none" />
 
-      {/* Cards */}
-      <div className="px-6 max-w-md mx-auto space-y-4">
-        {/* Card: Notifications */}
-        <motion.button
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          onClick={() => handleCardClick('/espace/mes-messages')}
-          className="w-full glass rounded-3xl p-5 flex items-center gap-4 shadow-glass text-left active:scale-[0.98] transition-transform"
-        >
-          <div className="w-14 h-14 bg-gradient-to-br from-orange-400 to-pink-500 rounded-2xl flex items-center justify-center flex-shrink-0 shadow-lg shadow-orange-500/20">
-            <Bell size={24} className="text-white" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <h3 className="text-base font-extrabold text-gray-800 tracking-tight">Notifications</h3>
-            <p className="text-xs text-gray-400 font-medium mt-0.5">Messages et activite</p>
-          </div>
-          <div className="flex items-center gap-2 flex-shrink-0">
-            {unreadCount > 0 && (
-              <span className="min-w-[24px] h-[24px] bg-red-500 text-white text-[11px] font-bold rounded-full flex items-center justify-center px-1.5 shadow-sm animate-pulse">
-                {unreadCount > 9 ? '9+' : unreadCount}
-              </span>
-            )}
-            <ChevronRight size={18} className="text-gray-300" />
-          </div>
-        </motion.button>
-
-        {/* Card: Mes Groupes de Parole */}
-        <motion.button
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-          onClick={() => handleCardClick('/espace/mes-groupes')}
-          className="w-full glass rounded-3xl p-5 flex items-center gap-4 shadow-glass text-left active:scale-[0.98] transition-transform"
-        >
-          <div className="w-14 h-14 bg-gradient-to-br from-orange-400 to-orange-500 rounded-2xl flex items-center justify-center flex-shrink-0 shadow-lg shadow-orange-500/20">
-            <Users size={24} className="text-white" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <h3 className="text-base font-extrabold text-gray-800 tracking-tight">Mes Groupes de Parole</h3>
-            <p className="text-xs text-gray-400 font-medium mt-0.5">
-              {myGroupsCount > 0
-                ? `${myGroupsCount} groupe${myGroupsCount > 1 ? 's' : ''} actif${myGroupsCount > 1 ? 's' : ''}`
-                : 'Aucun groupe pour le moment'}
-            </p>
-          </div>
-          <div className="flex items-center gap-2 flex-shrink-0">
-            {myGroupsCount > 0 && (
-              <span className="min-w-[24px] h-[24px] bg-orange-100 text-orange-600 text-[11px] font-bold rounded-full flex items-center justify-center px-1.5">
-                {myGroupsCount}
-              </span>
-            )}
-            <ChevronRight size={18} className="text-gray-300" />
-          </div>
-        </motion.button>
-
-        {/* Card: Evaluations en attente */}
-        {pendingEvals.length > 0 ? (
-          <motion.button
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-            onClick={() => setShowEvalsModal(true)}
-            className="w-full glass rounded-3xl p-5 flex items-center gap-4 shadow-glass text-left active:scale-[0.98] transition-transform border-2 border-orange-200/50"
-          >
-            <div className="w-14 h-14 bg-gradient-to-br from-pink-400 to-orange-400 rounded-2xl flex items-center justify-center flex-shrink-0 shadow-lg shadow-pink-500/20">
-              <Heart size={24} className="text-white fill-white" />
+          {/* Compact Flex Content */}
+          <div className="relative px-5 py-5 flex items-center gap-4">
+            <div className="w-14 h-14 bg-white/10 backdrop-blur-md rounded-2xl flex flex-shrink-0 items-center justify-center shadow-glass border border-white/20">
+              <LayoutGrid size={28} className="text-white drop-shadow-md" />
             </div>
-            <div className="flex-1 min-w-0">
-              <h3 className="text-base font-extrabold text-gray-800 tracking-tight">Donner mon avis</h3>
-              <p className="text-xs text-gray-400 font-medium mt-0.5">
-                {pendingEvals.length === 1
-                  ? `"${pendingEvals[0].groupeTitre}"`
-                  : `${pendingEvals.length} groupes en attente`}
+            <div className="flex-1">
+              <h1 className="text-[20px] font-black text-white tracking-tight drop-shadow-md leading-tight">
+                Mon Espace
+              </h1>
+              <p className="text-[10px] text-white/70 font-bold uppercase tracking-widest mt-0.5 drop-shadow-sm line-clamp-1">
+                Votre espace personnel
               </p>
             </div>
-            <div className="flex items-center gap-2 flex-shrink-0">
-              <span className="min-w-[24px] h-[24px] bg-orange-100 text-orange-600 text-[11px] font-bold rounded-full flex items-center justify-center px-1.5 animate-pulse">
-                {pendingEvals.length}
-              </span>
-              <ChevronRight size={18} className="text-gray-300" />
-            </div>
-          </motion.button>
-        ) : (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-            className="w-full glass rounded-3xl p-5 flex items-center gap-4 opacity-50 cursor-default"
-          >
-            <div className="w-14 h-14 bg-gray-200 rounded-2xl flex items-center justify-center flex-shrink-0">
-              <Sparkles size={24} className="text-gray-400" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <h3 className="text-base font-extrabold text-gray-400 tracking-tight">Bientot disponible</h3>
-              <p className="text-xs text-gray-300 font-medium mt-0.5">De nouvelles fonctionnalites arrivent</p>
-            </div>
-          </motion.div>
-        )}
+          </div>
+        </div>
       </div>
 
-      {/* Ma progression */}
-      {currentUser && progression && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.4 }}
-          className="px-6 max-w-md mx-auto mt-6"
-        >
-          <div className="glass rounded-3xl border border-white/60 shadow-glass overflow-hidden">
-            {/* Header */}
-            <div className="px-5 pt-5 pb-3">
-              <h3 className="text-sm font-extrabold text-gray-800 tracking-tight">Ma progression</h3>
-              <p className="text-[11px] text-gray-400 font-medium mt-0.5">Votre engagement dans la communaute</p>
-            </div>
+      {/* Main Grid Content */}
+      <div className="px-6 max-w-md mx-auto pt-4">
+        <div className="grid grid-cols-2 gap-4">
+          {/* Card: Notifications */}
+          <SquareCard
+            icon={Bell}
+            label="Messages"
+            description="Activités"
+            count={unreadCount}
+            bgImage="/assets/backgrounds/slide_bg_messages.png"
+            colorClasses="bg-gradient-to-br from-white/90 via-white/50 to-blue-200/30"
+            onClick={() => handleCardClick('/espace/mes-messages')}
+          />
 
-            {/* Badge + Points */}
-            <div className="px-5 pb-4 flex items-center gap-4">
-              {/* Badge icon */}
-              <div
-                className="w-16 h-16 rounded-full flex items-center justify-center shadow-lg"
-                style={{
-                  background: progression.badge === 'nid'
-                    ? 'linear-gradient(135deg, #F59E0B, #D97706)'
-                    : progression.badge === 'envol'
-                    ? 'linear-gradient(135deg, #8B5CF6, #7C3AED)'
-                    : progression.badge === 'plume'
-                    ? 'linear-gradient(135deg, #F9A826, #FB923C)'
-                    : 'linear-gradient(135deg, #E5E7EB, #D1D5DB)',
-                }}
-              >
-                {progression.badge === 'nid' ? (
-                  <Home size={28} className="text-white" />
-                ) : progression.badge === 'envol' ? (
-                  <Wind size={28} className="text-white" />
-                ) : progression.badge === 'plume' ? (
-                  <Feather size={28} className="text-white" />
-                ) : (
-                  <Feather size={28} className="text-gray-400" />
-                )}
-              </div>
+          {/* Card: Mes Groupes */}
+          <SquareCard
+            icon={Users}
+            label="Groupes"
+            description="Mes cercles"
+            count={myGroupsCount}
+            bgImage="/assets/backgrounds/slide_bg_forum.png"
+            colorClasses="bg-gradient-to-br from-orange-500 to-rose-600"
+            onClick={() => handleCardClick('/espace/mes-groupes')}
+          />
 
-              <div className="flex-1">
-                <p className="text-lg font-extrabold text-gray-800">
-                  {progression.points} <span className="text-sm font-bold text-gray-400">points</span>
-                </p>
-                {progression.badge !== 'none' ? (
-                  <p className="text-sm font-bold" style={{
-                    color: progression.badge === 'nid' ? '#D97706'
-                      : progression.badge === 'envol' ? '#7C3AED'
-                      : '#F9A826',
-                  }}>
-                    Badge {BADGE_THRESHOLDS.find((b) => b.level === progression.badge)?.label}
-                  </p>
-                ) : (
-                  <p className="text-xs text-gray-400 font-medium">Pas encore de badge</p>
-                )}
+          {/* Card: Badge Interactif */}
+          {currentUser && progression && (
+             <SquareCard
+                isBadge
+                label={`Badge ${BADGE_THRESHOLDS.find(b => b.level === progression.badge)?.label || 'Nid'}`}
+                description={`${progression.points} points • Détails`}
+                bgImage={
+                  progression.badge === 'nid' ? '/assets/badges/badge_nid.png' :
+                  progression.badge === 'envol' ? '/assets/badges/badge_envol.png' :
+                  '/assets/badges/badge_plume.png'
+                }
+                colorClasses={
+                  progression.badge === 'nid' ? 'bg-orange-400' :
+                  progression.badge === 'envol' ? 'bg-indigo-500' :
+                  'bg-yellow-400'
+                }
+                onClick={() => setShowBadgeModal(true)}
+             />
+          )}
 
-                {/* Next badge progress */}
-                {(() => {
-                  const next = getNextBadge(progression.points);
-                  if (!next) return <p className="text-[11px] text-amber-500 font-bold mt-1">Niveau maximum atteint !</p>;
-                  const threshold = next.label === 'Plume' ? 50 : next.label === 'Envol' ? 150 : 300;
-                  const prevThreshold = next.label === 'Plume' ? 0 : next.label === 'Envol' ? 50 : 150;
-                  const progressPct = ((progression.points - prevThreshold) / (threshold - prevThreshold)) * 100;
-                  return (
-                    <div className="mt-2">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-[10px] text-gray-400 font-medium">
-                          Encore {next.pointsNeeded} pts pour {next.label}
-                        </span>
-                      </div>
-                      <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                        <motion.div
-                          className="h-full rounded-full"
-                          style={{
-                            background: next.label === 'Envol' ? '#8B5CF6'
-                              : next.label === 'Nid' ? '#F59E0B'
-                              : '#F9A826',
-                          }}
-                          initial={{ width: 0 }}
-                          animate={{ width: `${Math.min(100, progressPct)}%` }}
-                          transition={{ duration: 0.8, ease: 'easeOut' }}
-                        />
-                      </div>
-                    </div>
-                  );
-                })()}
-              </div>
-            </div>
+          {/* Card: Donner mon avis OR (Empty) */}
+          {pendingEvals.length > 0 && (
+            <SquareCard
+              icon={Heart}
+              label="Avis"
+              description="A donner"
+              count={pendingEvals.length}
+              bgImage="/assets/backgrounds/profile_bg.png"
+              colorClasses="bg-gradient-to-br from-pink-500 to-rose-600"
+              onClick={() => setShowEvalsModal(true)}
+            />
+          )}
+        </div>
+      </div>
 
-            {/* Historique (dernières 5 entrées) */}
-            {progression.history.length > 0 && (
-              <div className="border-t border-gray-100/60 px-5 py-3">
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Historique recent</p>
-                <div className="space-y-1.5">
-                  {progression.history
-                    .slice()
-                    .sort((a, b) => b.date.getTime() - a.date.getTime())
-                    .slice(0, 5)
-                    .map((entry, i) => (
-                      <div key={i} className="flex items-center justify-between">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                            entry.type === 'creation' ? 'bg-orange-400' : 'bg-blue-400'
-                          }`} />
-                          <p className="text-[11px] text-gray-600 font-medium truncate">
-                            {entry.type === 'creation' ? 'Cree' : 'Participe'} — {entry.groupeTitre}
-                          </p>
-                        </div>
-                        <span className="text-[10px] font-bold text-emerald-500 shrink-0 ml-2">
-                          +{entry.points}
-                        </span>
-                      </div>
-                    ))}
+      {/* Badge Detail Modal */}
+      <AnimatePresence>
+        {showBadgeModal && currentUser && progression && (
+          <div className="fixed inset-0 z-[10000] flex items-center justify-center p-6">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowBadgeModal(false)}
+              className="absolute inset-0 bg-black/60 backdrop-blur-md" 
+            />
+            
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              className="relative w-full max-w-sm bg-white rounded-[32px] overflow-hidden shadow-2xl overflow-y-auto max-h-[90vh] no-scrollbar"
+            >
+              {/* Header with Background */}
+              <div className={`h-40 relative flex flex-col items-center justify-center flex-shrink-0 ${
+                progression.badge === 'nid' ? 'bg-gradient-to-br from-amber-400 to-orange-600' :
+                progression.badge === 'envol' ? 'bg-gradient-to-br from-purple-500 to-indigo-700' :
+                'bg-gradient-to-br from-yellow-300 to-orange-500'
+              }`}>
+                <div className="absolute inset-0 opacity-20 mix-blend-overlay">
+                    <img src="/assets/backgrounds/profile_bg.png" className="w-full h-full object-cover" />
                 </div>
+                <div className="relative z-10 w-24 h-24 bg-white/20 backdrop-blur-xl rounded-[2.5rem] flex items-center justify-center border border-white/30 shadow-glass transform rotate-3 overflow-hidden">
+                   <img 
+                      src={
+                        progression.badge === 'nid' ? '/assets/badges/badge_nid.png' :
+                        progression.badge === 'envol' ? '/assets/badges/badge_envol.png' :
+                        '/assets/badges/badge_plume.png'
+                      } 
+                      className="w-full h-full object-cover"
+                   />
+                </div>
+                <button 
+                  onClick={() => setShowBadgeModal(false)}
+                  className="absolute top-4 right-4 w-10 h-10 bg-black/20 backdrop-blur-md rounded-full flex items-center justify-center text-white border border-white/20"
+                >
+                  <X size={20} />
+                </button>
               </div>
-            )}
+
+              <div className="p-8 text-center">
+                <h3 className="text-2xl font-black text-gray-800 tracking-tight">
+                  Badge {BADGE_THRESHOLDS.find(b => b.level === progression.badge)?.label}
+                </h3>
+                <p className="text-gray-500 font-bold mt-2 px-4 leading-relaxed">
+                  {progression.badge === 'nid' ? "Vous avez posé les bases de votre engagement !" :
+                   progression.badge === 'envol' ? "Votre implication s'envole, merci pour votre aide !" :
+                   "Un membre pilier de la communauté Parent'aile."}
+                </p>
+
+                <div className="mt-8 bg-gray-50 rounded-3xl p-6">
+                   <div className="flex items-baseline justify-center gap-1">
+                      <span className="text-4xl font-black text-orange-500">{progression.points}</span>
+                      <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">points cumulés</span>
+                   </div>
+                   
+                   {/* Progress to next */}
+                   {(() => {
+                      const next = getNextBadge(progression.points);
+                      if (!next) return <p className="text-sm font-bold text-amber-600 mt-4">Félicitations, vous êtes au maximum !</p>;
+                      const threshold = next.label === 'Plume' ? 50 : next.label === 'Envol' ? 150 : 300;
+                      const prevThreshold = next.label === 'Plume' ? 0 : next.label === 'Envol' ? 50 : 150;
+                      const progressPct = ((progression.points - prevThreshold) / (threshold - prevThreshold)) * 100;
+                      return (
+                        <div className="mt-6">
+                          <div className="flex justify-between items-center mb-2">
+                             <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Objectif : {next.label}</span>
+                             <span className="text-[10px] font-black text-orange-500">+{next.pointsNeeded} pts</span>
+                          </div>
+                          <div className="w-full h-3 bg-gray-200 rounded-full overflow-hidden">
+                             <motion.div 
+                               initial={{ width: 0 }}
+                               animate={{ width: `${progressPct}%` }}
+                               className={`h-full rounded-full ${
+                                  next.label === 'Envol' ? 'bg-indigo-500' : 'bg-orange-500'
+                               }`} 
+                             />
+                          </div>
+                        </div>
+                      );
+                   })()}
+                </div>
+
+                {/* Historique INTEGRATED HERE */}
+                {progression.history.length > 0 && (
+                  <div className="mt-8 text-left">
+                    <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em] mb-4">Activités récentes</h4>
+                    <div className="space-y-3">
+                      {progression.history
+                        .slice()
+                        .sort((a, b) => b.date.getTime() - a.date.getTime())
+                        .slice(0, 5)
+                        .map((entry, i) => (
+                          <div key={i} className="flex items-center justify-between border-b border-gray-100 pb-3">
+                             <div className="flex items-center gap-3">
+                                <div className={`w-1.5 h-1.5 rounded-full ${entry.type === 'creation' ? 'bg-orange-400' : 'bg-blue-400'}`} />
+                                <span className="text-xs font-bold text-gray-700 truncate max-w-[140px]">{entry.groupeTitre}</span>
+                             </div>
+                             <span className="text-[10px] font-black text-emerald-600">+{entry.points} pts</span>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                )}
+
+                <button 
+                   onClick={() => setShowBadgeModal(false)}
+                   className="w-full mt-8 h-14 bg-gray-900 text-white rounded-2xl font-bold active:scale-95 transition-transform"
+                >
+                   Continuer
+                </button>
+              </div>
+            </motion.div>
           </div>
-        </motion.div>
-      )}
+        )}
+      </AnimatePresence>
 
       {/* Pending Evaluations Bottom Sheet */}
       {showEvalsModal &&

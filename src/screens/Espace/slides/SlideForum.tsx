@@ -410,34 +410,31 @@ export const SlideForum = () => {
       {/* Scrollable Container Over Glass */}
       <div className="absolute inset-0 z-10 overflow-y-auto pb-32">
 
-      {/* Hero Header sticky - Floating Cartouche Version */}
+      {/* Hero Header sticky - Premium Dark Cartouche Version matching SlideAccueil */}
       <div className="sticky top-0 z-40 px-6 pt-3 pb-2">
-        <div className="relative border border-white/60 shadow-premium overflow-hidden bg-white/30 backdrop-blur-xl rounded-[2rem]">
-          {/* Abstract tinted background overlay */}
-          <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/10 via-transparent to-orange-500/10 mix-blend-overlay" />
-          
-          {/* Microscope Image Background */}
-          <div className="absolute inset-[-100%] opacity-[0.25] mix-blend-luminosity">
+        <div className="relative border border-white/20 shadow-premium overflow-hidden bg-gray-900 rounded-[2rem]">
+          {/* Background Image - Full color like the Accueil card */}
+          <div className="absolute inset-0 opacity-80">
             <img 
               src="/assets/backgrounds/slide_bg_forum.png" 
               alt="Microphone Wallpaper"
-              className="w-full h-full object-cover transform -scale-x-100 scale-150 translate-x-1/4 -translate-y-[15%]"
+              className="w-full h-full object-cover transform -scale-x-100 scale-125 translate-x-1/4 -translate-y-4"
             />
           </div>
           
-          {/* Fade gradient for readability */}
-          <div className="absolute inset-0 bg-gradient-to-t from-white/90 via-white/40 to-white/10 pointer-events-none" />
+          {/* Dark Overlay gradient matching SlideAccueil card */}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-black/10 pointer-events-none" />
 
           {/* Compact Flex Content */}
-          <div className="relative px-5 py-4 flex items-center gap-4">
-            <div className="w-12 h-12 bg-white/50 backdrop-blur-md rounded-2xl flex flex-shrink-0 items-center justify-center shadow-sm border border-white/80">
-              <Mic size={24} className="text-purple-600 drop-shadow-sm" />
+          <div className="relative px-5 py-5 flex items-center gap-4">
+            <div className="w-14 h-14 bg-white/10 backdrop-blur-md rounded-2xl flex flex-shrink-0 items-center justify-center shadow-glass border border-white/20">
+              <Mic size={28} className="text-white drop-shadow-md" />
             </div>
             <div className="flex-1">
-              <h1 className="text-[19px] font-extrabold text-gray-800 tracking-tight drop-shadow-sm leading-tight">
+              <h1 className="text-[20px] font-black text-white tracking-tight drop-shadow-md leading-tight">
                 Groupes de parole
               </h1>
-              <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mt-0.5 opacity-90 drop-shadow-sm line-clamp-1">
+              <p className="text-[10px] text-white/70 font-bold uppercase tracking-widest mt-0.5 drop-shadow-sm line-clamp-1">
                 Cercles d'échange
               </p>
             </div>
