@@ -1151,9 +1151,10 @@ const RoomContent: React.FC<{
     effectiveAnimateurUid,
     isEffectiveAnimateur,
     onSuspend: async (reason) => {
+      console.log('[SUSPENSION] Suspending session:', reason);
       await suspendSession(groupeId, reason);
       if (reason === 'below_minimum') {
-        setWarnToast('Un participant a quitté — moins de 3 personnes, session en pause');
+        setWarnToast('Moins de 3 participants — en attente de renforts...');
         setTimeout(() => setWarnToast(null), 6000);
       } else if (reason === 'animateur_left') {
         setWarnToast('L\'animateur a quitté la salle');
@@ -1161,18 +1162,16 @@ const RoomContent: React.FC<{
       }
     },
     onResume: async () => {
+      console.log('[SUSPENSION] Resuming session');
       await resumeSession(groupeId);
       setPhaseToast('La session reprend !');
       setTimeout(() => setPhaseToast(null), 3000);
     },
     onAutoEnd: async () => {
-      // Use firestoreSession directly to avoid circular reference with destructured suspensionReason
-      if (firestoreSession?.suspensionReason === 'below_minimum') {
-        await cancelGroup(groupeId, 'Nombre de participants insuffisant en cours de session');
-        setStep('cancelled');
-      } else {
-        await endSession(groupeId);
-      }
+      console.log('[SUSPENSION] Auto-end — cancelling group');
+      // Countdown terminé sans résolution → annuler le groupe
+      await cancelGroup(groupeId, 'Nombre de participants insuffisant après délai d\'attente');
+      setStep('cancelled');
     }
   });
 
