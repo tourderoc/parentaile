@@ -1092,7 +1092,7 @@ const RoomContent: React.FC<{
     }
   }, [groupeId]);
 
-  const { waitingForAnimateur, waitCountdownSec, canPropose: waitCanPropose, timedOut: animateurTimedOut, forceReplacement, belowMinimum: waitBelowMinimum } = useAnimateurWait({
+  const { waitingForAnimateur, waitCountdownSec, canPropose: waitCanPropose, timedOut: animateurTimedOut, forceReplacement } = useAnimateurWait({
     groupeId,
     liveKitParticipants: participants,
     firestoreSession: firestoreSession || undefined,
@@ -1100,14 +1100,24 @@ const RoomContent: React.FC<{
     sessionStarted: dateVocalPassed || (firestoreSession?.sessionActive ?? false),
     isTestGroup,
     onDisconnectCountChanged: handleAnimateurDisconnect,
-    onBelowMinimum: async () => {
-      await cancelGroup(groupeId, 'Nombre de participants insuffisant dans la salle vocale (minimum 3)');
-      setStep('cancelled');
+    onTimedOut: async (totalConnected) => {
+      // After 3 min: if < 3 connected → cancel, otherwise let them propose replacement
+      if (!isTestGroup && totalConnected < 3) {
+        await cancelGroup(groupeId, 'Nombre de participants insuffisant dans la salle vocale (minimum 3)');
+        setStep('cancelled');
+      }
     },
   });
 
   const handleProposeAnimateur = async () => {
     if (!auth.currentUser) return;
+    // Double-check connected count before allowing replacement
+    const totalConnected = 1 + participants.length;
+    if (!isTestGroup && totalConnected < 3) {
+      await cancelGroup(groupeId, 'Nombre de participants insuffisant dans la salle vocale (minimum 3)');
+      setStep('cancelled');
+      return;
+    }
     await proposeAsAnimateur(groupeId, auth.currentUser.uid, sessionPrenom || 'Parent');
   };
 

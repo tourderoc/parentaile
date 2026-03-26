@@ -9,15 +9,13 @@ interface UseAnimateurWaitProps {
   createurUid: string;
   sessionStarted: boolean;
   isTestGroup?: boolean;
-  onTimedOut?: () => void;
+  onTimedOut?: (totalConnected: number) => void;
   onDisconnectCountChanged?: (count: number) => void;
-  onBelowMinimum?: () => void; // Called when < 3 participants detected during animateur wait
 }
 
 const GRACE_PERIOD_MS = 15_000;   // 15s network grace before counting a disconnect
 const COUNTDOWN_SEC = 180;        // 3 min wait
 const MAX_DISCONNECTS = 2;        // After 2 disconnects, force replacement
-const MIN_PARTICIPANTS = 3;
 
 export function useAnimateurWait({
   liveKitParticipants,
@@ -27,23 +25,22 @@ export function useAnimateurWait({
   isTestGroup,
   onTimedOut,
   onDisconnectCountChanged,
-  onBelowMinimum,
 }: UseAnimateurWaitProps) {
   const [waitingForAnimateur, setWaitingForAnimateur] = useState(false);
   const [waitCountdownSec, setWaitCountdownSec] = useState(COUNTDOWN_SEC);
   const [canPropose, setCanPropose] = useState(false);
   const [timedOut, setTimedOut] = useState(false);
   const [forceReplacement, setForceReplacement] = useState(false);
-  const [belowMinimum, setBelowMinimum] = useState(false);
 
   const timerRef = useRef<NodeJS.Timeout>();
   const graceTimerRef = useRef<NodeJS.Timeout>();
   const onTimedOutRef = useRef(onTimedOut);
   const onDisconnectRef = useRef(onDisconnectCountChanged);
-  const onBelowMinimumRef = useRef(onBelowMinimum);
+  // Keep a live ref to participant count so the timer callback reads the latest value
+  const liveParticipantsRef = useRef(liveKitParticipants);
+  liveParticipantsRef.current = liveKitParticipants;
   onTimedOutRef.current = onTimedOut;
   onDisconnectRef.current = onDisconnectCountChanged;
-  onBelowMinimumRef.current = onBelowMinimum;
 
   // Track disconnect count from Firestore
   const disconnectCount = firestoreSession?.animateurDisconnectCount || 0;
@@ -60,7 +57,6 @@ export function useAnimateurWait({
     const animateurPresent = liveKitParticipants.some(p => p.identity === effectiveUid);
 
     if (animateurPresent) {
-      // Animateur is here — cancel grace period, stop waiting
       clearTimeout(graceTimerRef.current);
       setWaitingForAnimateur(false);
       setWaitCountdownSec(COUNTDOWN_SEC);
@@ -73,9 +69,7 @@ export function useAnimateurWait({
     if (!waitingForAnimateur && !timedOut && !forceReplacement) {
       clearTimeout(graceTimerRef.current);
       graceTimerRef.current = setTimeout(() => {
-        // Grace period elapsed — animateur is truly gone
         setWaitingForAnimateur(true);
-        // Notify parent to increment disconnect count in Firestore
         onDisconnectRef.current?.(disconnectCount + 1);
       }, GRACE_PERIOD_MS);
     }
@@ -103,29 +97,13 @@ export function useAnimateurWait({
     }
   }, [disconnectCount, waitingForAnimateur]);
 
-  // Effect 3: Monitor participant count — if < 3 connected, cancel
+  // Effect 3: Run the countdown timer when waiting
   useEffect(() => {
-    if (!waitingForAnimateur || isTestGroup) return;
-    // total = local user (1) + remote liveKit participants
-    const totalConnected = 1 + liveKitParticipants.length;
-    if (totalConnected < MIN_PARTICIPANTS) {
-      setBelowMinimum(true);
-      clearInterval(timerRef.current);
-      setCanPropose(false);
-      onBelowMinimumRef.current?.();
-    } else {
-      setBelowMinimum(false);
-    }
-  }, [liveKitParticipants.length, waitingForAnimateur, isTestGroup]);
-
-  // Effect 4: Run the countdown timer when waiting (only if not force replacement and not below minimum)
-  useEffect(() => {
-    if (!waitingForAnimateur || forceReplacement || belowMinimum) {
+    if (!waitingForAnimateur || forceReplacement) {
       clearInterval(timerRef.current);
       return;
     }
 
-    // Reset countdown at start
     setWaitCountdownSec(COUNTDOWN_SEC);
     setCanPropose(false);
 
@@ -135,7 +113,9 @@ export function useAnimateurWait({
           clearInterval(timerRef.current);
           setTimedOut(true);
           setCanPropose(true);
-          onTimedOutRef.current?.();
+          // Pass current connected count so parent can decide: replace or cancel
+          const totalConnected = 1 + liveParticipantsRef.current.length;
+          onTimedOutRef.current?.(totalConnected);
           return 0;
         }
         return prev - 1;
@@ -143,7 +123,7 @@ export function useAnimateurWait({
     }, 1000);
 
     return () => clearInterval(timerRef.current);
-  }, [waitingForAnimateur, forceReplacement, belowMinimum]);
+  }, [waitingForAnimateur, forceReplacement]);
 
-  return { waitingForAnimateur, waitCountdownSec, canPropose, timedOut, forceReplacement, disconnectCount, belowMinimum };
+  return { waitingForAnimateur, waitCountdownSec, canPropose, timedOut, forceReplacement, disconnectCount };
 }
