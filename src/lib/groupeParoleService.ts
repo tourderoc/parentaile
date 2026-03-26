@@ -800,7 +800,13 @@ export async function suspendSession(
  * Reprend une session suspendue.
  */
 export async function resumeSession(groupeId: string): Promise<void> {
-  await updateDoc(doc(db, 'groupes', groupeId), {
+  const ref = doc(db, 'groupes', groupeId);
+  const snap = await getDoc(ref);
+  if (snap.exists()) {
+    const status = snap.data().status;
+    if (status === 'cancelled' || status === 'completed') return;
+  }
+  await updateDoc(ref, {
     'sessionState.suspended': false,
     'sessionState.suspendedAt': deleteField(),
     'sessionState.suspensionReason': deleteField(),
@@ -816,6 +822,12 @@ export async function initSessionStateV2(
   animateurPseudo: string
 ): Promise<void> {
   const ref = doc(db, 'groupes', groupeId);
+  // Don't reinit if group is cancelled or completed
+  const snap = await getDoc(ref);
+  if (snap.exists()) {
+    const status = snap.data().status;
+    if (status === 'cancelled' || status === 'completed') return;
+  }
   await updateDoc(ref, {
     status: 'in_progress',
     sessionState: {
@@ -849,6 +861,7 @@ export async function proposeAsAnimateur(
       if (!docSnap.exists()) throw new Error('Groupe inexistant');
 
       const data = docSnap.data();
+      if (data.status === 'cancelled' || data.status === 'completed') throw new Error('Groupe terminé');
       const state = data.sessionState;
 
       if (state?.replacementUsed) throw new Error('Remplacement déjà utilisé');

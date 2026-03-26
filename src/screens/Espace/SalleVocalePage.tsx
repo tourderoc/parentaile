@@ -3164,6 +3164,13 @@ export const SalleVocalePage = () => {
   const [step, setStep] = useState<FlowStep | 'cancelled'>('loading');
   const [connectingToRoom, setConnectingToRoom] = useState(false);
 
+  // Auto-redirect to cancellation screen when group is cancelled (real-time from Firestore)
+  useEffect(() => {
+    if (groupeStatus === 'cancelled' && step !== 'cancelled' && step !== 'loading') {
+      setStep('cancelled');
+    }
+  }, [groupeStatus, step]);
+
   // Session data
   const [sessionPrenom, setSessionPrenom] = useState('');
   const [animateurNotes, setAnimateurNotes] = useState<AnimateurNotes | null>(null);
@@ -3417,11 +3424,22 @@ export const SalleVocalePage = () => {
         }).catch(() => {});
       }
     }
-    setStep('end');
-  }, [groupeId, groupeTitre]);
+    // If group was cancelled, go to cancellation screen instead of end/evaluation
+    if (groupeStatus === 'cancelled') {
+      setStep('cancelled');
+    } else {
+      setStep('end');
+    }
+  }, [groupeId, groupeTitre, groupeStatus]);
 
   const handleLeave = useCallback(() => {
     voluntaryLeaveRef.current = true;
+
+    // If group was cancelled, go directly to cancellation screen
+    if (groupeStatus === 'cancelled') {
+      setStep('cancelled');
+      return;
+    }
 
     // Determine if session is complete (elapsed >= total or remaining < 2 min)
     const elapsed = sessionElapsedRef.current;
@@ -3439,7 +3457,6 @@ export const SalleVocalePage = () => {
       pointsAwardedRef.current = true;
       const user = auth.currentUser;
       if (user) {
-        // +10 pts if >50% of session, +5 pts otherwise
         const points = participationRatio > 0.5 ? 10 : 5;
         addPoints(user.uid, points, {
           groupeId,
@@ -3450,7 +3467,7 @@ export const SalleVocalePage = () => {
       }
     }
     setStep('end');
-  }, [groupeId, groupeTitre]);
+  }, [groupeId, groupeTitre, groupeStatus]);
 
   const handleDisconnected = useCallback(() => {
     if (voluntaryLeaveRef.current) {
