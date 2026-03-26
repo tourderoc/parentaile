@@ -29,6 +29,7 @@ import {
   Users
 } from 'lucide-react';
 import { MessageComposer } from '../MessageComposer';
+import { AuthWall } from '../../../components/ui/AuthWall';
 
 interface Child {
   tokenId: string;
@@ -178,18 +179,11 @@ export const SlideContact = () => {
   // ========== NOT AUTHENTICATED: Show auth prompt ==========
   if (!auth.currentUser) {
     return (
-      <div className="h-full bg-[#FFFBF0] flex flex-col items-center justify-center p-6 text-center">
-        <div className="w-full max-w-sm">
-          <div className="w-20 h-20 bg-white rounded-3xl flex items-center justify-center text-orange-500 mx-auto mb-6 shadow-sm border border-orange-100">
-            <Users size={40} />
-          </div>
-          <h2 className="text-2xl font-extrabold text-gray-800 mb-2">Espace Privé</h2>
-          <p className="text-gray-500 mb-8 font-medium">Une session est requise pour ajouter et gérer vos enfants.</p>
-          <button onClick={() => navigate('/espace?mode=login')} className="w-full h-14 bg-orange-500 text-white rounded-2xl font-bold shadow-sm active:scale-95 transition-transform">
-            Se connecter
-          </button>
-        </div>
-      </div>
+      <AuthWall 
+        title="Espace Privé" 
+        description="Une session est requise pour ajouter et gérer vos enfants et échanger avec votre cabinet."
+        icon={Users}
+      />
     );
   }
 

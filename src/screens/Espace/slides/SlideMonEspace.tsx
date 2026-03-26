@@ -13,7 +13,8 @@ import {
 } from 'firebase/firestore';
 import { Bell, Users, ChevronRight, LayoutGrid, Loader2, Heart, X, Star } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { onGroupesParole, onPendingEvaluations, onUserProgression, dismissEvaluation } from '../../../lib/groupeParoleService';
+import { onUserProgression, onPendingEvaluations, dismissEvaluation, onGroupesParole } from '../../../lib/groupeParoleService';
+import { AuthWall } from '../../../components/ui/AuthWall';
 import type { GroupeParole, EvaluationPendante, UserProgression } from '../../../types/groupeParole';
 import { getNextBadge, BADGE_THRESHOLDS, THEME_COLORS, THEME_LABELS } from '../../../types/groupeParole';
 import { onUnreadParentNotifCount } from '../../../lib/parentNotificationService';
@@ -161,7 +162,7 @@ export const SlideMonEspace = () => {
       setProgression(null);
       return;
     }
-    const unsub = onUserProgression(currentUser.uid, (prog) => {
+    const unsub = onUserProgression(currentUser.uid, (prog: any) => {
       setProgression(prog);
     });
     return () => unsub();
@@ -522,50 +523,17 @@ export const SlideMonEspace = () => {
         )}
 
       {/* Auth Modal */}
-      {showAuthModal &&
-        createPortal(
+        {showAuthModal && createPortal(
           <div
             className="fixed inset-0 z-[9999] flex items-center justify-center p-6 bg-black/40 backdrop-blur-sm"
             onClick={() => setShowAuthModal(false)}
           >
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0, y: 20 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              onClick={(e: React.MouseEvent) => e.stopPropagation()}
-              className="bg-white rounded-[32px] p-6 w-full max-w-sm shadow-2xl relative overflow-hidden"
-            >
-              <div className="absolute top-0 left-0 w-full h-32 bg-gradient-to-br from-orange-400 to-orange-500 opacity-10" />
-
-              <div className="relative text-center space-y-4">
-                <div className="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mx-auto text-orange-500">
-                  <LayoutGrid size={32} />
-                </div>
-
-                <div>
-                  <h3 className="text-xl font-extrabold text-gray-800 tracking-tight">
-                    Accédez à votre espace
-                  </h3>
-                  <p className="text-sm text-gray-500 mt-2 font-medium leading-relaxed">
-                    Connectez-vous ou inscrivez-vous pour accéder à vos messages et groupes de parole.
-                  </p>
-                </div>
-
-                <div className="pt-4 space-y-3">
-                  <button
-                    onClick={() => navigate('/espace?mode=register')}
-                    className="w-full py-3.5 bg-orange-500 text-white rounded-2xl font-bold text-sm shadow-lg shadow-orange-500/30 hover:bg-orange-600 transition-colors"
-                  >
-                    S'inscrire
-                  </button>
-                  <button
-                    onClick={() => navigate('/espace?mode=login')}
-                    className="w-full py-3.5 bg-orange-50 text-orange-600 rounded-2xl font-bold text-sm hover:bg-orange-100 transition-colors"
-                  >
-                    Se connecter
-                  </button>
-                </div>
-              </div>
-            </motion.div>
+            <AuthWall 
+              fullHeight={false}
+              title="Accédez à votre espace"
+              description="Connectez-vous ou inscrivez-vous pour accéder à vos messages, groupes de parole et suivre votre progression."
+              icon={LayoutGrid}
+            />
           </div>,
           document.body
         )}

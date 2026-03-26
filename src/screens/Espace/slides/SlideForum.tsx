@@ -10,6 +10,7 @@ import { onGroupesParole, onGroupeRating, onPresenceCount } from '../../../lib/g
 import type { GroupeParole, ThemeGroupe } from '../../../types/groupeParole';
 import { THEME_LABELS, THEME_COLORS, THEME_SHORT_LABELS } from '../../../types/groupeParole';
 import { CreateGroupeParole } from './CreateGroupeParole';
+import { AuthWall } from '../../../components/ui/AuthWall';
 
 
 // --- Helpers ---
@@ -621,44 +622,12 @@ export const SlideForum = () => {
           className="fixed inset-0 z-[9999] flex items-center justify-center p-6 bg-black/40 backdrop-blur-sm"
           onClick={() => setShowAuthModal(false)}
         >
-          <motion.div
-            initial={{ scale: 0.9, opacity: 0, y: 20 }}
-            animate={{ scale: 1, opacity: 1, y: 0 }}
-            onClick={(e: React.MouseEvent) => e.stopPropagation()}
-            className="bg-white rounded-[32px] p-6 w-full max-w-sm shadow-2xl relative overflow-hidden"
-          >
-            <div className="absolute top-0 left-0 w-full h-32 bg-gradient-to-br from-orange-400 to-orange-500 opacity-10" />
-
-            <div className="relative text-center space-y-4">
-              <div className="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mx-auto text-orange-500">
-                <Users size={32} />
-              </div>
-
-              <div>
-                <h3 className="text-xl font-extrabold text-gray-800 tracking-tight">
-                  Rejoignez la communauté
-                </h3>
-                <p className="text-sm text-gray-500 mt-2 font-medium leading-relaxed">
-                  Connectez-vous ou inscrivez-vous pour créer et participer aux groupes de parole. D'autres parents vous attendent !
-                </p>
-              </div>
-
-              <div className="pt-4 space-y-3">
-                <button
-                  onClick={() => navigate('/espace?mode=register')}
-                  className="w-full py-3.5 bg-orange-500 text-white rounded-2xl font-bold text-sm shadow-lg shadow-orange-500/30 hover:bg-orange-600 transition-colors"
-                >
-                  S'inscrire
-                </button>
-                <button
-                  onClick={() => navigate('/espace?mode=login')}
-                  className="w-full py-3.5 bg-orange-50 text-orange-600 rounded-2xl font-bold text-sm hover:bg-orange-100 transition-colors"
-                >
-                  Se connecter
-                </button>
-              </div>
-            </div>
-          </motion.div>
+          <AuthWall 
+            fullHeight={false}
+            title="Rejoignez la communauté"
+            description="Connectez-vous ou inscrivez-vous pour participer aux groupes de parole. D'autres parents vous attendent !"
+            icon={Users}
+          />
         </div>,
         document.body
       )}

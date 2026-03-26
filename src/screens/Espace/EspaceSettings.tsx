@@ -40,6 +40,7 @@ import {
   DICEBEAR_STYLES
 } from '../../lib/avatarTypes';
 import { RefreshCw, Sparkles, Star } from 'lucide-react';
+import { AuthWall } from '../../components/ui/AuthWall';
 
 export const EspaceSettings = () => {
   const navigate = useNavigate();
@@ -285,16 +286,11 @@ export const EspaceSettings = () => {
 
   if (!auth.currentUser) {
     return (
-      <div className="min-h-screen bg-[#FFFBF0] flex flex-col items-center justify-center p-6 text-center pb-32">
-        <div className="w-20 h-20 bg-orange-100 rounded-3xl flex items-center justify-center text-orange-500 mb-6 shadow-inner">
-          <User size={40} />
-        </div>
-        <h2 className="text-2xl font-extrabold text-gray-800 mb-2">Paramètres du compte</h2>
-        <p className="text-gray-500 mb-8 font-medium">Connectez-vous pour configurer votre profil, sécurité, et notifications.</p>
-        <button onClick={() => navigate('/espace?mode=login')} className="w-full h-14 bg-orange-500 text-white rounded-2xl font-bold shadow-premium active:scale-95 transition-transform">
-          Se connecter
-        </button>
-      </div>
+      <AuthWall 
+        title="Paramètres" 
+        description="Connectez-vous pour configurer votre profil, votre sécurité et vos préférences de notification."
+        icon={Settings}
+      />
     );
   }
 
