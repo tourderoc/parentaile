@@ -1,0 +1,95 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ========== 1. MEDCOMPANION (Collections ouvertes) ==========
+
+    match /tokens/{tokenId} {
+      allow read, write: if true;
+    }
+
+    match /messages/{messageId} {
+      allow read, write: if true;
+    }
+
+    match /notifications/{notificationId} {
+      allow read, write: if true;
+    }
+
+    // ========== 2. COMPTES & PROFILS ==========
+
+    match /accounts/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+
+      match /children/{childId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+    }
+
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // ========== 3. GROUPES DE PAROLE (Parent'aile) ==========
+
+    match /groupes/{groupeId} {
+      allow read: if true;
+      allow create: if request.auth != null;
+      // Permettre la modification par les membres connectés
+      allow update: if request.auth != null;
+      allow delete: if request.auth != null && request.auth.uid == resource.data.createurUid;
+
+      // Messages du forum (sous-collection)
+      match /messages/{messageId} {
+        allow read: if true;
+        allow create: if request.auth != null;
+        allow delete: if request.auth != null;
+      }
+
+      // Évaluations (sous-collection)
+      match /evaluations/{evalId} {
+        allow read: if request.auth != null;
+        allow create, update: if request.auth != null && request.auth.uid == evalId;
+        allow delete: if false;
+      }
+
+      // Présence (sous-collection)
+      match /presence/{uid} {
+        allow read: if true;
+        allow create, update: if request.auth != null && request.auth.uid == uid;
+        allow delete: if request.auth != null && request.auth.uid == uid;
+      }
+
+      // Sorties & bannissements participants (sous-collection, refactor vocal)
+      match /participantExits/{uid} {
+        allow read: if request.auth != null;
+        allow create, update: if request.auth != null;
+        allow delete: if false;
+      }
+
+      // Déduplication notifications envoyées (sous-collection)
+      match /notifications_sent/{notifId} {
+        allow read: if request.auth != null;
+        allow write: if request.auth != null;
+      }
+    }
+
+    // ========== 4. NOTIFICATIONS PARENTS (Top-level) ==========
+
+    match /parentNotifications/{notifId} {
+      // Un utilisateur peut créer une notification (write) pour un autre
+      allow create: if request.auth != null;
+
+      // Seul le destinataire peut lire ou modifier (marquer lu) ses notifications
+      allow read, update, delete: if request.auth != null && request.auth.uid == resource.data.recipientUid;
+    }
+
+    // ========== 5. SIGNALEMENTS DE BANNISSEMENT ==========
+
+    match /banReports/{reportId} {
+      allow create: if request.auth != null;
+      allow read, update, delete: if false; // Admin uniquement (via console)
+    }
+
+  }
+}

@@ -771,6 +771,8 @@ export async function suspendSession(
   if (!snap.exists()) return;
 
   const data = snap.data();
+  if (data.status === 'cancelled' || data.status === 'completed') return; // Garde terminale
+
   const state = data.sessionState;
   if (!state) return;
 
@@ -1103,15 +1105,7 @@ export async function submitBanFeedback(
 
 // ========== Session vocale en temps réel ==========
 
-export async function initSessionState(groupeId: string): Promise<void> {
-  await updateDoc(doc(db, 'groupes', groupeId), {
-    'sessionState.currentPhaseIndex': 0,
-    'sessionState.extendedMinutes': 0,
-    'sessionState.sessionActive': true,
-    'sessionState.phaseStartedAt': serverTimestamp(),
-    'sessionState.sessionStartedAt': serverTimestamp(),
-  });
-}
+// initSessionState supprimée — remplacée par initSessionStateV2 (avec tracking animateur)
 
 export async function advancePhase(groupeId: string, newIndex: number): Promise<void> {
   await updateDoc(doc(db, 'groupes', groupeId), {
@@ -1127,9 +1121,69 @@ export async function extendSession(groupeId: string, extraMinutes: number): Pro
 }
 
 export async function endSession(groupeId: string): Promise<void> {
-  await updateDoc(doc(db, 'groupes', groupeId), {
+  const ref = doc(db, 'groupes', groupeId);
+  const snap = await getDoc(ref);
+  if (snap.exists()) {
+    const status = snap.data().status;
+    if (status === 'cancelled' || status === 'completed') return; // Garde terminale
+  }
+  await updateDoc(ref, {
     'sessionState.sessionActive': false,
     status: 'completed',
   });
+}
+
+// ========== PARTICIPANT EXITS (PHASE 5 REFACTOR) ==========
+
+/**
+ * Incrémente atomiquement le compteur de sorties d'un participant.
+ * Si le count dépasse le seuil (2), marque le participant comme banni.
+ * Retourne le nouveau count.
+ */
+export async function incrementParticipantExit(
+  groupeId: string,
+  uid: string
+): Promise<number> {
+  const exitRef = doc(db, 'groupes', groupeId, 'participantExits', uid);
+  let newCount = 0;
+
+  await runTransaction(db, async (transaction) => {
+    const snap = await transaction.get(exitRef);
+    if (snap.exists()) {
+      newCount = (snap.data().count || 0) + 1;
+      const banned = newCount > 2; // MAX_PARTICIPANT_EXITS = 2
+      transaction.update(exitRef, {
+        count: newCount,
+        lastExitAt: serverTimestamp(),
+        ...(banned ? { banned: true } : {}),
+      });
+    } else {
+      newCount = 1;
+      transaction.set(exitRef, {
+        count: 1,
+        lastExitAt: serverTimestamp(),
+        banned: false,
+      });
+    }
+  });
+
+  return newCount;
+}
+
+/**
+ * Vérifie si un participant est banni d'un groupe.
+ * Lecture rapide du flag banned dans participantExits/{uid}.
+ */
+export async function isParticipantBanned(
+  groupeId: string,
+  uid: string
+): Promise<boolean> {
+  try {
+    const snap = await getDoc(doc(db, 'groupes', groupeId, 'participantExits', uid));
+    if (!snap.exists()) return false;
+    return snap.data().banned === true;
+  } catch {
+    return false;
+  }
 }
 

@@ -246,6 +246,16 @@ export const getLiveKitToken = functions.https.onCall(async (data, context) => {
     ? accountSnap.data()?.pseudo || 'Parent'
     : 'Parent';
 
+  // Vérifier si le participant est banni (défense en profondeur)
+  const exitSnap = await db.collection('groupes').doc(groupeId)
+    .collection('participantExits').doc(uid).get();
+  if (exitSnap.exists && exitSnap.data()?.banned === true) {
+    throw new functions.https.HttpsError(
+      'permission-denied',
+      'Vous avez été exclu de cette session'
+    );
+  }
+
   // Déterminer si l'utilisateur est l'animateur (créateur du groupe ou de remplacement)
   let isAnimateur = false;
   if (isTestGroup) {

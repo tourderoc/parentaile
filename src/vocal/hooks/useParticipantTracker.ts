@@ -1,0 +1,133 @@
+import { useEffect, useRef, useCallback } from 'react';
+import { Participant } from 'livekit-client';
+import { VOCAL_CONFIG, VocalEvent } from '../machine';
+import { doc, getDoc, setDoc, increment } from 'firebase/firestore';
+import { db } from '../../lib/firebase';
+
+interface UseParticipantTrackerProps {
+  groupeId: string;
+  localUid: string;
+  liveKitParticipants: Participant[];
+  effectiveAnimateurUid: string;
+  dispatch: (event: VocalEvent) => void;
+}
+
+interface ParticipantGrace {
+  /** setTimeout ID for the 30s absence grace */
+  timerId: ReturnType<typeof setTimeout>;
+  /** Timestamp when absence was first detected */
+  absentSince: number;
+}
+
+/**
+ * Bridge LiveKit participants → VocalEvent.
+ *
+ * - Calculates participantCount & animateurPresent from LiveKit state
+ * - Dispatches CONDITIONS_CHANGED when those values change
+ * - Tracks per-participant 30s grace before counting an "exit"
+ * - Increments Firestore participantExits/{uid}.count on confirmed exit
+ * - Dispatches PARTICIPANT_BANNED when count > MAX_PARTICIPANT_EXITS
+ */
+export function useParticipantTracker({
+  groupeId,
+  localUid,
+  liveKitParticipants,
+  effectiveAnimateurUid,
+  dispatch,
+}: UseParticipantTrackerProps) {
+  const graceMap = useRef(new Map<string, ParticipantGrace>());
+  const prevIdentitiesRef = useRef(new Set<string>());
+  const dispatchRef = useRef(dispatch);
+  dispatchRef.current = dispatch;
+
+  // Derive current identities set from LiveKit
+  const currentIdentities = new Set(liveKitParticipants.map(p => p.identity));
+
+  // Total count includes local user
+  const participantCount = 1 + liveKitParticipants.length;
+  const animateurPresent =
+    localUid === effectiveAnimateurUid ||
+    currentIdentities.has(effectiveAnimateurUid);
+
+  // ---- Handle confirmed exit: increment Firestore + check ban ----
+  const handleConfirmedExit = useCallback(async (uid: string) => {
+    console.log(`[PARTICIPANT_TRACKER] Confirmed exit: ${uid}`);
+    try {
+      const exitRef = doc(db, 'groupes', groupeId, 'participantExits', uid);
+      const snap = await getDoc(exitRef);
+
+      if (snap.exists()) {
+        await setDoc(exitRef, { count: increment(1), lastExitAt: new Date() }, { merge: true });
+      } else {
+        await setDoc(exitRef, { count: 1, lastExitAt: new Date(), banned: false });
+      }
+
+      // Re-read to check ban threshold
+      const updated = await getDoc(exitRef);
+      const data = updated.data();
+      if (data && data.count > VOCAL_CONFIG.MAX_PARTICIPANT_EXITS) {
+        await setDoc(exitRef, { banned: true }, { merge: true });
+        dispatchRef.current({ type: 'PARTICIPANT_BANNED', uid });
+      }
+    } catch (err) {
+      console.error(`[PARTICIPANT_TRACKER] Failed to record exit for ${uid}:`, err);
+    }
+  }, [groupeId]);
+
+  // ---- Detect joins/leaves and manage grace timers ----
+  useEffect(() => {
+    const prev = prevIdentitiesRef.current;
+    const graces = graceMap.current;
+
+    // Participants who left
+    prev.forEach(uid => {
+      if (!currentIdentities.has(uid) && uid !== localUid && !graces.has(uid)) {
+        // Start 30s grace
+        const timerId = setTimeout(() => {
+          graces.delete(uid);
+          handleConfirmedExit(uid);
+        }, VOCAL_CONFIG.GRACE_PERIOD_SEC * 1000);
+
+        graces.set(uid, { timerId, absentSince: Date.now() });
+      }
+    });
+
+    // Participants who (re)joined — cancel grace if pending
+    currentIdentities.forEach(uid => {
+      const grace = graces.get(uid);
+      if (grace) {
+        clearTimeout(grace.timerId);
+        graces.delete(uid);
+        console.log(`[PARTICIPANT_TRACKER] Grace cancelled (returned): ${uid}`);
+      }
+    });
+
+    prevIdentitiesRef.current = new Set(currentIdentities);
+  }, [liveKitParticipants, localUid, handleConfirmedExit, currentIdentities]);
+
+  // ---- Dispatch CONDITIONS_CHANGED on count/animateur changes ----
+  const prevCountRef = useRef(participantCount);
+  const prevAnimRef = useRef(animateurPresent);
+
+  useEffect(() => {
+    if (participantCount !== prevCountRef.current || animateurPresent !== prevAnimRef.current) {
+      prevCountRef.current = participantCount;
+      prevAnimRef.current = animateurPresent;
+      dispatchRef.current({
+        type: 'CONDITIONS_CHANGED',
+        count: participantCount,
+        animateurPresent,
+      });
+    }
+  }, [participantCount, animateurPresent]);
+
+  // ---- Cleanup all grace timers on unmount ----
+  useEffect(() => {
+    return () => {
+      graceMap.current.forEach(grace => clearTimeout(grace.timerId));
+      graceMap.current.clear();
+    };
+  }, []);
+
+  return { participantCount, animateurPresent };
+}

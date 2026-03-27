@@ -48,16 +48,14 @@ import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { getLiveKitToken } from '../../lib/liveKitService';
 import { 
   submitEvaluation, markEvaluationPending, getEvaluationStatus, addPoints, 
-  getUserBadge, setPresence, removePresence, initSessionState, advancePhase, 
+  getUserBadge, setPresence, removePresence, advancePhase, 
   extendSession, endSession, submitBanFeedback,
   initSessionStateV2, suspendSession, resumeSession, proposeAsAnimateur, onPresenceList,
   cancelGroup, incrementAnimateurDisconnect
 } from '../../lib/groupeParoleService';
 import type { MessageGroupe, ParticipantGroupe, StructureEtape, BadgeLevel, SessionState, MicPolicy } from '../../types/groupeParole';
 import { STRUCTURE_DEFAUT, getBadgeInfo, PHASE_MIC_POLICY, DEFAULT_MIC_POLICY } from '../../types/groupeParole';
-import { useEffectiveAnimateur } from '../../hooks/useEffectiveAnimateur';
-import { useAnimateurWait } from '../../hooks/useAnimateurWait';
-import { useSessionSuspension } from '../../hooks/useSessionSuspension';
+import { useVocalMachine } from '../../vocal/hooks/useVocalMachine';
 import { SuspensionOverlay } from '../../components/vocal/SuspensionOverlay';
 import { AnimateurWaitOverlay } from '../../components/vocal/AnimateurWaitOverlay';
 import { CancellationScreen } from '../../components/vocal/CancellationScreen';
@@ -1075,51 +1073,65 @@ const RoomContent: React.FC<{
     }
   }, [isAnimateur, groupeId, sessionPrenom]);
 
-  const { effectiveAnimateurUid, isEffectiveAnimateur, isReplacementAnimateur } = useEffectiveAnimateur({
-    firestoreSession: firestoreSession || undefined,
-    createurUid,
-    localUid: localParticipant?.identity || auth.currentUser?.uid || ''
-  });
-
-  // La session "a commence" si dateVocal est passee (pas besoin que l'animateur ait init)
-  const dateVocalPassed = dateVocal.getTime() <= Date.now();
-
-  const handleAnimateurDisconnect = useCallback(async (newCount: number) => {
-    await incrementAnimateurDisconnect(groupeId);
-    if (newCount >= 2) {
-      setWarnToast('L\'animateur s\'est déconnecté trop de fois — remplacement nécessaire');
-      setTimeout(() => setWarnToast(null), 6000);
-    }
-  }, [groupeId]);
-
-  const { waitingForAnimateur, waitCountdownSec, canPropose: waitCanPropose, timedOut: animateurTimedOut, forceReplacement } = useAnimateurWait({
+  // ========== Vocal Machine (replaces useEffectiveAnimateur + useAnimateurWait + useSessionSuspension) ==========
+  const {
+    phase: machinePhase,
+    reason: machineReason,
+    countdownSec: machineCountdown,
+    canPropose: machineCanPropose,
+    isProposing,
+    suspensionCount: machineSuspensionCount,
+    effectiveAnimateurUid,
+    isEffectiveAnimateur,
+    isReplacementAnimateur,
+    dispatch: machineDispatch,
+    proposeAsReplacement,
+  } = useVocalMachine({
     groupeId,
-    liveKitParticipants: participants,
-    firestoreSession: firestoreSession || undefined,
     createurUid,
-    sessionStarted: dateVocalPassed || (firestoreSession?.sessionActive ?? false),
+    localUid: localParticipant?.identity || auth.currentUser?.uid || '',
+    localPseudo: sessionPrenom || 'Parent',
+    liveKitParticipants: participants,
     isTestGroup,
-    onDisconnectCountChanged: handleAnimateurDisconnect,
-    onTimedOut: async (totalConnected) => {
-      // After 3 min: if < 3 connected → cancel, otherwise let them propose replacement
-      if (!isTestGroup && totalConnected < 3) {
-        await cancelGroup(groupeId, 'Nombre de participants insuffisant dans la salle vocale (minimum 3)');
-        setStep('cancelled');
-      }
-    },
+    firestoreSession: firestoreSession ? {
+      suspended: firestoreSession.suspended || false,
+      suspensionCount: firestoreSession.suspensionCount || 0,
+      currentAnimateurUid: firestoreSession.currentAnimateurUid || createurUid,
+      currentAnimateurPseudo: firestoreSession.currentAnimateurPseudo,
+      replacementUsed: firestoreSession.replacementUsed || false,
+      sessionActive: firestoreSession.sessionActive ?? true,
+    } : null,
   });
 
-  const handleProposeAnimateur = async () => {
-    if (!auth.currentUser) return;
-    // Double-check connected count before allowing replacement
-    const totalConnected = 1 + participants.length;
-    if (!isTestGroup && totalConnected < 3) {
-      await cancelGroup(groupeId, 'Nombre de participants insuffisant dans la salle vocale (minimum 3)');
-      setStep('cancelled');
+  // Dispatch HOUR_REACHED when dateVocal passes (or immediately for test groups)
+  const hourReachedRef = useRef(false);
+  useEffect(() => {
+    if (hourReachedRef.current) return;
+    if (isTestGroup) {
+      hourReachedRef.current = true;
+      machineDispatch({ type: 'HOUR_REACHED' });
       return;
     }
-    await proposeAsAnimateur(groupeId, auth.currentUser.uid, sessionPrenom || 'Parent');
-  };
+    const now = Date.now();
+    const delay = dateVocal.getTime() - now;
+    if (delay <= 0) {
+      hourReachedRef.current = true;
+      machineDispatch({ type: 'HOUR_REACHED' });
+    } else {
+      const timer = setTimeout(() => {
+        hourReachedRef.current = true;
+        machineDispatch({ type: 'HOUR_REACHED' });
+      }, delay);
+      return () => clearTimeout(timer);
+    }
+  }, [dateVocal, machineDispatch, isTestGroup]);
+
+  // Navigate away when machine reaches terminal cancelled state
+  useEffect(() => {
+    if (machinePhase === 'SESSION_CANCELLED') {
+      onLeave();
+    }
+  }, [machinePhase, onLeave]);
 
   // Toast when animateur changes (replacement happened)
   const prevAnimateurUidRef = useRef(firestoreSession?.currentAnimateurUid);
@@ -1142,38 +1154,6 @@ const RoomContent: React.FC<{
     }
     prevAnimateurUidRef.current = currentAnimUid;
   }, [firestoreSession?.currentAnimateurUid, firestoreSession?.currentAnimateurPseudo]);
-
-  const { suspended, suspensionReason, countdownSec: suspCountdownSec, canPropose: suspCanPropose } = useSessionSuspension({
-    groupeId,
-    localUid: localParticipant?.identity || auth.currentUser?.uid || '',
-    liveKitParticipants: participants,
-    firestoreSession: firestoreSession || undefined,
-    effectiveAnimateurUid,
-    isEffectiveAnimateur,
-    onSuspend: async (reason) => {
-      console.log('[SUSPENSION] Suspending session:', reason);
-      await suspendSession(groupeId, reason);
-      if (reason === 'below_minimum') {
-        setWarnToast('Moins de 3 participants — en attente de renforts...');
-        setTimeout(() => setWarnToast(null), 6000);
-      } else if (reason === 'animateur_left') {
-        setWarnToast('L\'animateur a quitté la salle');
-        setTimeout(() => setWarnToast(null), 4000);
-      }
-    },
-    onResume: async () => {
-      console.log('[SUSPENSION] Resuming session');
-      await resumeSession(groupeId);
-      setPhaseToast('La session reprend !');
-      setTimeout(() => setPhaseToast(null), 3000);
-    },
-    onAutoEnd: async () => {
-      console.log('[SUSPENSION] Auto-end — cancelling group');
-      // Countdown terminé sans résolution → annuler le groupe
-      await cancelGroup(groupeId, 'Nombre de participants insuffisant après délai d\'attente');
-      setStep('cancelled');
-    }
-  });
 
   // Session phase tracking (now Firestore-driven for structured mode)
   const sessionPhase = useSessionPhase(dateVocal, structureType, structure, firestoreSession, defaultDurationMin);
@@ -1549,25 +1529,50 @@ const RoomContent: React.FC<{
       )}
 
       <AnimatePresence>
-        {waitingForAnimateur && (
-          <AnimateurWaitOverlay
-            countdownSec={waitCountdownSec}
-            canPropose={waitCanPropose && !isTestGroup && (1 + participants.length) >= 3}
-            onPropose={handleProposeAnimateur}
-            forceReplacement={forceReplacement}
-            belowMinimum={!isTestGroup && (1 + participants.length) < 3}
-          />
-        )}
-        {suspended && (
-          <SuspensionOverlay
-            reason={suspensionReason}
-            countdownSec={suspCountdownSec}
-            canPropose={suspCanPropose && !(!isTestGroup && (1 + participants.length) < 3)}
-            onPropose={handleProposeAnimateur}
-            suspensionCount={firestoreSession?.suspensionCount || 0}
-            belowMinimum={!isTestGroup && (1 + participants.length) < 3}
-          />
-        )}
+        {machinePhase === 'COUNTDOWN_START' && (() => {
+          const belowMin = machineReason === 'below_minimum';
+          return (
+            <AnimateurWaitOverlay
+              title={belowMin ? 'Pas assez de participants'
+                : machineCanPropose ? "L'animateur n'est pas là"
+                : "En attente de l'animateur"}
+              subtitle={belowMin
+                ? (machineCountdown > 0 ? 'En attente de plus de participants...' : 'La session va être annulée')
+                : machineCanPropose ? "Quelqu'un peut prendre le relais !"
+                : "En attendant, vous pouvez discuter entre vous !"}
+              countdownSec={machineCountdown}
+              variant={belowMin ? 'danger' : machineCanPropose ? 'warning' : 'info'}
+              action={machineCanPropose ? {
+                label: 'Je prends le relais',
+                onClick: proposeAsReplacement,
+                loading: isProposing,
+              } : undefined}
+            />
+          );
+        })()}
+        {machinePhase === 'SUSPENDED' && (() => {
+          const belowMin = machineReason === 'below_minimum';
+          return (
+            <SuspensionOverlay
+              title={belowMin ? 'Pas assez de participants' : 'Session suspendue'}
+              subtitle={belowMin
+                ? (machineCountdown > 0
+                  ? "En attente de plus de participants pour continuer."
+                  : "La session va être annulée.")
+                : machineReason === 'animateur_left'
+                  ? "L'animateur a quitté la salle. Attendons son retour."
+                  : "Il n'y a pas assez de participants pour continuer."}
+              countdownSec={machineCountdown}
+              suspensionCount={machineSuspensionCount}
+              variant={belowMin ? 'danger' : 'warning'}
+              action={machineCanPropose && machineReason === 'animateur_left' ? {
+                label: 'Rejoindre en tant qu\'animateur',
+                onClick: proposeAsReplacement,
+                loading: isProposing,
+              } : undefined}
+            />
+          );
+        })()}
       </AnimatePresence>
 
       {/* Circular layout */}
