@@ -3407,67 +3407,68 @@ export const SalleVocalePage = () => {
   // Called when animateur ends the session — treated as normal completion
   const handleSessionEnded = useCallback(() => {
     voluntaryLeaveRef.current = true;
-    const elapsed = sessionElapsedRef.current;
-    const total = sessionTotalRef.current;
-    const participationRatio = total > 0 ? elapsed / total : 0;
 
-    // Session ended by animateur = normal end, never "left early"
-    if (!pointsAwardedRef.current && groupeId) {
-      pointsAwardedRef.current = true;
-      const user = auth.currentUser;
-      if (user) {
-        const points = participationRatio > 0.5 ? 10 : 5;
-        addPoints(user.uid, points, {
-          groupeId,
-          groupeTitre,
-          date: new Date(),
-          type: 'participation',
-        }).catch(() => {});
+    // If we're already on the cancellation screen, don't override it
+    // (race condition: sessionActive listener fires before status listener updates groupeStatus)
+    setStep(prev => {
+      if (prev === 'cancelled') return prev;
+
+      const elapsed = sessionElapsedRef.current;
+      const total = sessionTotalRef.current;
+      const participationRatio = total > 0 ? elapsed / total : 0;
+
+      if (!pointsAwardedRef.current && groupeId) {
+        pointsAwardedRef.current = true;
+        const user = auth.currentUser;
+        if (user) {
+          const points = participationRatio > 0.5 ? 10 : 5;
+          addPoints(user.uid, points, {
+            groupeId,
+            groupeTitre,
+            date: new Date(),
+            type: 'participation',
+          }).catch(() => {});
+        }
       }
-    }
-    // If group was cancelled, go to cancellation screen instead of end/evaluation
-    if (groupeStatus === 'cancelled') {
-      setStep('cancelled');
-    } else {
-      setStep('end');
-    }
+
+      if (groupeStatus === 'cancelled') return 'cancelled';
+      return 'end';
+    });
   }, [groupeId, groupeTitre, groupeStatus]);
 
   const handleLeave = useCallback(() => {
     voluntaryLeaveRef.current = true;
 
-    // If group was cancelled, go directly to cancellation screen
-    if (groupeStatus === 'cancelled') {
-      setStep('cancelled');
-      return;
-    }
+    setStep(prev => {
+      // If already on cancellation screen, don't override
+      if (prev === 'cancelled') return prev;
 
-    // Determine if session is complete (elapsed >= total or remaining < 2 min)
-    const elapsed = sessionElapsedRef.current;
-    const total = sessionTotalRef.current;
-    const isSessionComplete = total > 0 && (total - elapsed) < 2;
-    const participationRatio = total > 0 ? elapsed / total : 0;
+      if (groupeStatus === 'cancelled') return 'cancelled';
 
-    // Track early leave (< session end) → no evaluation allowed
-    if (!isSessionComplete) {
-      setLeftEarly(true);
-    }
+      const elapsed = sessionElapsedRef.current;
+      const total = sessionTotalRef.current;
+      const isSessionComplete = total > 0 && (total - elapsed) < 2;
+      const participationRatio = total > 0 ? elapsed / total : 0;
 
-    // Award proportional points for participation (once)
-    if (!pointsAwardedRef.current && groupeId) {
-      pointsAwardedRef.current = true;
-      const user = auth.currentUser;
-      if (user) {
-        const points = participationRatio > 0.5 ? 10 : 5;
-        addPoints(user.uid, points, {
-          groupeId,
-          groupeTitre,
-          date: new Date(),
-          type: 'participation',
-        }).catch(() => {});
+      if (!isSessionComplete) {
+        setLeftEarly(true);
       }
-    }
-    setStep('end');
+
+      if (!pointsAwardedRef.current && groupeId) {
+        pointsAwardedRef.current = true;
+        const user = auth.currentUser;
+        if (user) {
+          const points = participationRatio > 0.5 ? 10 : 5;
+          addPoints(user.uid, points, {
+            groupeId,
+            groupeTitre,
+            date: new Date(),
+            type: 'participation',
+          }).catch(() => {});
+        }
+      }
+      return 'end';
+    });
   }, [groupeId, groupeTitre, groupeStatus]);
 
   const handleDisconnected = useCallback(() => {
