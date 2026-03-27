@@ -1562,9 +1562,10 @@ const RoomContent: React.FC<{
           <SuspensionOverlay
             reason={suspensionReason}
             countdownSec={suspCountdownSec}
-            canPropose={suspCanPropose}
+            canPropose={suspCanPropose && !(!isTestGroup && (1 + participants.length) < 3)}
             onPropose={handleProposeAnimateur}
             suspensionCount={firestoreSession?.suspensionCount || 0}
+            belowMinimum={!isTestGroup && (1 + participants.length) < 3}
           />
         )}
       </AnimatePresence>

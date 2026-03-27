@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Clock, AlertCircle, UserCheck } from 'lucide-react';
+import { Clock, AlertCircle, UserCheck, Users } from 'lucide-react';
 
 interface Props {
   reason?: 'animateur_left' | 'below_minimum';
@@ -8,6 +8,7 @@ interface Props {
   canPropose: boolean;
   onPropose: () => void;
   suspensionCount: number; // max 2
+  belowMinimum?: boolean;
 }
 
 export const SuspensionOverlay: React.FC<Props> = ({
@@ -15,7 +16,8 @@ export const SuspensionOverlay: React.FC<Props> = ({
   countdownSec,
   canPropose,
   onPropose,
-  suspensionCount
+  suspensionCount,
+  belowMinimum = false,
 }) => {
   const formatTime = (sec: number) => {
     const m = Math.floor(sec / 60);
@@ -31,30 +33,43 @@ export const SuspensionOverlay: React.FC<Props> = ({
       className="absolute inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-md p-6"
     >
       <div className="bg-white rounded-[2rem] p-8 max-w-sm w-full text-center shadow-[0_20px_50px_-12px_rgba(0,0,0,0.5)] space-y-6">
-        <div className="mx-auto w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center ring-4 ring-orange-50">
-          <AlertCircle className="w-8 h-8 text-orange-500" />
+        <div className={`mx-auto w-16 h-16 rounded-full flex items-center justify-center ring-4 ${
+          belowMinimum ? 'bg-red-100 ring-red-50' : 'bg-orange-100 ring-orange-50'
+        }`}>
+          {belowMinimum
+            ? <Users className="w-8 h-8 text-red-500" />
+            : <AlertCircle className="w-8 h-8 text-orange-500" />
+          }
         </div>
-        
+
         <h3 className="text-2xl font-black text-gray-800 tracking-tight">
-          Session suspendue
+          {belowMinimum ? 'Pas assez de participants' : 'Session suspendue'}
         </h3>
-        
+
         <p className="text-gray-500 font-medium leading-relaxed">
-          {reason === 'animateur_left'
-            ? "L'animateur a quitté la salle. Les connexions peuvent parfois couper, attendons son retour."
-            : "Il n'y a pas assez de participants pour continuer l'échange de façon fluide."}
+          {belowMinimum
+            ? countdownSec > 0
+              ? "En attente de plus de participants pour continuer. Si le nombre reste insuffisant, la session sera annulée."
+              : "La session va être annulée."
+            : reason === 'animateur_left'
+              ? "L'animateur a quitté la salle. Les connexions peuvent parfois couper, attendons son retour."
+              : "Il n'y a pas assez de participants pour continuer l'échange de façon fluide."}
         </p>
 
-        <div className="bg-gray-50 py-3 rounded-2xl flex items-center justify-center space-x-3 text-3xl font-black text-orange-500 font-mono tracking-widest shadow-inner">
-          <Clock className="w-7 h-7 text-orange-400" />
+        <div className={`py-3 rounded-2xl flex items-center justify-center space-x-3 text-3xl font-black font-mono tracking-widest shadow-inner ${
+          belowMinimum ? 'bg-red-50 text-red-500' : 'bg-gray-50 text-orange-500'
+        }`}>
+          <Clock className={`w-7 h-7 ${belowMinimum ? 'text-red-400' : 'text-orange-400'}`} />
           <span>{formatTime(countdownSec)}</span>
         </div>
-        
-        <div className="text-xs text-gray-400 font-bold uppercase tracking-wider">
-          Suspension {suspensionCount}/2 avant annulation
-        </div>
 
-        {canPropose && reason === 'animateur_left' && (
+        {!belowMinimum && (
+          <div className="text-xs text-gray-400 font-bold uppercase tracking-wider">
+            Suspension {suspensionCount}/2 avant annulation
+          </div>
+        )}
+
+        {canPropose && !belowMinimum && reason === 'animateur_left' && (
           <motion.div
             initial={{ opacity: 0, scale: 0.95, y: 10 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
