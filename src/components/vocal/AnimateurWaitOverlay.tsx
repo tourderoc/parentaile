@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Clock, UserCheck, Mic2, AlertTriangle } from 'lucide-react';
+import { Clock, UserCheck, Mic2, AlertTriangle, Users } from 'lucide-react';
 
 interface Props {
   countdownSec: number;
@@ -8,6 +8,7 @@ interface Props {
   onPropose: () => void;
   message?: string;
   forceReplacement?: boolean;
+  belowMinimum?: boolean;
 }
 
 export const AnimateurWaitOverlay: React.FC<Props> = ({
@@ -16,6 +17,7 @@ export const AnimateurWaitOverlay: React.FC<Props> = ({
   onPropose,
   message = "En attendant, vous pouvez discuter entre vous !",
   forceReplacement = false,
+  belowMinimum = false,
 }) => {
   const formatTime = (sec: number) => {
     const m = Math.floor(sec / 60);
@@ -23,17 +25,23 @@ export const AnimateurWaitOverlay: React.FC<Props> = ({
     return `${m}:${s.toString().padStart(2, '0')}`;
   };
 
-  const title = forceReplacement
-    ? "L'animateur s'est déconnecté plusieurs fois"
-    : canPropose
-      ? "L'animateur n'est pas là"
-      : 'En attente de l\'animateur';
+  const title = belowMinimum
+    ? 'Pas assez de participants'
+    : forceReplacement
+      ? "L'animateur s'est déconnecté plusieurs fois"
+      : canPropose
+        ? "L'animateur n'est pas là"
+        : 'En attente de l\'animateur';
 
-  const subtitle = forceReplacement
-    ? 'Un volontaire doit prendre le relais pour continuer'
-    : canPropose
-      ? 'Quelqu\'un peut prendre le relais !'
-      : message;
+  const subtitle = belowMinimum
+    ? countdownSec > 0
+      ? 'En attente de plus de participants...'
+      : 'La session va être annulée'
+    : forceReplacement
+      ? 'Un volontaire doit prendre le relais pour continuer'
+      : canPropose
+        ? 'Quelqu\'un peut prendre le relais !'
+        : message;
 
   return (
     <motion.div
@@ -43,13 +51,19 @@ export const AnimateurWaitOverlay: React.FC<Props> = ({
       className="absolute top-3 left-3 right-3 z-[60] pointer-events-none"
     >
       <div className={`backdrop-blur-xl rounded-2xl px-5 py-4 shadow-[0_8px_30px_-8px_rgba(0,0,0,0.3)] pointer-events-auto ${
-        forceReplacement ? 'bg-amber-50/95 border border-amber-200' : 'bg-white/95'
+        belowMinimum ? 'bg-red-50/95 border border-red-200'
+        : forceReplacement ? 'bg-amber-50/95 border border-amber-200'
+        : 'bg-white/95'
       }`}>
         {/* Main banner */}
         <div className="flex items-center gap-3">
           {/* Icon */}
           <div className="w-11 h-11 relative shrink-0">
-            {forceReplacement ? (
+            {belowMinimum ? (
+              <div className="w-full h-full bg-red-100 rounded-full flex items-center justify-center">
+                <Users className="w-5 h-5 text-red-500" />
+              </div>
+            ) : forceReplacement ? (
               <div className="w-full h-full bg-amber-100 rounded-full flex items-center justify-center">
                 <AlertTriangle className="w-5 h-5 text-amber-600" />
               </div>
@@ -69,10 +83,10 @@ export const AnimateurWaitOverlay: React.FC<Props> = ({
 
           {/* Text */}
           <div className="flex-1 min-w-0">
-            <p className={`text-sm font-black leading-tight ${forceReplacement ? 'text-amber-800' : 'text-gray-800'}`}>
+            <p className={`text-sm font-black leading-tight ${belowMinimum ? 'text-red-700' : forceReplacement ? 'text-amber-800' : 'text-gray-800'}`}>
               {title}
             </p>
-            <p className={`text-xs font-medium truncate ${forceReplacement ? 'text-amber-600' : 'text-gray-500'}`}>
+            <p className={`text-xs font-medium truncate ${belowMinimum ? 'text-red-500' : forceReplacement ? 'text-amber-600' : 'text-gray-500'}`}>
               {subtitle}
             </p>
           </div>

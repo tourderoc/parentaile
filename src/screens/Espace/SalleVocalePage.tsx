@@ -1552,9 +1552,10 @@ const RoomContent: React.FC<{
         {waitingForAnimateur && (
           <AnimateurWaitOverlay
             countdownSec={waitCountdownSec}
-            canPropose={waitCanPropose}
+            canPropose={waitCanPropose && !isTestGroup && (1 + participants.length) >= 3}
             onPropose={handleProposeAnimateur}
             forceReplacement={forceReplacement}
+            belowMinimum={!isTestGroup && (1 + participants.length) < 3}
           />
         )}
         {suspended && (
