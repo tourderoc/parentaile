@@ -288,20 +288,24 @@ export async function rejoindreGroupe(
       
       if (data.createurUid && data.createurUid !== participant.uid) {
         if (currentCount === 3) {
+          const notifId = `milestone_min_${groupeId}_${data.createurUid}`;
           sendParentNotification(
             data.createurUid,
             'group_join',
             'Minimum atteint !',
             `Bonne nouvelle, 3 parents sont inscrits à "${data.titre}", le groupe aura bien lieu.`,
-            { groupeId, groupeTitre: data.titre }
+            { groupeId, groupeTitre: data.titre },
+            notifId
           );
         } else if (currentCount === data.participantsMax) {
+          const notifId = `milestone_full_${groupeId}_${data.createurUid}`;
           sendParentNotification(
             data.createurUid,
             'group_join',
             'Groupe complet !',
             `Le groupe "${data.titre}" est complet (${data.participantsMax} inscrits).`,
-            { groupeId, groupeTitre: data.titre }
+            { groupeId, groupeTitre: data.titre },
+            notifId
           );
         }
       }

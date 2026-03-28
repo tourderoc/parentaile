@@ -59,8 +59,9 @@ export const sendVocalReminders = functions
           for (const p of data.participants || []) {
             if (!p.uid) continue;
             
-            // Notification in-app
-            await db.collection('parentNotifications').add({
+            // Notification in-app (using deterministic ID to prevent duplicates with frontend)
+            const notifId = `cancel_${doc.id}_${p.uid}`;
+            await db.collection('parentNotifications').doc(notifId).set({
               type: 'group_cancelled',
               recipientUid: p.uid,
               title: 'Groupe annulé',
