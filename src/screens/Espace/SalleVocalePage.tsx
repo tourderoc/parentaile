@@ -16,31 +16,10 @@ import {
   ConnectionState,
 } from 'livekit-client';
 import {
-  Mic,
-  MicOff,
-  Crown,
-  Loader2,
-  AlertCircle,
-  Volume2,
-  UserX,
-  MessageCircle,
-  Hand,
-  LogOut,
-  KeyRound,
-  Send,
-  X,
-  CheckCircle2,
-  Users,
-  Clock,
-  AlertTriangle,
-  ShieldAlert,
-  Lightbulb,
-  Heart,
-  ChevronDown,
-  Lock,
-  SkipForward,
-  Plus,
-  Square,
+  Mic, MicOff, Crown, Loader2, AlertCircle, Volume2, UserX, MessageCircle,
+  Hand, LogOut, KeyRound, Send, X, CheckCircle2, Users, Clock,
+  AlertTriangle, ShieldAlert, Lightbulb, Heart, ChevronDown, Lock,
+  SkipForward, Plus, Square, ArrowRight
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { auth, db } from '../../lib/firebase';
@@ -986,7 +965,8 @@ const RoomContent: React.FC<{
   isTestGroup: boolean;
   createurUid: string;
   sessionCancelledRef: React.RefObject<boolean>;
-}> = ({ isAnimateur, groupeId, groupeTitre, groupeTheme, dateVocal, onLeave, onCancelled, animateurNotes, structureType, structure, defaultDurationMin, onSessionProgress, onSessionEnded, sessionPrenom, isTestGroup, createurUid, sessionCancelledRef }) => {
+  groupeStatus: string;
+}> = ({ isAnimateur, groupeId, groupeTitre, groupeTheme, dateVocal, onLeave, onCancelled, animateurNotes, structureType, structure, defaultDurationMin, onSessionProgress, onSessionEnded, sessionPrenom, isTestGroup, createurUid, sessionCancelledRef, groupeStatus }) => {
   useWakeLock(); // Keep screen on during vocal session
   const participants = useParticipants();
   const { localParticipant } = useLocalParticipant();
@@ -1169,13 +1149,13 @@ const RoomContent: React.FC<{
   // IMPORTANT: Do NOT fire if machine already cancelled (race condition guard)
   useEffect(() => {
     if (firestoreSession && !firestoreSession.sessionActive) {
-      const isCancelled = machinePhase === 'SESSION_CANCELLED' || sessionCancelledRef.current;
+      const isCancelled = machinePhase === 'SESSION_CANCELLED' || sessionCancelledRef.current || groupeStatus === 'cancelled';
       if (!isCancelled) {
         onSessionEnded?.();
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [firestoreSession?.sessionActive, machinePhase]);
+  }, [firestoreSession?.sessionActive, machinePhase, groupeStatus]);
 
   // Mic policy based on current phase
   const micPolicy: MicPolicy = useMemo(() => {
@@ -1542,14 +1522,16 @@ const RoomContent: React.FC<{
       <AnimatePresence>
         {machinePhase === 'COUNTDOWN_START' && (() => {
           const belowMin = machineReason === 'below_minimum';
+          const isAnyAnimPresent = isAnimateur || participants.some(p => p.identity === effectiveAnimateurUid);
+          
           return (
             <AnimateurWaitOverlay
-              title={isAnimateur ? 'En attente des autres participants' 
+              title={isAnyAnimPresent ? 'En attente des autres participants' 
                 : belowMin ? 'Pas assez de participants'
                 : machineCanPropose ? "L'animateur n'est pas là"
                 : "En attente de l'animateur"}
-              subtitle={isAnimateur 
-                ? (machineCountdown > 0 ? 'Démarrage dès qu\'il y a assez de monde...' : 'La session va être annulée')
+              subtitle={isAnyAnimPresent 
+                ? (machineCountdown > 0 ? (isAnimateur ? 'Démarrage dès qu\'il y a assez de monde...' : 'En attente de plus de participants...') : 'La session va être annulée')
                 : (belowMin ? (machineCountdown > 0 ? 'En attente de plus de participants...' : 'La session va être annulée')
                 : machineCanPropose ? "Quelqu'un peut prendre le relais !"
                 : "En attendant, vous pouvez discuter entre vous !")
@@ -3936,6 +3918,7 @@ export const SalleVocalePage = () => {
           isTestGroup={isTestGroup}
           createurUid={createurUid}
           sessionCancelledRef={sessionCancelledRef}
+          groupeStatus={groupeStatus}
         />
       </LiveKitRoom>
     </div>
