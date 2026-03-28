@@ -161,7 +161,8 @@ function handleCountdownStart(state: VocalState, event: VocalEvent, ctx: VocalCo
           ],
         };
       }
-      return { state: { phase: 'COUNTDOWN_START', context: newCtx }, sideEffects: [] };
+      const newReason = !event.animateurPresent ? 'animateur_left' : 'below_minimum';
+      return { state: { phase: 'COUNTDOWN_START', context: { ...newCtx, suspensionReason: newReason } }, sideEffects: [] };
     }
 
     case 'COUNTDOWN_TICK':
@@ -374,8 +375,9 @@ function handleSuspended(state: VocalState, event: VocalEvent, ctx: VocalContext
           ],
         };
       }
-
-      return { state: { phase: 'SUSPENDED', context: newCtx }, sideEffects: [] };
+      
+      const newReason = !event.animateurPresent ? 'animateur_left' : 'below_minimum';
+      return { state: { phase: 'SUSPENDED', context: { ...newCtx, suspensionReason: newReason } }, sideEffects: [] };
     }
 
     case 'COUNTDOWN_TICK':

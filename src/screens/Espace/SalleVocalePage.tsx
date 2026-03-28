@@ -975,6 +975,7 @@ const RoomContent: React.FC<{
   groupeTheme?: string;
   dateVocal: Date;
   onLeave: () => void;
+  onCancelled?: () => void;
   animateurNotes?: AnimateurNotes | null;
   structureType: 'libre' | 'structuree';
   structure: StructureEtape[];
@@ -984,7 +985,7 @@ const RoomContent: React.FC<{
   sessionPrenom: string;
   isTestGroup: boolean;
   createurUid: string;
-}> = ({ isAnimateur, groupeId, groupeTitre, groupeTheme, dateVocal, onLeave, animateurNotes, structureType, structure, defaultDurationMin, onSessionProgress, onSessionEnded, sessionPrenom, isTestGroup, createurUid }) => {
+}> = ({ isAnimateur, groupeId, groupeTitre, groupeTheme, dateVocal, onLeave, onCancelled, animateurNotes, structureType, structure, defaultDurationMin, onSessionProgress, onSessionEnded, sessionPrenom, isTestGroup, createurUid }) => {
   useWakeLock(); // Keep screen on during vocal session
   const participants = useParticipants();
   const { localParticipant } = useLocalParticipant();
@@ -1129,9 +1130,10 @@ const RoomContent: React.FC<{
   // Navigate away when machine reaches terminal cancelled state
   useEffect(() => {
     if (machinePhase === 'SESSION_CANCELLED') {
-      onLeave();
+      if (onCancelled) onCancelled();
+      else onLeave();
     }
-  }, [machinePhase, onLeave]);
+  }, [machinePhase, onLeave, onCancelled]);
 
   // Toast when animateur changes (replacement happened)
   const prevAnimateurUidRef = useRef(firestoreSession?.currentAnimateurUid);
@@ -3895,6 +3897,7 @@ export const SalleVocalePage = () => {
           groupeTheme={groupeTheme}
           dateVocal={dateVocal}
           onLeave={handleLeave}
+          onCancelled={() => setStep('cancelled')}
           animateurNotes={animateurNotes}
           structureType={structureType}
           structure={structure}
