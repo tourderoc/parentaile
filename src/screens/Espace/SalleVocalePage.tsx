@@ -1162,10 +1162,14 @@ const RoomContent: React.FC<{
   const prevPhaseRef = useRef(0);
 
   // Handle session end by animateur — notify parent via custom event
+  // IMPORTANT: Do NOT fire if machine already cancelled (race condition guard)
   useEffect(() => {
     if (firestoreSession && !firestoreSession.sessionActive) {
-      onSessionEnded?.();
+      if (machinePhase !== 'SESSION_CANCELLED') {
+        onSessionEnded?.();
+      }
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [firestoreSession?.sessionActive]);
 
   // Mic policy based on current phase
@@ -3403,6 +3407,9 @@ export const SalleVocalePage = () => {
 
   const pointsAwardedRef = useRef(false);
   const voluntaryLeaveRef = useRef(false);
+  // Tracks forced cancellation (insufficient participants) — synchronous ref
+  // to prevent handleDisconnected from routing to reconnect screen
+  const sessionCancelledRef = useRef(false);
   const reconnectAttemptsRef = useRef(0);
   const sessionElapsedRef = useRef(0);
   const sessionTotalRef = useRef(0);
@@ -3481,6 +3488,13 @@ export const SalleVocalePage = () => {
   }, [groupeId, groupeTitre, groupeStatus]);
 
   const handleDisconnected = useCallback(() => {
+    // If the session was force-cancelled (insufficient participants),
+    // LiveKit will disconnect but we must NOT go to reconnect screen.
+    // The step is already set to 'cancelled' by onCancelled().
+    if (sessionCancelledRef.current) {
+      console.log('[SalleVocale] Deconnexion due a annulation — pas de reconnexion');
+      return;
+    }
     if (voluntaryLeaveRef.current) {
       // Depart volontaire → ecran de fin
       handleLeave();
@@ -3898,7 +3912,10 @@ export const SalleVocalePage = () => {
           groupeTheme={groupeTheme}
           dateVocal={dateVocal}
           onLeave={handleLeave}
-          onCancelled={() => setStep('cancelled')}
+          onCancelled={() => {
+            sessionCancelledRef.current = true;
+            setStep('cancelled');
+          }}
           animateurNotes={animateurNotes}
           structureType={structureType}
           structure={structure}
