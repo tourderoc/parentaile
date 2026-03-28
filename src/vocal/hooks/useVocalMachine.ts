@@ -185,9 +185,19 @@ export function useVocalMachine({
             await resumeSession(groupeId);
             break;
 
-          case 'WRITE_FIRESTORE_CANCELLED':
+          case 'WRITE_FIRESTORE_CANCELLED': {
+            // OPTIMIZATION: If animator is present, only they should perform the cancellation.
+            // If animator is absent, everyone tries, but the transaction in the service will ensure idempotency.
+            const isAnyAnimPresent = stateRef.current.context.animateurPresent;
+            const amIAnim = stateRef.current.context.currentAnimateurUid === localUid;
+            
+            if (isAnyAnimPresent && !amIAnim) {
+              console.log("[VOCAL_MACHINE] Skipping redundancy: animator present, skipping cancelGroup call.");
+              break;
+            }
             await cancelGroup(groupeId, effect.reason);
             break;
+          }
 
           case 'WRITE_FIRESTORE_ENDED':
             await endSession(groupeId);

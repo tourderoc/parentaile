@@ -734,29 +734,34 @@ export async function getUserBadge(uid: string): Promise<BadgeLevel> {
  */
 export async function cancelGroup(groupeId: string, reason: string): Promise<void> {
   const ref = doc(db, 'groupes', groupeId);
-  const snap = await getDoc(ref);
-  if (!snap.exists()) return;
 
-  const data = snap.data();
-  if (data.status === 'cancelled' || data.status === 'completed') return;
+  await runTransaction(db, async (transaction) => {
+    const snap = await transaction.get(ref);
+    if (!snap.exists()) return;
 
-  await updateDoc(ref, {
-    status: 'cancelled',
-    'sessionState.sessionActive': false,
-    cancelReason: reason,
+    const data = snap.data();
+    // Idempotency: skip if already terminal
+    if (data.status === 'cancelled' || data.status === 'completed') return;
+
+    // Execute update atomically
+    transaction.update(ref, {
+      status: 'cancelled',
+      'sessionState.sessionActive': false,
+      cancelReason: reason,
+    });
+
+    // Notify all participants (only once, because only this transaction will succeed in this block)
+    const participants = data.participants || [];
+    for (const p of participants) {
+      sendParentNotification(
+        p.uid,
+        'group_cancelled',
+        'Groupe annulé',
+        `Le groupe "${data.titre}" n'aura malheureusement pas lieu (${reason}).`,
+        { groupeId, groupeTitre: data.titre }
+      ).catch(() => {});
+    }
   });
-
-  // Notifier tous les participants
-  const participants = data.participants || [];
-  for (const p of participants) {
-    sendParentNotification(
-      p.uid,
-      'group_cancelled',
-      'Groupe annulé',
-      `Le groupe "${data.titre}" n'aura malheureusement pas lieu (${reason}).`,
-      { groupeId, groupeTitre: data.titre }
-    ).catch(() => {});
-  }
 }
 
 /**
