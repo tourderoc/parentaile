@@ -3323,7 +3323,7 @@ export const SalleVocalePage = () => {
 
     init();
 
-    // Real-time listener for participants
+    // Real-time listener for participants AND status
     const unsub = onSnapshot(doc(db, 'groupes', groupeId), (snap) => {
       if (snap.exists()) {
         const data = snap.data();
@@ -3335,6 +3335,7 @@ export const SalleVocalePage = () => {
             dateInscription: p.dateInscription?.toDate?.() || new Date(),
           }))
         );
+        setGroupeStatus(data.status || 'scheduled');
       }
     });
 
@@ -3416,10 +3417,11 @@ export const SalleVocalePage = () => {
   const handleSessionEnded = useCallback(() => {
     voluntaryLeaveRef.current = true;
 
-    // If we're already on the cancellation screen, don't override it
-    // (race condition: sessionActive listener fires before status listener updates groupeStatus)
     setStep(prev => {
+      // If we're already on the cancellation screen, don't override it
       if (prev === 'cancelled') return prev;
+
+      if (groupeStatus === 'cancelled') return 'cancelled';
 
       const elapsed = sessionElapsedRef.current;
       const total = sessionTotalRef.current;
@@ -3439,7 +3441,6 @@ export const SalleVocalePage = () => {
         }
       }
 
-      if (groupeStatus === 'cancelled') return 'cancelled';
       return 'end';
     });
   }, [groupeId, groupeTitre, groupeStatus]);
