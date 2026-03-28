@@ -1110,7 +1110,10 @@ const RoomContent: React.FC<{
     if (hourReachedRef.current) return;
     if (isTestGroup) {
       hourReachedRef.current = true;
-      machineDispatch({ type: 'HOUR_REACHED' });
+      // Defer by one tick so CONDITIONS_CHANGED (always dispatched on first render)
+      // updates the machine context BEFORE HOUR_REACHED evaluates it.
+      // Without this, HOUR_REACHED reads participantCount=0 and animateurPresent=false.
+      setTimeout(() => machineDispatch({ type: 'HOUR_REACHED' }), 0);
       return;
     }
     const now = Date.now();

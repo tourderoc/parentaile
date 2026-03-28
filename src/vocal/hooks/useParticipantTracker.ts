@@ -112,8 +112,11 @@ export function useParticipantTracker({
   }, [liveKitParticipants, localUid, handleConfirmedExit, currentIdentities]);
 
   // ---- Dispatch CONDITIONS_CHANGED on count/animateur changes ----
-  const prevCountRef = useRef(participantCount);
-  const prevAnimRef = useRef(animateurPresent);
+  // IMPORTANT: Use sentinel values (-1 / null) so the first render ALWAYS dispatches,
+  // guaranteeing the machine has accurate participantCount + animateurPresent
+  // BEFORE the HOUR_REACHED event fires (which uses these values to choose the reason).
+  const prevCountRef = useRef(-1);
+  const prevAnimRef = useRef<boolean | null>(null);
 
   useEffect(() => {
     if (participantCount !== prevCountRef.current || animateurPresent !== prevAnimRef.current) {
