@@ -985,7 +985,8 @@ const RoomContent: React.FC<{
   sessionPrenom: string;
   isTestGroup: boolean;
   createurUid: string;
-}> = ({ isAnimateur, groupeId, groupeTitre, groupeTheme, dateVocal, onLeave, onCancelled, animateurNotes, structureType, structure, defaultDurationMin, onSessionProgress, onSessionEnded, sessionPrenom, isTestGroup, createurUid }) => {
+  sessionCancelledRef: React.RefObject<boolean>;
+}> = ({ isAnimateur, groupeId, groupeTitre, groupeTheme, dateVocal, onLeave, onCancelled, animateurNotes, structureType, structure, defaultDurationMin, onSessionProgress, onSessionEnded, sessionPrenom, isTestGroup, createurUid, sessionCancelledRef }) => {
   useWakeLock(); // Keep screen on during vocal session
   const participants = useParticipants();
   const { localParticipant } = useLocalParticipant();
@@ -1168,12 +1169,13 @@ const RoomContent: React.FC<{
   // IMPORTANT: Do NOT fire if machine already cancelled (race condition guard)
   useEffect(() => {
     if (firestoreSession && !firestoreSession.sessionActive) {
-      if (machinePhase !== 'SESSION_CANCELLED') {
+      const isCancelled = machinePhase === 'SESSION_CANCELLED' || sessionCancelledRef.current;
+      if (!isCancelled) {
         onSessionEnded?.();
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [firestoreSession?.sessionActive]);
+  }, [firestoreSession?.sessionActive, machinePhase]);
 
   // Mic policy based on current phase
   const micPolicy: MicPolicy = useMemo(() => {
@@ -1542,13 +1544,16 @@ const RoomContent: React.FC<{
           const belowMin = machineReason === 'below_minimum';
           return (
             <AnimateurWaitOverlay
-              title={belowMin ? 'Pas assez de participants'
+              title={isAnimateur ? 'En attente des autres participants' 
+                : belowMin ? 'Pas assez de participants'
                 : machineCanPropose ? "L'animateur n'est pas là"
                 : "En attente de l'animateur"}
-              subtitle={belowMin
-                ? (machineCountdown > 0 ? 'En attente de plus de participants...' : 'La session va être annulée')
+              subtitle={isAnimateur 
+                ? (machineCountdown > 0 ? 'Démarrage dès qu\'il y a assez de monde...' : 'La session va être annulée')
+                : (belowMin ? (machineCountdown > 0 ? 'En attente de plus de participants...' : 'La session va être annulée')
                 : machineCanPropose ? "Quelqu'un peut prendre le relais !"
-                : "En attendant, vous pouvez discuter entre vous !"}
+                : "En attendant, vous pouvez discuter entre vous !")
+              }
               countdownSec={machineCountdown}
               variant={belowMin ? 'danger' : machineCanPropose ? 'warning' : 'info'}
               action={machineCanPropose ? {
@@ -3431,7 +3436,8 @@ export const SalleVocalePage = () => {
       // If we're already on the cancellation screen, don't override it
       if (prev === 'cancelled') return prev;
 
-      if (groupeStatus === 'cancelled') return 'cancelled';
+      // Check ref directly as a backup to state
+      if (sessionCancelledRef.current || groupeStatus === 'cancelled') return 'cancelled';
 
       const elapsed = sessionElapsedRef.current;
       const total = sessionTotalRef.current;
@@ -3462,7 +3468,8 @@ export const SalleVocalePage = () => {
       // If already on cancellation screen, don't override
       if (prev === 'cancelled') return prev;
 
-      if (groupeStatus === 'cancelled') return 'cancelled';
+      // Check ref directly as a backup to state
+      if (sessionCancelledRef.current || groupeStatus === 'cancelled') return 'cancelled';
 
       const elapsed = sessionElapsedRef.current;
       const total = sessionTotalRef.current;
@@ -3928,6 +3935,7 @@ export const SalleVocalePage = () => {
           sessionPrenom={sessionPrenom}
           isTestGroup={isTestGroup}
           createurUid={createurUid}
+          sessionCancelledRef={sessionCancelledRef}
         />
       </LiveKitRoom>
     </div>
