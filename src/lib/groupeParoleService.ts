@@ -911,7 +911,7 @@ export async function proposeAsAnimateur(
           status: 'in_progress',
         });
       } else {
-        // Session existante — mise a jour atomique
+        // Session existante — mise a jour atomique préservant la progression
         transaction.update(ref, {
           'sessionState.currentAnimateurUid': uid,
           'sessionState.currentAnimateurPseudo': pseudo,
@@ -920,6 +920,9 @@ export async function proposeAsAnimateur(
           'sessionState.suspendedAt': deleteField(),
           'sessionState.suspensionReason': deleteField(),
           'sessionState.sessionActive': true,
+          // IMPORTANT: we do NOT touch currentPhaseIndex or phaseStartedAt here
+          // unless phaseStartedAt needs to be refreshed to reset the local phase timer
+          'sessionState.phaseStartedAt': serverTimestamp(), 
         });
       }
     });

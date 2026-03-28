@@ -213,7 +213,8 @@ function handleCountdownStart(state: VocalState, event: VocalEvent, ctx: VocalCo
         },
         sideEffects: [
           { type: 'CANCEL_TIMER', slot: 'countdown' },
-          { type: 'WRITE_FIRESTORE_SESSION_ACTIVE' },
+          // Note: the write to Firestore is performed by the participant who clicked,
+          // so we don't trigger it as a side effect for everyone here.
         ],
       };
 
@@ -272,18 +273,28 @@ function handleSessionActive(state: VocalState, event: VocalEvent, ctx: VocalCon
         ],
       };
 
-    case 'FIRESTORE_SYNC':
+    case 'FIRESTORE_SYNC': {
+      const newCtx = {
+        ...ctx,
+        suspensionCount: event.suspensionCount,
+        currentAnimateurUid: event.currentAnimateurUid,
+      };
+
+      // Si on était en attente (COUNTDOWN_START ou SUSPENDED)
+      // et qu'un nouvel animateur est là (et présent LiveKit),
+      // on peut repasser en ACTIVE si les conditions sont réunies.
+      if (!ctx.animateurPresent && canStartSession(ctx.participantCount, true)) {
+         // L'UI va re-évaluer l'animateurPresent via le tracker qui dispatchera CONDITIONS_CHANGED
+      }
+
       return {
         state: {
-          phase: 'SESSION_ACTIVE',
-          context: {
-            ...ctx,
-            suspensionCount: event.suspensionCount,
-            currentAnimateurUid: event.currentAnimateurUid,
-          },
+          phase: state.phase, // Garder la phase actuelle, laisser CONDITIONS_CHANGED gérer la suite si besoin
+          context: newCtx,
         },
         sideEffects: [],
       };
+    }
 
     default:
       return same(state);
