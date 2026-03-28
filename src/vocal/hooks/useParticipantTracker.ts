@@ -40,17 +40,23 @@ export function useParticipantTracker({
   const dispatchRef = useRef(dispatch);
   dispatchRef.current = dispatch;
 
-  // Derive current identities set from LiveKit
-  const currentIdentities = new Set(liveKitParticipants.map(p => p.identity));
+  // Filter out the local participant to get only remote ones
+  const remoteParticipants = liveKitParticipants.filter(p => !p.isLocal);
 
-  // Total count includes local user
-  const participantCount = 1 + liveKitParticipants.length;
+  // Derive current identities set of remote participants, ensure valid strings
+  const currentIdentities = new Set(
+    remoteParticipants.map(p => p.identity).filter(Boolean) as string[]
+  );
+
+  // Total count includes local user (1) + remote participants
+  const participantCount = 1 + remoteParticipants.length;
   const animateurPresent =
     localUid === effectiveAnimateurUid ||
     currentIdentities.has(effectiveAnimateurUid);
 
   // ---- Handle confirmed exit: increment Firestore + check ban ----
   const handleConfirmedExit = useCallback(async (uid: string) => {
+    if (!uid) return;
     console.log(`[PARTICIPANT_TRACKER] Confirmed exit: ${uid}`);
     try {
       const exitRef = doc(db, 'groupes', groupeId, 'participantExits', uid);
