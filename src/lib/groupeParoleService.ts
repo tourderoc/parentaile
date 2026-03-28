@@ -734,6 +734,9 @@ export async function getUserBadge(uid: string): Promise<BadgeLevel> {
  */
 export async function cancelGroup(groupeId: string, reason: string): Promise<void> {
   const ref = doc(db, 'groupes', groupeId);
+  let shouldNotify = false;
+  let participantsToNotify: any[] = [];
+  let groupTitre = '';
 
   await runTransaction(db, async (transaction) => {
     const snap = await transaction.get(ref);
@@ -750,18 +753,31 @@ export async function cancelGroup(groupeId: string, reason: string): Promise<voi
       cancelReason: reason,
     });
 
-    // Notify all participants (only once, because only this transaction will succeed in this block)
-    const participants = data.participants || [];
-    for (const p of participants) {
+    // Capture context for post-transaction notifications
+    shouldNotify = true;
+    participantsToNotify = data.participants || [];
+    groupTitre = data.titre || 'Groupe de parole';
+  });
+
+  // Send notifications only AFTER the transaction successfully commits
+  if (shouldNotify) {
+    for (const p of participantsToNotify) {
+      if (!p.uid) continue;
+
+      // Deterministic ID: ensures that even with simultaneous triggers, 
+      // only ONE notification document is created/updated per participant.
+      const notifId = `cancel_${groupeId}_${p.uid}`;
+
       sendParentNotification(
         p.uid,
         'group_cancelled',
         'Groupe annulé',
-        `Le groupe "${data.titre}" n'aura malheureusement pas lieu (${reason}).`,
-        { groupeId, groupeTitre: data.titre }
+        `Le groupe "${groupTitre}" n'aura malheureusement pas lieu (${reason}).`,
+        { groupeId, groupeTitre: groupTitre },
+        notifId
       ).catch(() => {});
     }
-  });
+  }
 }
 
 /**

@@ -9,6 +9,7 @@ import {
   updateDoc,
   deleteDoc,
   doc,
+  setDoc,
   serverTimestamp,
   writeBatch,
   getDocs,
@@ -55,10 +56,11 @@ export async function sendParentNotification(
   type: ParentNotifType,
   title: string,
   body: string,
-  context?: { groupeId?: string; groupeTitre?: string }
+  context?: { groupeId?: string; groupeTitre?: string },
+  notifId?: string
 ): Promise<void> {
   try {
-    await addDoc(collection(db, 'parentNotifications'), {
+    const data = {
       type,
       recipientUid,
       title,
@@ -67,7 +69,13 @@ export async function sendParentNotification(
       createdAt: serverTimestamp(),
       ...(context?.groupeId ? { groupeId: context.groupeId } : {}),
       ...(context?.groupeTitre ? { groupeTitre: context.groupeTitre } : {}),
-    });
+    };
+
+    if (notifId) {
+      await setDoc(doc(db, 'parentNotifications', notifId), data);
+    } else {
+      await addDoc(collection(db, 'parentNotifications'), data);
+    }
   } catch (err) {
     console.error('Erreur envoi notification parent:', err);
   }
