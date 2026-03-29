@@ -920,11 +920,11 @@ function useWakeLock() {
 
     const requestLock = async () => {
       try {
-        if ('wakeLock' in navigator && active) {
+        if (typeof navigator !== 'undefined' && 'wakeLock' in navigator && active) {
           wakeLockRef.current = await navigator.wakeLock.request('screen');
         }
-      } catch {
-        // Wake lock denied or not supported — silently ignore
+      } catch (err) {
+        console.warn('[WakeLock] Request failed:', err);
       }
     };
 
@@ -2229,8 +2229,9 @@ const WaitingRoom: React.FC<{
   const animateurPresent = participants.some((p) => p.uid === createurUid);
 
   return (
-    <div
-      className="h-screen flex flex-col items-center px-6 pt-12 pb-8 overflow-y-auto"
+    <div 
+      id="waiting-room-container"
+      className="min-h-[100dvh] flex flex-col items-center px-6 pt-12 pb-8 overflow-y-auto"
       style={{
         background: 'radial-gradient(ellipse at 50% 30%, #2a3060 0%, #1a1f3a 50%, #12152a 100%)',
       }}
@@ -3189,11 +3190,6 @@ export const SalleVocalePage = () => {
     if (!groupeId) return;
 
     const unsub = onSnapshot(doc(db, 'groupes', groupeId), async (snap) => {
-      if (!snap.exists()) {
-        setError('Ce groupe n\'existe plus.');
-        setStep('loading');
-        return;
-      }
 
       const data = snap.data();
       
@@ -3529,7 +3525,7 @@ export const SalleVocalePage = () => {
   // ===== Loading =====
   if (step === 'loading') {
     return (
-      <div className="h-screen bg-[#FFFBF0] flex flex-col items-center justify-center gap-4">
+      <div className="min-h-[100dvh] bg-[#FFFBF0] flex flex-col items-center justify-center gap-4">
         <Loader2 className="w-12 h-12 animate-spin text-orange-400" />
         <p className="text-sm font-bold text-gray-400">Chargement...</p>
       </div>
