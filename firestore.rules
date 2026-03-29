@@ -36,13 +36,15 @@ service cloud.firestore {
       allow read: if true;
       allow create: if request.auth != null;
       allow update: if request.auth != null && (
-        // Autoriser si on ne touche PAS au sessionState (ex: inscription/désinscription)
-        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['sessionState']) ||
-        // Sinon, appliquer les règles de protection de l'animateur (plus sûr avec get())
-        resource.data.get('sessionState', null) == null || 
-        !resource.data.sessionState.get('replacementUsed', false) || 
-        resource.data.sessionState.get('currentAnimateurUid', '') == request.auth.uid ||
-        request.resource.data.sessionState.get('currentAnimateurUid', '') == request.auth.uid
+        // 1. Autoriser les mises à jour de type inscription/désinscription (ne touchent pas aux champs protégés)
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['sessionState', 'handRaised', 'speakingName', 'currentTheme', 'structure']) ||
+        // 2. Autoriser si l'utilisateur est l'animateur ACTUEL enregistré (Créateur ou Remplaçant)
+        resource.data.get(['sessionState', 'currentAnimateurUid'], resource.data.createurUid) == request.auth.uid ||
+        // 3. Autoriser la prise de relais (Takeover) : l'utilisateur se désigne comme nouvel animateur
+        (request.resource.data.sessionState.currentAnimateurUid == request.auth.uid && (
+           resource.data.get('sessionState', null) == null || 
+           resource.data.sessionState.get('suspended', false) == true
+        ))
       );
       allow delete: if request.auth != null && request.auth.uid == resource.data.createurUid;
 

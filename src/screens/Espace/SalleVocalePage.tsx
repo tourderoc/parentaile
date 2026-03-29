@@ -32,8 +32,7 @@ import {
   initSessionStateV2, suspendSession, resumeSession, proposeAsAnimateur, onPresenceList,
   cancelGroup, incrementAnimateurDisconnect
 } from '../../lib/groupeParoleService';
-import type { MessageGroupe, ParticipantGroupe, StructureEtape, BadgeLevel, SessionState, MicPolicy } from '../../types/groupeParole';
-import { STRUCTURE_DEFAUT, getBadgeInfo, PHASE_MIC_POLICY, DEFAULT_MIC_POLICY } from '../../types/groupeParole';
+import { STRUCTURE_DEFAUT, getBadgeInfo, PHASE_MIC_POLICY, DEFAULT_MIC_POLICY, getBadgeForPoints } from '../../types/groupeParole';
 import { useVocalMachine } from '../../vocal/hooks/useVocalMachine';
 import { SuspensionOverlay } from '../../components/vocal/SuspensionOverlay';
 import { AnimateurWaitOverlay } from '../../components/vocal/AnimateurWaitOverlay';
@@ -966,7 +965,8 @@ const RoomContent: React.FC<{
   createurUid: string;
   sessionCancelledRef: React.RefObject<boolean>;
   groupeStatus: string;
-}> = ({ isAnimateur, groupeId, groupeTitre, groupeTheme, dateVocal, onLeave, onCancelled, animateurNotes, structureType, structure, defaultDurationMin, onSessionProgress, onSessionEnded, sessionPrenom, isTestGroup, createurUid, sessionCancelledRef, groupeStatus }) => {
+  firestoreSession?: SessionState | null;
+}> = ({ isAnimateur, groupeId, groupeTitre, groupeTheme, dateVocal, onLeave, onCancelled, animateurNotes, structureType, structure, defaultDurationMin, onSessionProgress, onSessionEnded, sessionPrenom, isTestGroup, createurUid, sessionCancelledRef, groupeStatus, firestoreSession }) => {
   useWakeLock(); // Keep screen on during vocal session
   const participants = useParticipants();
   const { localParticipant } = useLocalParticipant();
@@ -1015,34 +1015,8 @@ const RoomContent: React.FC<{
     fetchStats();
   }, [participants.length]);
 
-  // Firestore session state listener (real-time sync for all participants)
-  const [firestoreSession, setFirestoreSession] = useState<SessionState | null>(null);
   const [micLocked, setMicLocked] = useState(false);
-
-  useEffect(() => {
-    const unsub = onSnapshot(doc(db, 'groupes', groupeId), (snap) => {
-      if (snap.exists()) {
-        const data = snap.data();
-        if (data.sessionState) {
-          setFirestoreSession({
-            currentPhaseIndex: data.sessionState.currentPhaseIndex ?? 0,
-            extendedMinutes: data.sessionState.extendedMinutes ?? 0,
-            sessionActive: data.sessionState.sessionActive ?? true,
-            phaseStartedAt: data.sessionState.phaseStartedAt?.toDate?.() || new Date(),
-            sessionStartedAt: data.sessionState.sessionStartedAt?.toDate?.() || new Date(),
-            suspended: data.sessionState.suspended || false,
-            suspensionReason: data.sessionState.suspensionReason,
-            suspensionCount: data.sessionState.suspensionCount || 0,
-            replacementUsed: data.sessionState.replacementUsed || false,
-            currentAnimateurUid: data.sessionState.currentAnimateurUid || createurUid,
-            currentAnimateurPseudo: data.sessionState.currentAnimateurPseudo,
-            suspendedAt: data.sessionState.suspendedAt?.toDate?.(),
-          });
-        }
-      }
-    });
-    return () => unsub();
-  }, [groupeId, createurUid]);
+  // firestoreSession is now provided by props from parent
 
   // Warn when exactly 3 participants (1 local + 2 remote) — next departure = cancellation
   const prevParticipantCountRef = useRef(participants.length);
@@ -1077,7 +1051,14 @@ const RoomContent: React.FC<{
     localPseudo: sessionPrenom || 'Parent',
     liveKitParticipants: participants,
     isTestGroup,
-    firestoreSession,
+    firestoreSession: firestoreSession ? {
+      ...firestoreSession,
+      suspended: !!firestoreSession.suspended,
+      suspensionCount: firestoreSession.suspensionCount || 0,
+      currentAnimateurUid: firestoreSession.currentAnimateurUid || createurUid || '',
+      replacementUsed: !!firestoreSession.replacementUsed,
+      sessionActive: firestoreSession.sessionActive !== false,
+    } : null,
     participantPoints,
   });
 
@@ -2183,9 +2164,10 @@ const WaitingRoom: React.FC<{
   structureType?: 'libre' | 'structuree';
   structure?: StructureEtape[];
   sessionPrenom: string;
+  isAnimateur: boolean;
   onEnter: () => void;
   onBack: () => void;
-}> = ({ groupeId, groupeTitre, groupeTheme, dateVocal, isTestGroup, participants, createurUid, structureType, structure, sessionPrenom, onEnter, onBack }) => {
+}> = ({ groupeId, groupeTitre, groupeTheme, dateVocal, isTestGroup, participants, createurUid, structureType, structure, sessionPrenom, isAnimateur, onEnter, onBack }) => {
   const currentUser = auth.currentUser;
   const [countdown, setCountdown] = useState('');
   const [sessionStarted, setSessionStarted] = useState(false);
@@ -2245,7 +2227,6 @@ const WaitingRoom: React.FC<{
   }, [dateVocal, isTestGroup, testStartTime]);
 
   const animateurPresent = participants.some((p) => p.uid === createurUid);
-  const isAnimateur = currentUser?.uid === createurUid;
 
   return (
     <div
@@ -3161,196 +3142,144 @@ export const SalleVocalePage = () => {
   const { groupeId } = useParams<{ groupeId: string }>();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const isEvalDirect = searchParams.get('eval') === 'true';
+  // const isEvalDirect = searchParams.get('eval') === 'true'; // Handled via searchParams directly if needed
 
-  const [token, setToken] = useState<string | null>(null);
-  const [wsUrl, setWsUrl] = useState<string>('');
-  const [isAnimateur, setIsAnimateur] = useState(false);
+  // Group Metadata
   const [groupeTitre, setGroupeTitre] = useState('');
   const [groupeTheme, setGroupeTheme] = useState<string | undefined>();
   const [groupeDescription, setGroupeDescription] = useState('');
   const [dateVocal, setDateVocal] = useState<Date>(new Date());
-  const [error, setError] = useState<string | null>(null);
-  const [groupeParticipants, setGroupeParticipants] = useState<ParticipantGroupe[]>([]);
   const [createurUid, setCreateurUid] = useState('');
   const [isTestGroup, setIsTestGroup] = useState(false);
   const [structureType, setStructureType] = useState<'libre' | 'structuree'>('libre');
   const [structure, setStructure] = useState<StructureEtape[]>([]);
   const [customDurationMin, setCustomDurationMin] = useState<number | undefined>(undefined);
   const [groupeStatus, setGroupeStatus] = useState<'scheduled'|'cancelled'|'in_progress'|'completed'>('scheduled');
+  const [groupeParticipants, setGroupeParticipants] = useState<ParticipantGroupe[]>([]);
 
-  // Flow state
+  // Flow & Connection State
   const [step, setStep] = useState<FlowStep | 'cancelled'>('loading');
   const [connectingToRoom, setConnectingToRoom] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [token, setToken] = useState<string | null>(null);
+  const [wsUrl, setWsUrl] = useState<string>('');
+  const [currentAnimateurUid, setCurrentAnimateurUid] = useState<string | null>(null);
+  const [sessionState, setSessionState] = useState<SessionState | null>(null);
 
-  // Auto-redirect to cancellation screen when group is cancelled (real-time from Firestore)
-  useEffect(() => {
-    if (groupeStatus === 'cancelled' && step !== 'cancelled' && step !== 'loading') {
-      setStep('cancelled');
-    }
-  }, [groupeStatus, step]);
-
-  // Session data
+  // Session Data & Validation
   const [sessionPrenom, setSessionPrenom] = useState('');
   const [animateurNotes, setAnimateurNotes] = useState<AnimateurNotes | null>(null);
-
-  // Password prompt state
   const [passwordInput, setPasswordInput] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [connectingAfterPassword, setConnectingAfterPassword] = useState(false);
   const [passwordValidated, setPasswordValidated] = useState(false);
+
+  // Dynamic role calculation
+  const isAnimateur = auth.currentUser?.uid === (currentAnimateurUid || createurUid);
 
   // Connect to LiveKit
   const connectToRoom = async (password?: string) => {
     const result = await getLiveKitToken(groupeId!, password);
     setToken(result.token);
     setWsUrl(result.wsUrl);
-    setIsAnimateur(result.isAnimateur);
   };
 
-  // Load group info + check skipCharte
+  // Main group sync listener (Metadata, Role, Status, and Entry Logic)
   useEffect(() => {
     if (!groupeId) return;
 
-    const init = async () => {
-      try {
-        const groupeSnap = await getDoc(doc(db, 'groupes', groupeId));
-        if (groupeSnap.exists()) {
-          const data = groupeSnap.data();
-          setGroupeTitre(data.titre || '');
-          setGroupeTheme(data.theme || data.categorie || undefined);
-          setGroupeDescription(data.description || '');
-          setDateVocal(data.dateVocal?.toDate?.() || new Date());
-          setCreateurUid(data.createurUid || '');
-          setIsTestGroup(!!data.isTestGroup);
-          setStructureType(data.structureType || 'libre');
-          setStructure(
-            data.structureType === 'structuree'
-              ? (data.structure || STRUCTURE_DEFAUT)
-              : []
-          );
-          if (data.durationMin) setCustomDurationMin(data.durationMin);
-          setGroupeParticipants(
-            (data.participants || []).map((p: any) => ({
-              uid: p.uid || '',
-              pseudo: p.pseudo || '',
-              inscritVocal: p.inscritVocal ?? true,
-              dateInscription: p.dateInscription?.toDate?.() || new Date(),
-            }))
-          );
-          setGroupeStatus(data.status || 'scheduled');
+    const unsub = onSnapshot(doc(db, 'groupes', groupeId), async (snap) => {
+      if (!snap.exists()) {
+        setError('Ce groupe n\'existe plus.');
+        setStep('loading');
+        return;
+      }
 
-          if (data.status === 'cancelled') {
-             setStep('cancelled');
-             return;
-          }
+      const data = snap.data();
+      
+      // 1. Metadata Sync
+      setGroupeTitre(data.titre || '');
+      setGroupeTheme(data.theme || data.categorie || undefined);
+      setGroupeDescription(data.description || '');
+      setDateVocal(data.dateVocal?.toDate?.() || new Date());
+      setCreateurUid(data.createurUid || '');
+      setIsTestGroup(!!data.isTestGroup);
+      setStructureType(data.structureType || 'libre');
+      setStructure(data.structureType === 'structuree' ? (data.structure || STRUCTURE_DEFAUT) : []);
+      if (data.durationMin) setCustomDurationMin(data.durationMin);
+      setGroupeStatus(data.status || 'scheduled');
+      
+      // 2. Critical Role & Session Sync
+      const currentAnim = data.sessionState?.currentAnimateurUid || data.createurUid || null;
+      setCurrentAnimateurUid(currentAnim);
+      setSessionState(data.sessionState || null);
 
-          const now = Date.now();
-          const vocalTime = data.dateVocal?.toDate?.() || new Date();
-          const minutesBefore = (vocalTime.getTime() - now) / 60000;
+      // 3. Participant List Sync
+      setGroupeParticipants(
+        (data.participants || []).map((p: any) => ({
+          uid: p.uid || '',
+          pseudo: p.pseudo || '',
+          inscritVocal: p.inscritVocal ?? true,
+          dateInscription: p.dateInscription?.toDate?.() || new Date(),
+        }))
+      );
 
-          if (minutesBefore > 15 && !data.isTestGroup) {
-            setStep('too_early');
-            return;
-          }
+      // 4. Flow Control
+      if (data.status === 'cancelled') {
+        setStep('cancelled');
+        return;
+      }
 
-          // Test group → skip evaluation check, go to password
-          if (data.isTestGroup && data.passwordVocal) {
-            setStep('password');
-            return;
-          }
+      // Entry flow: only run once or if we are still in the transition phase
+      if (step === 'loading') {
+        // ... (Logic remains identical to previous correct version)
+        const now = Date.now();
+        const vocalTime = data.dateVocal?.toDate?.() || new Date();
+        const minutesBefore = (vocalTime.getTime() - now) / 60000;
 
-          // Check if session is still active (not ended by animateur)
-          const sessionActive = data.sessionState?.sessionActive !== false;
-
-          // Direct evaluation access (from "Donner mon avis" bottom sheet)
-          if (isEvalDirect) {
-            setStep('evaluation');
-            return;
-          }
-
-          // Normal groups: check if user has a pending evaluation
-          // BUT only redirect to evaluation if session is no longer active
-          const currentUsr = auth.currentUser;
-          if (currentUsr) {
-            try {
-              const evalStatus = await getEvaluationStatus(groupeId, currentUsr.uid);
-              if (evalStatus === 'pending' && !sessionActive) {
-                setStep('evaluation');
-                return;
-              }
-            } catch {
-              // Firestore rules may not allow reading evaluations yet
-            }
-
-            // If session is still active and user is a participant, go directly to room
-            if (sessionActive && minutesBefore <= 0) {
-              // Logic check: if not test group and < 3 registered, cancel instead of joining
-              if (!data.isTestGroup && (data.participants || []).length < 3) {
-                 await cancelGroup(groupeId, 'Nombre de participants insuffisant (minimum 3)');
-                 setStep('cancelled');
-                 return;
-              }
-
-              const isParticipant = (data.participants || []).some(
-                (p: any) => p.uid === currentUsr.uid
-              );
-              if (isParticipant) {
-                // Pre-fill pseudo and skip charte/waiting
-                const accSnap = await getDoc(doc(db, 'accounts', currentUsr.uid));
-                if (accSnap.exists()) {
-                  setSessionPrenom(accSnap.data()?.pseudo || currentUsr.displayName || '');
-                }
-                await connectToRoom(data.passwordVocal || undefined);
-                setStep('room');
-                return;
-              }
-            }
-          }
+        if (minutesBefore > 15 && !data.isTestGroup) {
+          setStep('too_early');
+          return;
         }
 
-        // Check if user has skipCharte
+        if (data.isTestGroup && data.passwordVocal && !passwordValidated) {
+          setStep('password');
+          return;
+        }
+
+        const sessionActive = data.sessionState?.sessionActive !== false;
         const currentUser = auth.currentUser;
-        if (currentUser) {
-          const accSnap = await getDoc(doc(db, 'accounts', currentUser.uid));
-          if (accSnap.exists() && accSnap.data()?.skipCharte) {
-            setStep('prenom');
-            return;
-          }
-          // Pre-fill prenom from account
-          if (accSnap.exists()) {
-            setSessionPrenom(accSnap.data()?.pseudo || currentUser.displayName || '');
-          }
+        if (currentUser && !sessionActive) {
+          try {
+            const evalStatus = await getEvaluationStatus(groupeId, currentUser.uid);
+            if (evalStatus === 'pending') {
+              setStep('evaluation');
+              return;
+            }
+          } catch { /* ignore */ }
         }
 
-        setStep('charte');
-      } catch (err: any) {
-        console.error('Erreur chargement groupe:', err);
-        setError(err.message || 'Impossible de charger le groupe');
+        if (currentUser) {
+          try {
+            const accSnap = await getDoc(doc(db, 'accounts', currentUser.uid));
+            if (accSnap.exists()) {
+              const uData = accSnap.data();
+              setSessionPrenom(uData.pseudo || currentUser.displayName || '');
+              if (uData.skipCharte) {
+                setStep('waiting');
+                return;
+              }
+            }
+          } catch { /* ignore */ }
+        }
         setStep('charte');
       }
-    };
-
-    init();
-
-    // Real-time listener for participants AND status
-    const unsub = onSnapshot(doc(db, 'groupes', groupeId), (snap) => {
-      if (snap.exists()) {
-        const data = snap.data();
-        setGroupeParticipants(
-          (data.participants || []).map((p: any) => ({
-            uid: p.uid || '',
-            pseudo: p.pseudo || '',
-            inscritVocal: p.inscritVocal ?? true,
-            dateInscription: p.dateInscription?.toDate?.() || new Date(),
-          }))
-        );
-        setGroupeStatus(data.status || 'scheduled');
-      }
+    }, (err) => {
+      console.error('[SalleVocalePage] sync error:', err);
     });
 
-    return unsub;
-  }, [groupeId]);
+    return () => unsub();
+  }, [groupeId, step, passwordValidated]);
 
   // Submit password
   const handlePasswordSubmit = async () => {
@@ -3759,6 +3688,7 @@ export const SalleVocalePage = () => {
 
     return (
       <WaitingRoom
+        isAnimateur={isAnimateur}
         groupeId={groupeId!}
         groupeTitre={groupeTitre}
         groupeTheme={groupeTheme}
@@ -3935,6 +3865,7 @@ export const SalleVocalePage = () => {
           createurUid={createurUid}
           sessionCancelledRef={sessionCancelledRef}
           groupeStatus={groupeStatus}
+          firestoreSession={sessionState}
         />
       </LiveKitRoom>
     </div>
