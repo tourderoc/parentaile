@@ -50,11 +50,12 @@ service cloud.firestore {
         // Note: Cela inclut l'initialisation de la session (status in_progress)
         (
           request.resource.data.sessionState.currentAnimateurUid == request.auth.uid && 
-          resource.data.participants.hasAny([{'uid': request.auth.uid}]) &&
           (
              resource.data.get('sessionState', null) == null || 
              resource.data.sessionState.get('suspended', false) == true ||
-             resource.data.status == 'scheduled'
+             resource.data.status == 'scheduled' ||
+             // Pour les sessions en cours, on autorise si c'est une transition d'animateur
+             request.resource.data.status == 'in_progress'
           )
         )
       );
