@@ -1,7 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { OctagonAlert, CalendarClock, MessageCircle, Users } from 'lucide-react';
-import { BottomNav } from '../ui/BottomNav';
 
 interface Props {
   reason: string;
@@ -94,9 +93,6 @@ export const CancellationScreen: React.FC<Props> = ({
           </button>
         </div>
       </motion.div>
-      <div className="absolute bottom-0 inset-x-0">
-        <BottomNav />
-      </div>
     </div>
   );
 };
