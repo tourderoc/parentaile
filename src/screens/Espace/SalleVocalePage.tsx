@@ -599,8 +599,13 @@ function useSessionPhase(
             })();
 
         // Phase elapsed from Firestore phaseStartedAt or calculated
-        const phaseElapsedMin = firestoreSession?.phaseStartedAt
-          ? Math.max(0, (Date.now() - firestoreSession.phaseStartedAt.getTime()) / 60000)
+        const phaseStartedAt = firestoreSession?.phaseStartedAt;
+        const phaseStartMs = phaseStartedAt
+          ? (phaseStartedAt instanceof Date ? phaseStartedAt.getTime() : (typeof (phaseStartedAt as any).toDate === 'function' ? (phaseStartedAt as any).toDate().getTime() : new Date(phaseStartedAt as any).getTime()))
+          : 0;
+
+        const phaseElapsedMin = phaseStartedAt
+          ? Math.max(0, (Date.now() - phaseStartMs) / 60000)
           : (() => {
               const phaseStart = structure.slice(0, idx).reduce((s, e) => s + e.dureeMinutes, 0);
               return Math.max(0, clampedElapsed - phaseStart);
@@ -3217,7 +3222,14 @@ export const SalleVocalePage = () => {
       // 2. Critical Role & Session Sync
       const currentAnim = data.sessionState?.currentAnimateurUid || data.createurUid || null;
       setCurrentAnimateurUid(currentAnim);
-      setSessionState(data.sessionState || null);
+      
+      const rawSS = data.sessionState;
+      setSessionState(rawSS ? {
+        ...rawSS,
+        phaseStartedAt: rawSS.phaseStartedAt ? (typeof rawSS.phaseStartedAt.toDate === 'function' ? rawSS.phaseStartedAt.toDate() : new Date(rawSS.phaseStartedAt)) : undefined,
+        sessionStartedAt: rawSS.sessionStartedAt ? (typeof rawSS.sessionStartedAt.toDate === 'function' ? rawSS.sessionStartedAt.toDate() : new Date(rawSS.sessionStartedAt)) : undefined,
+        suspendedAt: rawSS.suspendedAt ? (typeof rawSS.suspendedAt.toDate === 'function' ? rawSS.suspendedAt.toDate() : new Date(rawSS.suspendedAt)) : undefined,
+      } : null);
 
       // 3. Participant List Sync
       setGroupeParticipants(
