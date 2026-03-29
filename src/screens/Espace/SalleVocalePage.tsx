@@ -30,7 +30,7 @@ import {
   getUserBadge, setPresence, removePresence, advancePhase, 
   extendSession, endSession, submitBanFeedback,
   initSessionStateV2, suspendSession, resumeSession, proposeAsAnimateur, onPresenceList,
-  cancelGroup, incrementAnimateurDisconnect, banParticipantExplicit
+  cancelGroup, incrementAnimateurDisconnect, banParticipantExplicit, isParticipantBanned
 } from '../../lib/groupeParoleService';
 import { STRUCTURE_DEFAUT, getBadgeInfo, PHASE_MIC_POLICY, DEFAULT_MIC_POLICY, getBadgeForPoints } from '../../types/groupeParole';
 import { useVocalMachine } from '../../vocal/hooks/useVocalMachine';
@@ -3268,10 +3268,10 @@ export const SalleVocalePage = () => {
         }
 
         const currentUser = auth.currentUser;
-        const isBanned = (data.participants || []).some((p: any) => p.uid === currentUser?.uid && p.banni);
-        if (isBanned) {
-          // Si l'utilisateur est banni en base de donnees, on le bloque avant la connexion
-          setStep('cancelled'); // Utilise cancelled pour l'instant pour eviter de faire un autre ecran hors RoomContent
+        const isBannedInArray = (data.participants || []).some((p: any) => p.uid === currentUser?.uid && p.banni);
+        const isBannedInExits = currentUser ? await isParticipantBanned(groupeId, currentUser.uid) : false;
+        if (isBannedInArray || isBannedInExits) {
+          setStep('cancelled');
           alert('Vous avez été définitivement banni de cette salle.');
           return;
         }

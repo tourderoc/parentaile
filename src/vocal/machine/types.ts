@@ -2,7 +2,7 @@
 
 export const VOCAL_CONFIG = {
   GRACE_PERIOD_SEC: 30,
-  COUNTDOWN_SEC: 180,    // 3 minutes before automatic cancellation
+  COUNTDOWN_SEC: 120,    // 2 minutes before automatic cancellation
   MIN_PARTICIPANTS: 3,
   MAX_SUSPENSIONS: 2,
   MAX_PARTICIPANT_EXITS: 2,

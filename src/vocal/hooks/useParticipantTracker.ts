@@ -1,7 +1,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { Participant } from 'livekit-client';
 import { VOCAL_CONFIG, VocalEvent } from '../machine';
-import { doc, getDoc, setDoc, increment } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, increment } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 
 interface UseParticipantTrackerProps {
@@ -73,6 +73,20 @@ export function useParticipantTracker({
       const data = updated.data();
       if (data && data.count > VOCAL_CONFIG.MAX_PARTICIPANT_EXITS) {
         await setDoc(exitRef, { banned: true }, { merge: true });
+        // Sync banni flag in groupe participants array
+        try {
+          const groupeRef = doc(db, 'groupes', groupeId);
+          const groupeSnap = await getDoc(groupeRef);
+          if (groupeSnap.exists()) {
+            const participants = groupeSnap.data().participants || [];
+            const updated = participants.map((p: any) =>
+              p.uid === uid ? { ...p, banni: true } : p
+            );
+            await updateDoc(groupeRef, { participants: updated });
+          }
+        } catch (err) {
+          console.error(`[PARTICIPANT_TRACKER] Failed to sync banni flag for ${uid}:`, err);
+        }
         dispatchRef.current({ type: 'PARTICIPANT_BANNED', uid });
       }
     } catch (err) {

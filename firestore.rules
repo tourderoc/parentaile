@@ -83,9 +83,14 @@ service cloud.firestore {
       }
 
       // Sorties & bannissements participants (sous-collection, refactor vocal)
+      // Un participant banni ne peut plus modifier son propre document d'exit
       match /participantExits/{uid} {
         allow read: if request.auth != null;
-        allow create, update: if request.auth != null;
+        allow create: if request.auth != null;
+        allow update: if request.auth != null && (
+          // Si le document existe déjà avec banned=true, seul un AUTRE user peut l'updater (animateur/tracker d'un autre)
+          !(resource.data.get('banned', false) == true && request.auth.uid == uid)
+        );
         allow delete: if false;
       }
 
