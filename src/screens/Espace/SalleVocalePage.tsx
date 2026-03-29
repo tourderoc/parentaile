@@ -48,9 +48,9 @@ const VocalTimer: React.FC<{ dateVocal: Date; durationMin: number; extendedMinut
   const [isOvertime, setIsOvertime] = useState(false);
 
   useEffect(() => {
-    const endTime = dateVocal.getTime() + (durationMin + extendedMinutes) * 60000;
-
     const update = () => {
+      const startMs = dateVocal instanceof Date ? dateVocal.getTime() : new Date(dateVocal).getTime();
+      const endTime = (isNaN(startMs) ? Date.now() : startMs) + (Number(durationMin || 0) + Number(extendedMinutes || 0)) * 60000;
       const now = Date.now();
       const diff = endTime - now;
 
@@ -579,15 +579,16 @@ function useSessionPhase(
     }
 
     const update = () => {
-      const elapsed = (Date.now() - dateVocal.getTime()) / 60000;
-      const clampedElapsed = Math.max(0, elapsed);
-      const overall = Math.min(1, clampedElapsed / totalMin);
-      const isComplete = clampedElapsed >= totalMin;
+      const elapsed = (Date.now() - (dateVocal instanceof Date ? dateVocal.getTime() : new Date(dateVocal).getTime())) / 60000;
+      const clampedElapsed = Math.max(0, isNaN(elapsed) ? 0 : elapsed);
+      const overall = totalMin > 0 ? Math.min(1, clampedElapsed / totalMin) : 0;
+      const isComplete = clampedElapsed >= totalMin && totalMin > 0;
 
       if (structureType === 'structuree' && structure.length > 0) {
         // Phase index comes from Firestore (manual control) or fallback to time-based
-        const idx = firestoreSession
-          ? Math.min(firestoreSession.currentPhaseIndex, structure.length - 1)
+        const firestoreIndex = Number(firestoreSession?.currentPhaseIndex);
+        const idx = !isNaN(firestoreIndex)
+          ? Math.min(firestoreIndex, structure.length - 1)
           : (() => {
               let accumulated = 0;
               for (let i = 0; i < structure.length; i++) {
@@ -1066,11 +1067,19 @@ const RoomContent: React.FC<{
   const sessionInitRef = useRef(false);
   useEffect(() => {
     if (isEffectiveAnimateur && !sessionInitRef.current) {
-      // UN SEUL animateur peut initier la session, et seulement si elle n'est pas déjà 'in_progress'
-      if (groupeStatus !== 'in_progress' && groupeStatus !== 'completed' && groupeStatus !== 'cancelled') {
-        sessionInitRef.current = true;
-        initSessionStateV2(groupeId, auth.currentUser!.uid, sessionPrenom || 'Parent');
-      }
+      const runInit = async () => {
+        try {
+          // Double check status - only init if needed and not already done
+          if (groupeStatus !== 'in_progress' && groupeStatus !== 'completed' && groupeStatus !== 'cancelled') {
+            sessionInitRef.current = true;
+            await initSessionStateV2(groupeId, auth.currentUser!.uid, sessionPrenom || 'Parent');
+          }
+        } catch (err) {
+          console.error('[RoomContent] initSessionStateV2 error:', err);
+          sessionInitRef.current = false; // Allow retry
+        }
+      };
+      runInit();
     }
   }, [isEffectiveAnimateur, groupeStatus, groupeId, sessionPrenom]);
 

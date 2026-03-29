@@ -47,10 +47,16 @@ service cloud.firestore {
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(['titre', 'description', 'createurUid', 'dateVocal'])
         ) ||
         // 4. Autoriser la prise de relais (Takeover) : l'utilisateur se désigne comme nouvel animateur
-        (request.resource.data.sessionState.currentAnimateurUid == request.auth.uid && (
-           resource.data.get('sessionState', null) == null || 
-           resource.data.sessionState.get('suspended', false) == true
-        ))
+        // Note: Cela inclut l'initialisation de la session (status in_progress)
+        (
+          request.resource.data.sessionState.currentAnimateurUid == request.auth.uid && 
+          resource.data.participants.hasAny([{'uid': request.auth.uid}]) &&
+          (
+             resource.data.get('sessionState', null) == null || 
+             resource.data.sessionState.get('suspended', false) == true ||
+             resource.data.status == 'scheduled'
+          )
+        )
       );
       allow delete: if request.auth != null && request.auth.uid == resource.data.createurUid;
 
