@@ -1171,7 +1171,9 @@ const RoomContent: React.FC<{
   useEffect(() => {
     if (firestoreSession && !firestoreSession.sessionActive) {
       const isCancelled = machinePhase === 'SESSION_CANCELLED' || sessionCancelledRef.current || groupeStatus === 'cancelled';
-      if (!isCancelled) {
+      const isWaiting = machinePhase === 'WAITING_ROOM' || machinePhase === 'COUNTDOWN_START';
+      
+      if (!isCancelled && !isWaiting) {
         onSessionEnded?.();
       }
     }
