@@ -29,57 +29,74 @@ export const SuspensionOverlay: React.FC<Props> = ({
 
   const isDanger = variant === 'danger';
 
+  const bgClass = isDanger
+    ? 'bg-red-50/95 border border-red-200'
+    : 'bg-amber-50/95 border border-amber-200';
+
+  const titleColor = isDanger ? 'text-red-700' : 'text-amber-800';
+  const subtitleColor = isDanger ? 'text-red-500' : 'text-amber-600';
+
+  const btnClass = variant === 'warning'
+    ? 'bg-amber-500 text-white hover:bg-amber-600 shadow-amber-500/20'
+    : 'bg-gray-900 text-white hover:bg-gray-800 shadow-gray-900/20';
+
   return (
     <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="absolute inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-md p-6"
+      initial={{ opacity: 0, y: -30 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -30 }}
+      className="absolute top-3 left-3 right-3 z-[60] pointer-events-none"
     >
-      <div className="bg-white rounded-[2rem] p-8 max-w-sm w-full text-center shadow-[0_20px_50px_-12px_rgba(0,0,0,0.5)] space-y-6">
-        <div className={`mx-auto w-16 h-16 rounded-full flex items-center justify-center ring-4 ${
-          isDanger ? 'bg-red-100 ring-red-50' : 'bg-orange-100 ring-orange-50'
-        }`}>
-          {isDanger
-            ? <Users className="w-8 h-8 text-red-500" />
-            : <AlertCircle className="w-8 h-8 text-orange-500" />
-          }
+      <div className={`backdrop-blur-xl rounded-2xl px-5 py-4 shadow-[0_8px_30px_-8px_rgba(0,0,0,0.3)] pointer-events-auto ${bgClass}`}>
+        {/* Main banner */}
+        <div className="flex items-center gap-3">
+          {/* Icon */}
+          <div className="w-11 h-11 relative shrink-0">
+            {isDanger ? (
+              <div className="w-full h-full bg-red-100 rounded-full flex items-center justify-center">
+                <Users className="w-5 h-5 text-red-500" />
+              </div>
+            ) : (
+              <div className="w-full h-full bg-amber-100 rounded-full flex items-center justify-center">
+                <AlertCircle className="w-5 h-5 text-amber-600" />
+              </div>
+            )}
+          </div>
+
+          {/* Text */}
+          <div className="flex-1 min-w-0">
+            <p className={`text-sm font-black leading-tight ${titleColor}`}>
+              {title}
+            </p>
+            <p className={`text-xs font-medium truncate ${subtitleColor}`}>
+              <span className="font-bold opacity-70">[{suspensionCount}/2]</span> {subtitle}
+            </p>
+          </div>
+
+          {/* Countdown */}
+          {countdownSec > 0 && (
+            <div className="bg-white/50 px-3 py-1.5 rounded-xl flex items-center gap-1.5 shrink-0 border border-black/5">
+              <Clock className="w-4 h-4 text-gray-400" />
+              <span className="text-lg font-black text-gray-700 font-mono tracking-wider">
+                {formatTime(countdownSec)}
+              </span>
+            </div>
+          )}
         </div>
 
-        <h3 className="text-2xl font-black text-gray-800 tracking-tight">
-          {title}
-        </h3>
-
-        <p className="text-gray-500 font-medium leading-relaxed">
-          {subtitle}
-        </p>
-
-        <div className={`py-3 rounded-2xl flex items-center justify-center space-x-3 text-3xl font-black font-mono tracking-widest shadow-inner ${
-          isDanger ? 'bg-red-50 text-red-500' : 'bg-gray-50 text-orange-500'
-        }`}>
-          <Clock className={`w-7 h-7 ${isDanger ? 'text-red-400' : 'text-orange-400'}`} />
-          <span>{formatTime(countdownSec)}</span>
-        </div>
-
-        <div className="text-xs text-gray-400 font-bold uppercase tracking-wider">
-          Suspension {suspensionCount}/2 avant annulation
-        </div>
-
+        {/* Action button */}
         {action && (
           <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: 10 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            className="pt-4 border-t border-gray-100 space-y-4"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            className="mt-3 pt-3 border-t border-black/5"
           >
-            <p className="text-sm text-gray-500 font-medium">
-              L'animateur tarde à revenir ? L'un de vous peut reprendre le flambeau temporairement !
-            </p>
             <button
               onClick={action.onClick}
               disabled={action.loading}
-              className="w-full flex justify-center items-center gap-2 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white py-4 rounded-2xl font-bold transition-all hover:scale-[1.02] active:scale-95 shadow-lg shadow-orange-500/25 disabled:opacity-50 disabled:cursor-wait"
+              className={`w-full flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold transition-all active:scale-95 shadow-lg disabled:opacity-50 disabled:cursor-wait ${btnClass}`}
             >
-              <UserCheck size={20} />
+              <UserCheck size={16} />
               {action.loading ? 'En cours...' : action.label}
             </button>
             
