@@ -136,6 +136,7 @@ export function onGroupesParole(
             pseudo: p.pseudo,
             inscritVocal: p.inscritVocal ?? false,
             dateInscription: p.dateInscription?.toDate?.() || new Date(),
+            banni: !!p.banni
           })),
           messages: [],
           messageCount: d.messageCount || 0,
@@ -190,6 +191,7 @@ export function onGroupeParole(
         pseudo: p.pseudo,
         inscritVocal: p.inscritVocal ?? false,
         dateInscription: p.dateInscription?.toDate?.() || new Date(),
+        banni: !!p.banni
       })),
       messages: [],
       messageCount: d.messageCount || 0,
