@@ -1084,15 +1084,14 @@ const RoomContent: React.FC<{
   // Init session state when animateur enters
   const sessionInitRef = useRef(false);
   useEffect(() => {
-    if (isEffectiveAnimateur && !sessionInitRef.current && firebaseGroupe) {
-      const status = firebaseGroupe.status;
+    if (isEffectiveAnimateur && !sessionInitRef.current) {
       // UN SEUL animateur peut initier la session, et seulement si elle n'est pas déjà 'in_progress'
-      if (status !== 'in_progress' && status !== 'completed' && status !== 'cancelled') {
+      if (groupeStatus !== 'in_progress' && groupeStatus !== 'completed' && groupeStatus !== 'cancelled') {
         sessionInitRef.current = true;
         initSessionStateV2(groupeId, auth.currentUser!.uid, sessionPrenom || 'Parent');
       }
     }
-  }, [isEffectiveAnimateur, firebaseGroupe, groupeId, sessionPrenom]);
+  }, [isEffectiveAnimateur, groupeStatus, groupeId, sessionPrenom]);
 
   // Dispatch HOUR_REACHED when dateVocal passes (or immediately for test groups)
   const hourReachedRef = useRef(false);
