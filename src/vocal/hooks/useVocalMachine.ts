@@ -68,6 +68,9 @@ export interface VocalMachineOutput {
   /** Proposer de devenir animateur de remplacement */
   proposeAsReplacement: () => void;
 
+  /** Refuser la proposition de relais */
+  refuseRelay: () => void;
+
   /** Terminer la session (animateur uniquement) */
   endSessionAction: () => void;
 }
@@ -89,7 +92,10 @@ interface UseVocalMachineProps {
     currentAnimateurPseudo?: string;
     replacementUsed: boolean;
     sessionActive: boolean;
+    suspendedAt?: Date;
+    phaseStartedAt?: Date;
   } | null;
+  participantPoints: Record<string, number>;
 }
 
 // ========== Internal reducer ==========
@@ -122,7 +128,11 @@ export function useVocalMachine({
   liveKitParticipants,
   isTestGroup,
   firestoreSession,
+  participantPoints,
 }: UseVocalMachineProps): VocalMachineOutput {
+
+  // ---------- Local Refusal State ----------
+  const [hasRefused, setHasRefused] = useReducer((_: boolean, val: boolean) => val, false);
 
   // ---------- Core state ----------
   const [machineState, reducerDispatch] = useReducer(
@@ -133,6 +143,36 @@ export function useVocalMachine({
 
   const stateRef = useRef(machineState);
   stateRef.current = machineState;
+
+  // ---------- Sync Countdown with Firestore Timestamps ----------
+  const syncCountdownFromFirestore = useCallback(() => {
+    if (!firestoreSession) return;
+    
+    // Determine which timestamp to use
+    const startTime = (machineState.phase === 'SUSPENDED' || machineState.phase === 'GRACE_PERIOD')
+      ? firestoreSession.suspendedAt
+      : firestoreSession.phaseStartedAt;
+      
+    if (!startTime) return;
+
+    const now = Date.now();
+    const elapsedSec = Math.floor((now - startTime.getTime()) / 1000);
+    const totalDuration = (machineState.phase === 'GRACE_PERIOD') 
+      ? VOCAL_CONFIG.GRACE_PERIOD_SEC 
+      : VOCAL_CONFIG.COUNTDOWN_SEC;
+
+    const remaining = Math.max(0, totalDuration - elapsedSec);
+    
+    if (Math.abs(remaining - machineState.context.countdownRemaining) > 1) {
+      reducerDispatch({
+        type: 'SET_STATE',
+        state: {
+          ...machineState,
+          context: { ...machineState.context, countdownRemaining: remaining }
+        }
+      });
+    }
+  }, [firestoreSession, machineState.phase, machineState.context.countdownRemaining]);
 
   // ---------- Timer manager (stable across renders) ----------
   const timerManagerRef = useRef<TimerManager | null>(null);
@@ -255,21 +295,60 @@ export function useVocalMachine({
       suspensionCount: firestoreSession.suspensionCount,
       currentAnimateurUid: firestoreSession.currentAnimateurUid || createurUid,
     });
+
+    // Also sync replacement status
+    dispatch({
+      type: 'REPLACEMENT_SYNC',
+      currentAnimateurUid: firestoreSession.currentAnimateurUid || createurUid,
+      replacementUsed: firestoreSession.replacementUsed,
+    });
+
+    // Reset refusal state if session resumes or animator found
+    if (!firestoreSession.suspended || firestoreSession.currentAnimateurUid !== effectiveAnimateurUid) {
+      setHasRefused(false);
+    }
+
+    // Re-sync countdown immediately on session updates
+    syncCountdownFromFirestore();
   }, [
     firestoreSession?.suspended,
     firestoreSession?.suspensionCount,
     firestoreSession?.currentAnimateurUid,
+    firestoreSession?.replacementUsed,
+    firestoreSession?.suspendedAt,
+    firestoreSession?.phaseStartedAt,
     createurUid,
     dispatch,
+    syncCountdownFromFirestore,
+    effectiveAnimateurUid,
   ]);
 
-  // ---------- canPropose logic ----------
-  // Show "Je prends le relais" button after PROPOSE_AFTER_SEC seconds
-  // during COUNTDOWN_START (no_anim) or SUSPENDED (animateur_left)
+  // ---------- Merlin Ranking & canPropose logic ----------
+  const relayRank = useMemo(() => {
+    const identities = liveKitParticipants.map(p => p.identity).filter(Boolean);
+    if (!identities.includes(localUid)) return 0;
+
+    // Filter out the animator from the candidates
+    const candidates = identities.filter(id => id !== effectiveAnimateurUid);
+    
+    // Sort by points (desc) then by UID (stable tie-breaker)
+    candidates.sort((a, b) => {
+      const ptsA = participantPoints[a] || 0;
+      const ptsB = participantPoints[b] || 0;
+      if (ptsA !== ptsB) return ptsB - ptsA;
+      return a.localeCompare(b);
+    });
+
+    return candidates.indexOf(localUid);
+  }, [liveKitParticipants, localUid, effectiveAnimateurUid, participantPoints]);
+
   const canPropose = useMemo(() => {
     const { phase, context } = machineState;
     const isWaitingPhase = phase === 'COUNTDOWN_START' || phase === 'SUSPENDED';
     if (!isWaitingPhase) return false;
+
+    // Don't show if already refused
+    if (hasRefused) return false;
 
     const hasAnimateurIssue =
       context.suspensionReason === 'animateur_left' ||
@@ -279,16 +358,17 @@ export function useVocalMachine({
     // Don't allow if already the animateur
     if (localUid === effectiveAnimateurUid) return false;
 
-    // Must wait PROPOSE_AFTER_SEC
+    // MERIT-BASED DELAY: PROPOSE_AFTER_SEC + (rank * RANK_DELAY_SEC)
     const elapsed = VOCAL_CONFIG.COUNTDOWN_SEC - context.countdownRemaining;
-    if (elapsed < VOCAL_CONFIG.PROPOSE_AFTER_SEC) return false;
+    const threshold = VOCAL_CONFIG.PROPOSE_AFTER_SEC + (relayRank * VOCAL_CONFIG.RANK_DELAY_SEC);
+    if (elapsed < threshold) return false;
 
-    // In test groups, always allow
+    // In test groups, always allow (after delay)
     if (isTestGroup) return true;
 
     // In non-test groups, need >= 3 participants to propose
     return participantCount >= VOCAL_CONFIG.MIN_PARTICIPANTS;
-  }, [machineState, localUid, effectiveAnimateurUid, isTestGroup, participantCount]);
+  }, [machineState, localUid, effectiveAnimateurUid, isTestGroup, participantCount, relayRank, hasRefused]);
 
   // ---------- Actions ----------
   const proposeAsReplacement = useCallback(async () => {
@@ -325,6 +405,11 @@ export function useVocalMachine({
     }
   }, [groupeId, localPseudo, isTestGroup, participantCount, dispatch]);
 
+  const refuseRelay = useCallback(() => {
+    setHasRefused(true);
+    dispatch({ type: 'REPLACEMENT_REFUSED' });
+  }, [dispatch]);
+
   const endSessionAction = useCallback(() => {
     dispatch({ type: 'ANIMATEUR_END_SESSION' });
   }, [dispatch]);
@@ -355,6 +440,7 @@ export function useVocalMachine({
     animateurPresent,
     dispatch,
     proposeAsReplacement,
+    refuseRelay,
     endSessionAction,
   };
 }

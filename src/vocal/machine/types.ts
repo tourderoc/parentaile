@@ -2,11 +2,12 @@
 
 export const VOCAL_CONFIG = {
   GRACE_PERIOD_SEC: 30,
-  COUNTDOWN_SEC: 300,
+  COUNTDOWN_SEC: 180,    // 3 minutes before automatic cancellation
   MIN_PARTICIPANTS: 3,
   MAX_SUSPENSIONS: 2,
   MAX_PARTICIPANT_EXITS: 2,
-  PROPOSE_AFTER_SEC: 180,
+  PROPOSE_AFTER_SEC: 10, // Base delay before the first person can propose
+  RANK_DELAY_SEC: 15,    // Delay added per rank (Rank 1: 10s, Rank 2: 25s, Rank 3: 40s...)
 } as const;
 
 // ========== Phases ==========
@@ -36,6 +37,8 @@ export type VocalEvent =
   | { type: 'REPLACEMENT_FAILED'; reason: string }
   | { type: 'ANIMATEUR_END_SESSION' }
   | { type: 'PARTICIPANT_BANNED'; uid: string }
+  | { type: 'REPLACEMENT_REFUSED' }
+  | { type: 'REPLACEMENT_SYNC'; currentAnimateurUid: string; replacementUsed: boolean }
   | { type: 'FIRESTORE_SYNC'; suspended: boolean; suspensionCount: number; currentAnimateurUid: string };
 
 // ========== Contexte (donnees accumulees) ==========
@@ -51,6 +54,8 @@ export interface VocalContext {
   isProposing: boolean;
   sessionEverStarted: boolean;
   currentAnimateurUid: string;
+  participantPoints: Record<string, number>;
+  refusedRelay: boolean;
 }
 
 // ========== Etat complet ==========
@@ -102,6 +107,8 @@ export function createInitialState(animateurUid: string): VocalState {
       isProposing: false,
       sessionEverStarted: false,
       currentAnimateurUid: animateurUid,
+      participantPoints: {},
+      refusedRelay: false,
     },
   };
 }

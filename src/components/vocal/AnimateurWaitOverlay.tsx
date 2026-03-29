@@ -8,6 +8,7 @@ interface Props {
   countdownSec: number;
   variant: 'info' | 'warning' | 'danger';
   action?: { label: string; onClick: () => void; loading?: boolean };
+  secondaryAction?: { label: string; onClick: () => void };
 }
 
 export const CountdownOverlay: React.FC<Props> = ({
@@ -16,6 +17,7 @@ export const CountdownOverlay: React.FC<Props> = ({
   countdownSec,
   variant,
   action,
+  secondaryAction,
 }) => {
   const formatTime = (sec: number) => {
     const m = Math.floor(sec / 60);
@@ -115,6 +117,15 @@ export const CountdownOverlay: React.FC<Props> = ({
               <UserCheck size={16} />
               {action.loading ? 'En cours...' : action.label}
             </button>
+            
+            {secondaryAction && (
+              <button
+                onClick={secondaryAction.onClick}
+                className="w-full mt-2 py-2 text-xs font-bold text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                {secondaryAction.label}
+              </button>
+            )}
           </motion.div>
         )}
       </div>

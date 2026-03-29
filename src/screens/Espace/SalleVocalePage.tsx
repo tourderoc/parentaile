@@ -989,22 +989,31 @@ const RoomContent: React.FC<{
   const [showAllNotes, setShowAllNotes] = useState(false);
   const [notesPulse, setNotesPulse] = useState(false);
   const [participantBadges, setParticipantBadges] = useState<Record<string, BadgeLevel>>({});
+  const [participantPoints, setParticipantPoints] = useState<Record<string, number>>({});
   const [warningCounts, setWarningCounts] = useState<Record<string, number>>({});
   const [localWarnings, setLocalWarnings] = useState(0);
   const [banInfo, setBanInfo] = useState<{ banned: boolean; groupeTitre: string } | null>(null);
 
-  // Fetch badges for all participants
+  // Fetch badges and points for all participants
   useEffect(() => {
     const identities = participants.map((p) => p.identity);
-    const fetchBadges = async () => {
+    const fetchStats = async () => {
       const badges: Record<string, BadgeLevel> = {};
+      const points: Record<string, number> = {};
       for (const id of identities) {
-        badges[id] = await getUserBadge(id);
+        if (!id) continue;
+        const snap = await getDoc(doc(db, 'accounts', id));
+        if (snap.exists()) {
+          const data = snap.data();
+          points[id] = data.points || 0;
+          badges[id] = data.badge || getBadgeForPoints(data.points || 0);
+        }
       }
+      setParticipantPoints(points);
       setParticipantBadges(badges);
     };
-    fetchBadges();
-  }, [participants.length]); // re-fetch when participant count changes
+    fetchStats();
+  }, [participants.length]);
 
   // Firestore session state listener (real-time sync for all participants)
   const [firestoreSession, setFirestoreSession] = useState<SessionState | null>(null);
@@ -1027,11 +1036,12 @@ const RoomContent: React.FC<{
             replacementUsed: data.sessionState.replacementUsed || false,
             currentAnimateurUid: data.sessionState.currentAnimateurUid || createurUid,
             currentAnimateurPseudo: data.sessionState.currentAnimateurPseudo,
+            suspendedAt: data.sessionState.suspendedAt?.toDate?.(),
           });
         }
       }
     });
-    return unsub;
+    return () => unsub();
   }, [groupeId, createurUid]);
 
   // Warn when exactly 3 participants (1 local + 2 remote) — next departure = cancellation
@@ -1068,6 +1078,7 @@ const RoomContent: React.FC<{
     isReplacementAnimateur,
     dispatch: machineDispatch,
     proposeAsReplacement,
+    refuseRelay,
   } = useVocalMachine({
     groupeId,
     createurUid,
@@ -1075,14 +1086,8 @@ const RoomContent: React.FC<{
     localPseudo: sessionPrenom || 'Parent',
     liveKitParticipants: participants,
     isTestGroup,
-    firestoreSession: firestoreSession ? {
-      suspended: firestoreSession.suspended || false,
-      suspensionCount: firestoreSession.suspensionCount || 0,
-      currentAnimateurUid: firestoreSession.currentAnimateurUid || createurUid,
-      currentAnimateurPseudo: firestoreSession.currentAnimateurPseudo,
-      replacementUsed: firestoreSession.replacementUsed || false,
-      sessionActive: firestoreSession.sessionActive ?? true,
-    } : null,
+    firestoreSession,
+    participantPoints,
   });
 
   // Dispatch HOUR_REACHED when dateVocal passes (or immediately for test groups)
@@ -1543,6 +1548,10 @@ const RoomContent: React.FC<{
                 onClick: proposeAsReplacement,
                 loading: isProposing,
               } : undefined}
+              secondaryAction={machineCanPropose ? {
+                label: 'Passer mon tour',
+                onClick: refuseRelay,
+              } : undefined}
             />
           );
         })()}
@@ -1565,6 +1574,10 @@ const RoomContent: React.FC<{
                 label: 'Rejoindre en tant qu\'animateur',
                 onClick: proposeAsReplacement,
                 loading: isProposing,
+              } : undefined}
+              secondaryAction={machineCanPropose && machineReason === 'animateur_left' ? {
+                label: 'Passer mon tour',
+                onClick: refuseRelay,
               } : undefined}
             />
           );

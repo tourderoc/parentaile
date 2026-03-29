@@ -227,6 +227,31 @@ function handleCountdownStart(state: VocalState, event: VocalEvent, ctx: VocalCo
         sideEffects: [],
       };
 
+    case 'REPLACEMENT_REFUSED':
+      return {
+        state: { phase: 'COUNTDOWN_START', context: { ...ctx, refusedRelay: true } },
+        sideEffects: [],
+      };
+
+    case 'REPLACEMENT_SYNC': {
+      // If a replacement was taken, update UID and transition to active if animator present
+      const newCtx = { 
+        ...ctx, 
+        currentAnimateurUid: event.currentAnimateurUid,
+        isProposing: event.currentAnimateurUid === ctx.currentAnimateurUid ? ctx.isProposing : false,
+      };
+      
+      if (event.replacementUsed && ctx.animateurPresent) {
+        return {
+          state: { phase: 'SESSION_ACTIVE', context: { ...newCtx, sessionEverStarted: true, suspensionReason: undefined } },
+          sideEffects: [
+            { type: 'CANCEL_TIMER', slot: 'countdown' },
+          ],
+        };
+      }
+      return same({ phase: 'COUNTDOWN_START', context: newCtx });
+    }
+
     default:
       return same(state);
   }
@@ -274,17 +299,19 @@ function handleSessionActive(state: VocalState, event: VocalEvent, ctx: VocalCon
       };
 
     case 'FIRESTORE_SYNC': {
+      // L'animateur vient de changer via Firestore Sync (pas forcément localement)
       const newCtx = {
         ...ctx,
         suspensionCount: event.suspensionCount,
         currentAnimateurUid: event.currentAnimateurUid,
       };
 
-      // Si on était en attente (COUNTDOWN_START ou SUSPENDED)
-      // et qu'un nouvel animateur est là (et présent LiveKit),
-      // on peut repasser en ACTIVE si les conditions sont réunies.
-      if (!ctx.animateurPresent && canStartSession(ctx.participantCount, true)) {
-         // L'UI va re-évaluer l'animateurPresent via le tracker qui dispatchera CONDITIONS_CHANGED
+      // Si on était en attente et qu'un nouvel animateur est là (via LiveKit), on active
+      if (ctx.animateurPresent && state.phase !== 'SESSION_ACTIVE') {
+        return {
+          state: { phase: 'SESSION_ACTIVE', context: { ...newCtx, suspensionReason: undefined } },
+          sideEffects: [{ type: 'CANCEL_ALL_TIMERS' }],
+        };
       }
 
       return {
@@ -447,6 +474,31 @@ function handleSuspended(state: VocalState, event: VocalEvent, ctx: VocalContext
         },
         sideEffects: [],
       };
+
+    case 'REPLACEMENT_REFUSED':
+      return {
+        state: { phase: 'SUSPENDED', context: { ...ctx, refusedRelay: true } },
+        sideEffects: [],
+      };
+
+    case 'REPLACEMENT_SYNC': {
+      const newCtx = { 
+        ...ctx, 
+        currentAnimateurUid: event.currentAnimateurUid,
+        isProposing: event.currentAnimateurUid === ctx.currentAnimateurUid ? ctx.isProposing : false,
+      };
+      
+      if (event.replacementUsed && ctx.animateurPresent) {
+        return {
+          state: { phase: 'SESSION_ACTIVE', context: { ...newCtx, suspensionReason: undefined } },
+          sideEffects: [
+            { type: 'CANCEL_TIMER', slot: 'countdown' },
+            { type: 'WRITE_FIRESTORE_RESUMED' },
+          ],
+        };
+      }
+      return same({ phase: 'SUSPENDED', context: newCtx });
+    }
 
     case 'PARTICIPANT_BANNED':
       return {

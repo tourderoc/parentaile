@@ -9,6 +9,7 @@ interface Props {
   suspensionCount: number;
   variant: 'warning' | 'danger';
   action?: { label: string; onClick: () => void; loading?: boolean };
+  secondaryAction?: { label: string; onClick: () => void };
 }
 
 export const SuspensionOverlay: React.FC<Props> = ({
@@ -18,6 +19,7 @@ export const SuspensionOverlay: React.FC<Props> = ({
   suspensionCount,
   variant,
   action,
+  secondaryAction,
 }) => {
   const formatTime = (sec: number) => {
     const m = Math.floor(sec / 60);
@@ -80,6 +82,15 @@ export const SuspensionOverlay: React.FC<Props> = ({
               <UserCheck size={20} />
               {action.loading ? 'En cours...' : action.label}
             </button>
+            
+            {secondaryAction && (
+              <button
+                onClick={secondaryAction.onClick}
+                className="w-full mt-2 py-2 text-xs font-bold text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                {secondaryAction.label}
+              </button>
+            )}
           </motion.div>
         )}
       </div>
