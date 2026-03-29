@@ -1225,3 +1225,31 @@ export async function isParticipantBanned(
   }
 }
 
+/**
+ * Banni explicitement de maniere permanente un participant (Action animateur).
+ * Modifie le sous-document participantExits ET met le flag banni:true dans l'array participants du groupe.
+ */
+export async function banParticipantExplicit(
+  groupeId: string,
+  uid: string
+): Promise<void> {
+  // 1. Marquer comme banni dans participantExits
+  const exitRef = doc(db, 'groupes', groupeId, 'participantExits', uid);
+  await setDoc(exitRef, {
+    count: 3, 
+    lastExitAt: serverTimestamp(),
+    banned: true,
+  }, { merge: true });
+
+  // 2. Mettre à jour l'array participants pour propager l'état banni immédiatement (UI + Banner)
+  const groupeRef = doc(db, 'groupes', groupeId);
+  const snap = await getDoc(groupeRef);
+  if (snap.exists()) {
+    const participants = snap.data().participants || [];
+    const updatedParticipants = participants.map((p: any) => 
+      p.uid === uid ? { ...p, banni: true } : p
+    );
+    await updateDoc(groupeRef, { participants: updatedParticipants });
+  }
+}
+

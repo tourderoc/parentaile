@@ -30,7 +30,7 @@ import {
   getUserBadge, setPresence, removePresence, advancePhase, 
   extendSession, endSession, submitBanFeedback,
   initSessionStateV2, suspendSession, resumeSession, proposeAsAnimateur, onPresenceList,
-  cancelGroup, incrementAnimateurDisconnect
+  cancelGroup, incrementAnimateurDisconnect, banParticipantExplicit
 } from '../../lib/groupeParoleService';
 import { STRUCTURE_DEFAUT, getBadgeInfo, PHASE_MIC_POLICY, DEFAULT_MIC_POLICY, getBadgeForPoints } from '../../types/groupeParole';
 import { useVocalMachine } from '../../vocal/hooks/useVocalMachine';
@@ -1330,8 +1330,10 @@ const RoomContent: React.FC<{
       const encoder = new TextEncoder();
       const data = encoder.encode(JSON.stringify({ action: 'kick', target: identity }));
       await localParticipant.publishData(data, { reliable: true });
+      // Permanent ban update in Firestore
+      await banParticipantExplicit(groupeId, identity).catch(err => console.error(err));
     },
-    [localParticipant, isAnimateur]
+    [localParticipant, isAnimateur, groupeId]
   );
 
   // Listen for data messages (mute/kick/raise_hand commands)
@@ -3238,6 +3240,7 @@ export const SalleVocalePage = () => {
           pseudo: p.pseudo || '',
           inscritVocal: p.inscritVocal ?? true,
           dateInscription: p.dateInscription?.toDate?.() || new Date(),
+          banni: !!p.banni
         }))
       );
 
@@ -3264,8 +3267,16 @@ export const SalleVocalePage = () => {
           return;
         }
 
-        const sessionActive = data.sessionState?.sessionActive !== false;
         const currentUser = auth.currentUser;
+        const isBanned = (data.participants || []).some((p: any) => p.uid === currentUser?.uid && p.banni);
+        if (isBanned) {
+          // Si l'utilisateur est banni en base de donnees, on le bloque avant la connexion
+          setStep('cancelled'); // Utilise cancelled pour l'instant pour eviter de faire un autre ecran hors RoomContent
+          alert('Vous avez été définitivement banni de cette salle.');
+          return;
+        }
+
+        const sessionActive = data.sessionState?.sessionActive !== false;
         if (currentUser && !sessionActive) {
           try {
             const evalStatus = await getEvaluationStatus(groupeId, currentUser.uid);

@@ -10,6 +10,7 @@ export interface ParticipantGroupe {
   pseudo: string;
   inscritVocal: boolean;
   dateInscription: Date;
+  banni?: boolean;
 }
 
 export interface MessageGroupe {

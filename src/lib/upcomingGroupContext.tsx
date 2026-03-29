@@ -57,7 +57,7 @@ function findUpcomingGroup(groupes: GroupeParole[], uid: string): { group: Group
   const myGroups = groupes.filter(g =>
     !g.isTestGroup &&
     g.status !== 'cancelled' &&
-    g.participants.some(p => p.uid === uid)
+    g.participants.some(p => p.uid === uid && !p.banni)
   );
 
   let best: GroupeParole | null = null;
