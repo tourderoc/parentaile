@@ -214,15 +214,21 @@ export function useVocalMachine({
             break;
 
           case 'WRITE_FIRESTORE_SESSION_ACTIVE':
-            await initSessionStateV2(groupeId, stateRef.current.context.currentAnimateurUid, localPseudo);
+            if (stateRef.current.context.currentAnimateurUid === localUid) {
+              await initSessionStateV2(groupeId, localUid, localPseudo);
+            }
             break;
 
           case 'WRITE_FIRESTORE_SUSPENDED':
-            await suspendSession(groupeId, effect.reason);
+            if (stateRef.current.context.currentAnimateurUid === localUid || !stateRef.current.context.animateurPresent) {
+              await suspendSession(groupeId, effect.reason);
+            }
             break;
 
           case 'WRITE_FIRESTORE_RESUMED':
-            await resumeSession(groupeId);
+            if (stateRef.current.context.currentAnimateurUid === localUid) {
+              await resumeSession(groupeId);
+            }
             break;
 
           case 'WRITE_FIRESTORE_CANCELLED': {
@@ -240,7 +246,9 @@ export function useVocalMachine({
           }
 
           case 'WRITE_FIRESTORE_ENDED':
-            await endSession(groupeId);
+            if (stateRef.current.context.currentAnimateurUid === localUid) {
+              await endSession(groupeId);
+            }
             break;
 
           case 'WRITE_FIRESTORE_REPLACEMENT':
