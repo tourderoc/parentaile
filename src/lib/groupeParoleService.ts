@@ -849,12 +849,22 @@ export async function initSessionStateV2(
   animateurPseudo: string
 ): Promise<void> {
   const ref = doc(db, 'groupes', groupeId);
-  // Don't reinit if group is cancelled or completed
   const snap = await getDoc(ref);
-  if (snap.exists()) {
-    const status = snap.data().status;
-    if (status === 'cancelled' || status === 'completed') return;
+  if (!snap.exists()) return;
+
+  const data = snap.data();
+  // Ne pas réinitialiser si le groupe est déjà en cours, terminé ou annulé
+  if (data.status === 'in_progress' || data.status === 'completed' || data.status === 'cancelled') {
+    console.warn(`[SERVICE] initSessionStateV2 ignored: group ${groupeId} is already ${data.status}`);
+    return;
   }
+
+  // Ne pas réinitialiser si un état de session existe déjà (ex: relay déjà pris)
+  if (data.sessionState) {
+    console.warn(`[SERVICE] initSessionStateV2 ignored: sessionState already exists for ${groupeId}`);
+    return;
+  }
+
   await updateDoc(ref, {
     status: 'in_progress',
     sessionState: {

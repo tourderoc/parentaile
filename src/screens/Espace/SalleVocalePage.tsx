@@ -1059,11 +1059,15 @@ const RoomContent: React.FC<{
   // Init session state when animateur enters
   const sessionInitRef = useRef(false);
   useEffect(() => {
-    if (isAnimateur && !sessionInitRef.current) {
-      sessionInitRef.current = true;
-      initSessionStateV2(groupeId, auth.currentUser!.uid, sessionPrenom || 'Parent');
+    if (isEffectiveAnimateur && !sessionInitRef.current && firebaseGroupe) {
+      const status = firebaseGroupe.status;
+      // UN SEUL animateur peut initier la session, et seulement si elle n'est pas déjà 'in_progress'
+      if (status !== 'in_progress' && status !== 'completed' && status !== 'cancelled') {
+        sessionInitRef.current = true;
+        initSessionStateV2(groupeId, auth.currentUser!.uid, sessionPrenom || 'Parent');
+      }
     }
-  }, [isAnimateur, groupeId, sessionPrenom]);
+  }, [isEffectiveAnimateur, firebaseGroupe, groupeId, sessionPrenom]);
 
   // ========== Vocal Machine (replaces useEffectiveAnimateur + useAnimateurWait + useSessionSuspension) ==========
   const {

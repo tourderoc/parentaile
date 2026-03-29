@@ -293,13 +293,13 @@ export function useVocalMachine({
       type: 'FIRESTORE_SYNC',
       suspended: firestoreSession.suspended,
       suspensionCount: firestoreSession.suspensionCount,
-      currentAnimateurUid: firestoreSession.currentAnimateurUid || createurUid,
+      currentAnimateurUid: firestoreSession.currentAnimateurUid,
     });
 
     // Also sync replacement status
     dispatch({
       type: 'REPLACEMENT_SYNC',
-      currentAnimateurUid: firestoreSession.currentAnimateurUid || createurUid,
+      currentAnimateurUid: firestoreSession.currentAnimateurUid,
       replacementUsed: firestoreSession.replacementUsed,
     });
 
