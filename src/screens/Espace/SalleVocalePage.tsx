@@ -1056,19 +1056,6 @@ const RoomContent: React.FC<{
     prevParticipantCountRef.current = participants.length;
   }, [participants.length, firestoreSession?.sessionActive]);
 
-  // Init session state when animateur enters
-  const sessionInitRef = useRef(false);
-  useEffect(() => {
-    if (isEffectiveAnimateur && !sessionInitRef.current && firebaseGroupe) {
-      const status = firebaseGroupe.status;
-      // UN SEUL animateur peut initier la session, et seulement si elle n'est pas déjà 'in_progress'
-      if (status !== 'in_progress' && status !== 'completed' && status !== 'cancelled') {
-        sessionInitRef.current = true;
-        initSessionStateV2(groupeId, auth.currentUser!.uid, sessionPrenom || 'Parent');
-      }
-    }
-  }, [isEffectiveAnimateur, firebaseGroupe, groupeId, sessionPrenom]);
-
   // ========== Vocal Machine (replaces useEffectiveAnimateur + useAnimateurWait + useSessionSuspension) ==========
   const {
     phase: machinePhase,
@@ -1093,6 +1080,19 @@ const RoomContent: React.FC<{
     firestoreSession,
     participantPoints,
   });
+
+  // Init session state when animateur enters
+  const sessionInitRef = useRef(false);
+  useEffect(() => {
+    if (isEffectiveAnimateur && !sessionInitRef.current && firebaseGroupe) {
+      const status = firebaseGroupe.status;
+      // UN SEUL animateur peut initier la session, et seulement si elle n'est pas déjà 'in_progress'
+      if (status !== 'in_progress' && status !== 'completed' && status !== 'cancelled') {
+        sessionInitRef.current = true;
+        initSessionStateV2(groupeId, auth.currentUser!.uid, sessionPrenom || 'Parent');
+      }
+    }
+  }, [isEffectiveAnimateur, firebaseGroupe, groupeId, sessionPrenom]);
 
   // Dispatch HOUR_REACHED when dateVocal passes (or immediately for test groups)
   const hourReachedRef = useRef(false);

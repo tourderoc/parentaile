@@ -35,8 +35,15 @@ service cloud.firestore {
     match /groupes/{groupeId} {
       allow read: if true;
       allow create: if request.auth != null;
-      // Permettre la modification par les membres connectés
-      allow update: if request.auth != null;
+      allow update: if request.auth != null && (
+        // Autoriser si on ne touche PAS au sessionState (ex: inscription/désinscription)
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['sessionState']) ||
+        // Sinon, appliquer les règles de protection de l'animateur (plus sûr avec get())
+        resource.data.get('sessionState', null) == null || 
+        !resource.data.sessionState.get('replacementUsed', false) || 
+        resource.data.sessionState.get('currentAnimateurUid', '') == request.auth.uid ||
+        request.resource.data.sessionState.get('currentAnimateurUid', '') == request.auth.uid
+      );
       allow delete: if request.auth != null && request.auth.uid == resource.data.createurUid;
 
       // Messages du forum (sous-collection)
