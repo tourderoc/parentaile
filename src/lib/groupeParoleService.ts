@@ -873,32 +873,6 @@ export async function initSessionStateV2(
 }
 
 /**
- * Garantit que l'état de session Firestore existe pour que tout le monde 
- * puisse synchroniser son chrono sur le même timestamp dès le début,
- * même si l'animateur n'est pas encore là.
- */
-export async function ensureSessionState(groupeId: string): Promise<void> {
-  const ref = doc(db, 'groupes', groupeId);
-  await runTransaction(db, async (transaction) => {
-    const snap = await transaction.get(ref);
-    if (!snap.exists()) return;
-    const data = snap.data();
-    
-    // Si la session n'est pas encore initialisée et qu'on est au moins 3 (ou proche du début)
-    if (!data.sessionState && (data.status === undefined || data.status === 'open')) {
-      transaction.update(ref, {
-        status: 'starting',
-        'sessionState.phaseStartedAt': serverTimestamp(),
-        'sessionState.sessionActive': false, // Pas encore active tant que l'anim n'est pas là
-        'sessionState.currentPhaseIndex': 0,
-        'sessionState.suspended': false,
-        'sessionState.suspensionCount': 0,
-      });
-    }
-  });
-}
-
-/**
  * Transaction pour proposer de reprendre l'animation du groupe.
  */
 export async function proposeAsAnimateur(

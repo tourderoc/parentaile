@@ -16,10 +16,10 @@ import {
   ConnectionState,
 } from 'livekit-client';
 import {
-  Mic, MicOff, Crown, Loader2, AlertCircle, Volume2, MessageCircle,
+  Mic, MicOff, Crown, Loader2, AlertCircle, Volume2, UserX, MessageCircle,
   Hand, LogOut, KeyRound, Send, X, CheckCircle2, Users, Clock,
   AlertTriangle, ShieldAlert, Lightbulb, Heart, ChevronDown, Lock,
-  SkipForward, Plus, Square
+  SkipForward, Plus, Square, ArrowRight
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { auth, db } from '../../lib/firebase';
@@ -27,13 +27,13 @@ import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { getLiveKitToken } from '../../lib/liveKitService';
 import { 
   submitEvaluation, markEvaluationPending, getEvaluationStatus, addPoints, 
-  setPresence, removePresence, advancePhase, 
+  getUserBadge, setPresence, removePresence, advancePhase, 
   extendSession, endSession, submitBanFeedback,
-  initSessionStateV2, onPresenceList,
-  cancelGroup, ensureSessionState
+  initSessionStateV2, suspendSession, resumeSession, proposeAsAnimateur, onPresenceList,
+  cancelGroup, incrementAnimateurDisconnect
 } from '../../lib/groupeParoleService';
-import type { ParticipantGroupe, StructureEtape, BadgeLevel, SessionState, MicPolicy } from '../../types/groupeParole';
-import { STRUCTURE_DEFAUT, getBadgeInfo, PHASE_MIC_POLICY, DEFAULT_MIC_POLICY, getBadgeForPoints } from '../../types/groupeParole';
+import type { MessageGroupe, ParticipantGroupe, StructureEtape, BadgeLevel, SessionState, MicPolicy } from '../../types/groupeParole';
+import { STRUCTURE_DEFAUT, getBadgeInfo, PHASE_MIC_POLICY, DEFAULT_MIC_POLICY } from '../../types/groupeParole';
 import { useVocalMachine } from '../../vocal/hooks/useVocalMachine';
 import { SuspensionOverlay } from '../../components/vocal/SuspensionOverlay';
 import { AnimateurWaitOverlay } from '../../components/vocal/AnimateurWaitOverlay';
@@ -662,13 +662,13 @@ const SessionProgressBar: React.FC<{
       <div className="px-6 mt-2 mb-1">
         {/* Segmented bar */}
         <div className="flex gap-[2px] h-1.5 rounded-full overflow-hidden border border-white/5">
-          {structure.map((etape, index) => {
+          {structure.map((etape, i) => {
             const widthPct = (etape.dureeMinutes / phase.totalDurationMin) * 100;
-            const isCurrent = index === phase.currentIndex;
-            const isPast = index < phase.currentIndex;
+            const isPast = i < phase.currentIndex;
+            const isCurrent = i === phase.currentIndex;
             return (
               <div
-                key={index}
+                key={i}
                 className="relative overflow-hidden"
                 style={{ width: `${widthPct}%`, background: 'rgba(255,255,255,0.07)' }}
               >
@@ -1058,13 +1058,6 @@ const RoomContent: React.FC<{
 
   // Init session state when animateur enters
   const sessionInitRef = useRef(false);
-  // IMPORTANT: Ensure a shared countdown timestamp exists even if animateur is absent
-  useEffect(() => {
-    if (groupeId) {
-      ensureSessionState(groupeId);
-    }
-  }, [groupeId]);
-
   useEffect(() => {
     if (isAnimateur && !sessionInitRef.current) {
       sessionInitRef.current = true;
@@ -1093,16 +1086,7 @@ const RoomContent: React.FC<{
     localPseudo: sessionPrenom || 'Parent',
     liveKitParticipants: participants,
     isTestGroup,
-    firestoreSession: firestoreSession ? {
-      suspended: !!firestoreSession.suspended,
-      suspensionCount: firestoreSession.suspensionCount || 0,
-      currentAnimateurUid: firestoreSession.currentAnimateurUid || createurUid,
-      currentAnimateurPseudo: firestoreSession.currentAnimateurPseudo,
-      replacementUsed: !!firestoreSession.replacementUsed,
-      sessionActive: !!firestoreSession.sessionActive,
-      suspendedAt: firestoreSession.suspendedAt,
-      phaseStartedAt: firestoreSession.phaseStartedAt,
-    } : undefined,
+    firestoreSession,
     participantPoints,
   });
 
@@ -1171,9 +1155,7 @@ const RoomContent: React.FC<{
   useEffect(() => {
     if (firestoreSession && !firestoreSession.sessionActive) {
       const isCancelled = machinePhase === 'SESSION_CANCELLED' || sessionCancelledRef.current || groupeStatus === 'cancelled';
-      const isWaiting = machinePhase === 'WAITING_ROOM' || machinePhase === 'COUNTDOWN_START';
-      
-      if (!isCancelled && !isWaiting) {
+      if (!isCancelled) {
         onSessionEnded?.();
       }
     }
@@ -2257,7 +2239,7 @@ const WaitingRoom: React.FC<{
     update();
     const interval = setInterval(update, 1000);
     return () => clearInterval(interval);
-  }, [dateVocal, isTestGroup, testStartTime, groupeId]);
+  }, [dateVocal, isTestGroup, testStartTime]);
 
   const animateurPresent = participants.some((p) => p.uid === createurUid);
   const isAnimateur = currentUser?.uid === createurUid;

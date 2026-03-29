@@ -163,9 +163,7 @@ export function useVocalMachine({
 
     const remaining = Math.max(0, totalDuration - elapsedSec);
     
-    // Snapping logic: only update if drift is > 1s to avoid oscillation
     if (Math.abs(remaining - machineState.context.countdownRemaining) > 1) {
-      console.log(`[VOCAL_MACHINE] Snapping countdown: ${machineState.context.countdownRemaining} -> ${remaining} (Elapsed: ${elapsedSec}s)`);
       reducerDispatch({
         type: 'SET_STATE',
         state: {
@@ -306,8 +304,7 @@ export function useVocalMachine({
     });
 
     // Reset refusal state if session resumes or animator found
-    const currentAnim = firestoreSession.currentAnimateurUid || createurUid;
-    if (!firestoreSession.suspended || currentAnim !== effectiveAnimateurUid) {
+    if (!firestoreSession.suspended || firestoreSession.currentAnimateurUid !== effectiveAnimateurUid) {
       setHasRefused(false);
     }
 
