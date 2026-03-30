@@ -57,6 +57,14 @@ export async function createGroupeParole(data: CreateGroupeData): Promise<string
     ...(data.structureType === 'structuree' && data.structure
       ? { structure: data.structure }
       : {}),
+    status: 'pending',
+    sessionState: {
+      sessionActive: false,
+      suspended: false,
+      suspensionCount: 0,
+      currentPhaseIndex: 0,
+      replacementUsed: false,
+    },
     participants: [
       {
         uid: data.createurUid,
@@ -142,6 +150,7 @@ export function onGroupesParole(
           messageCount: d.messageCount || 0,
           passwordVocal: d.passwordVocal,
           isTestGroup: d.isTestGroup || false,
+          status: d.status || undefined,
           sessionState: d.sessionState ? {
             currentPhaseIndex: d.sessionState.currentPhaseIndex ?? 0,
             extendedMinutes: d.sessionState.extendedMinutes ?? 0,
@@ -753,11 +762,25 @@ export async function cancelGroup(groupeId: string, reason: string): Promise<voi
     if (data.status === 'cancelled' || data.status === 'completed') return;
 
     // Execute update atomically
-    transaction.update(ref, {
+    const updates: Record<string, any> = {
       status: 'cancelled',
-      'sessionState.sessionActive': false,
       cancelReason: reason,
-    });
+    };
+
+    // Si sessionState n'existe pas encore (groupe jamais démarré), on l'initialise en terminal
+    if (!data.sessionState) {
+      updates.sessionState = {
+        sessionActive: false,
+        suspended: false,
+        suspensionCount: 0,
+        currentPhaseIndex: 0,
+        replacementUsed: false,
+      };
+    } else {
+      updates['sessionState.sessionActive'] = false;
+    }
+
+    transaction.update(ref, updates);
 
     // Capture context for post-transaction notifications
     shouldNotify = true;
@@ -861,9 +884,9 @@ export async function initSessionStateV2(
     return;
   }
 
-  // Ne pas réinitialiser si un état de session existe déjà (ex: relay déjà pris)
-  if (data.sessionState) {
-    console.warn(`[SERVICE] initSessionStateV2 ignored: sessionState already exists for ${groupeId}`);
+  // Ne pas réinitialiser si la session est déjà ACTIVE (ex: relay déjà pris)
+  if (data.sessionState?.sessionActive) {
+    console.warn(`[SERVICE] initSessionStateV2 ignored: session is already active for ${groupeId}`);
     return;
   }
 

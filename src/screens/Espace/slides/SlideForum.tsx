@@ -98,7 +98,7 @@ const GroupeCard: React.FC<{
 
   // Presence temps reel : ecouter quand la salle est ouverte (15 min avant → 60 min apres)
   const [onlineCount, setOnlineCount] = useState(0);
-  const salleOuverte = !vocalPassé && (groupe.dateVocal.getTime() - Date.now()) < 15 * 60000;
+  const salleOuverte = !vocalPassé && groupe.status !== 'cancelled' && (groupe.dateVocal.getTime() - Date.now()) < 15 * 60000;
 
   useEffect(() => {
     if (!salleOuverte && !groupe.isTestGroup) return;
@@ -243,7 +243,7 @@ const GroupeCard: React.FC<{
 
         {/* Pied : temps restant + rating */}
         {/* Pied : temps restant + rating ou CTA Début imminent */}
-        {salleOuverte && (!estComplet || groupe.participants.some(p => p.uid === auth.currentUser?.uid)) ? (
+        {salleOuverte && groupe.status !== 'cancelled' && (!estComplet || groupe.participants.some(p => p.uid === auth.currentUser?.uid)) ? (
           <div className="px-4 py-3.5 bg-gradient-to-r from-emerald-500 to-emerald-400 flex items-center justify-center gap-2 mt-auto">
             <span className="w-2 h-2 rounded-full bg-white animate-pulse shadow-[0_0_8px_rgba(255,255,255,0.8)]" />
             <span className="text-[11px] font-extrabold text-white uppercase tracking-widest">

@@ -42,21 +42,29 @@ service cloud.firestore {
         resource.data.get(['sessionState', 'currentAnimateurUid'], resource.data.createurUid) == request.auth.uid ||
         // 3. Autoriser les participants à mettre en pause la session si l'animateur est absent (Sauvetage de session)
         (
-          resource.data.participants.hasAny([{'uid': request.auth.uid}]) && 
+          resource.data.participants.hasAny([{'uid': request.auth.uid}]) &&
           request.resource.data.sessionState.get('suspended', false) == true &&
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(['titre', 'description', 'createurUid', 'dateVocal'])
         ) ||
         // 4. Autoriser la prise de relais (Takeover) : l'utilisateur se désigne comme nouvel animateur
         // Note: Cela inclut l'initialisation de la session (status in_progress)
         (
-          request.resource.data.sessionState.currentAnimateurUid == request.auth.uid && 
+          request.resource.data.sessionState.currentAnimateurUid == request.auth.uid &&
           (
-             resource.data.get('sessionState', null) == null || 
+             resource.data.get('sessionState', null) == null ||
              resource.data.sessionState.get('suspended', false) == true ||
              resource.data.status == 'scheduled' ||
              // Pour les sessions en cours, on autorise si c'est une transition d'animateur
              request.resource.data.status == 'in_progress'
           )
+        ) ||
+        // 5. Autoriser l'annulation par un participant inscrit quand la session n'a jamais démarré
+        // (animateur absent, countdown expiré → cancelGroup() doit pouvoir écrire status='cancelled')
+        (
+          request.resource.data.status == 'cancelled' &&
+          request.resource.data.sessionState.sessionActive == false &&
+          resource.data.get('status', 'scheduled') != 'completed' &&
+          resource.data.participants.hasAny([{'uid': request.auth.uid}])
         )
       );
       allow delete: if request.auth != null && request.auth.uid == resource.data.createurUid;

@@ -57,6 +57,7 @@ function findUpcomingGroup(groupes: GroupeParole[], uid: string): { group: Group
   const myGroups = groupes.filter(g =>
     !g.isTestGroup &&
     g.status !== 'cancelled' &&
+    g.status !== 'completed' &&
     g.participants.some(p => p.uid === uid && !p.banni)
   );
 
@@ -72,6 +73,11 @@ function findUpcomingGroup(groupes: GroupeParole[], uid: string): { group: Group
 
     // Skip if session was ended by animateur
     if (g.sessionState?.sessionActive === false) continue;
+
+    // Filet de securite : si dateVocal est passee depuis plus de 5 min
+    // et qu'il n'y a toujours pas de sessionState (session jamais demarree),
+    // considerer le groupe comme mort (cancelGroup a probablement echoue)
+    if (diff < -5 && !g.sessionState && g.status !== 'in_progress') continue;
 
     // Prendre le plus proche / le plus urgent
     if (diff < bestMinutes) {
