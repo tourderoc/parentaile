@@ -1153,8 +1153,11 @@ const RoomContent: React.FC<{
 
   // Handle session end by animateur — notify parent via custom event
   // IMPORTANT: Do NOT fire if machine already cancelled (race condition guard)
+  // IMPORTANT: Only fire if session was actually running (in_progress/completed),
+  // NOT for groups that never started (scheduled/pending with sessionActive=false from creation)
   useEffect(() => {
-    if (firestoreSession && !firestoreSession.sessionActive) {
+    if (firestoreSession && !firestoreSession.sessionActive
+        && (groupeStatus === 'in_progress' || groupeStatus === 'completed')) {
       const isCancelled = machinePhase === 'SESSION_CANCELLED' || sessionCancelledRef.current || groupeStatus === 'cancelled';
       if (!isCancelled) {
         onSessionEnded?.();
@@ -3288,8 +3291,10 @@ export const SalleVocalePage = () => {
           return;
         }
 
-        const sessionActive = data.sessionState?.sessionActive !== false;
-        if (currentUser && !sessionActive) {
+        // Only redirect to evaluation if the session was actually started and then ended/cancelled
+        const sessionWasStartedThenEnded = data.sessionState?.sessionActive === false
+          && (data.status === 'cancelled' || data.status === 'completed');
+        if (currentUser && sessionWasStartedThenEnded) {
           try {
             const evalStatus = await getEvaluationStatus(groupeId, currentUser.uid);
             if (evalStatus === 'pending') {

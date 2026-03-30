@@ -57,14 +57,7 @@ export async function createGroupeParole(data: CreateGroupeData): Promise<string
     ...(data.structureType === 'structuree' && data.structure
       ? { structure: data.structure }
       : {}),
-    status: 'pending',
-    sessionState: {
-      sessionActive: false,
-      suspended: false,
-      suspensionCount: 0,
-      currentPhaseIndex: 0,
-      replacementUsed: false,
-    },
+    status: 'scheduled',
     participants: [
       {
         uid: data.createurUid,

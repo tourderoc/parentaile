@@ -71,13 +71,14 @@ function findUpcomingGroup(groupes: GroupeParole[], uid: string): { group: Group
     if (diff > 30) continue;
     if (diff < -60) continue;
 
-    // Skip if session was ended by animateur
-    if (g.sessionState?.sessionActive === false) continue;
+    // Skip if session was ended or cancelled (use status, not sessionActive —
+    // sessionActive may not exist yet for groups that never started)
+    if (g.status === 'cancelled' || g.status === 'completed') continue;
 
     // Filet de securite : si dateVocal est passee depuis plus de 5 min
-    // et qu'il n'y a toujours pas de sessionState (session jamais demarree),
+    // et que la session n'a jamais demarree (pas de status in_progress),
     // considerer le groupe comme mort (cancelGroup a probablement echoue)
-    if (diff < -5 && !g.sessionState && g.status !== 'in_progress') continue;
+    if (diff < -5 && g.status !== 'in_progress' && !g.sessionState?.sessionActive) continue;
 
     // Prendre le plus proche / le plus urgent
     if (diff < bestMinutes) {
