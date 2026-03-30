@@ -309,6 +309,7 @@ export function useVocalMachine({
       type: 'REPLACEMENT_SYNC',
       currentAnimateurUid: firestoreSession.currentAnimateurUid,
       replacementUsed: firestoreSession.replacementUsed,
+      suspensionCount: firestoreSession.suspensionCount,
     });
 
     // Reset refusal state if session resumes or animator found
@@ -355,8 +356,8 @@ export function useVocalMachine({
     const isWaitingPhase = phase === 'COUNTDOWN_START' || phase === 'SUSPENDED';
     if (!isWaitingPhase) return false;
 
-    // Don't show if already refused
-    if (hasRefused) return false;
+    // Don't show if already refused (check both machine context and local state)
+    if (hasRefused || context.refusedRelay) return false;
 
     const hasAnimateurIssue =
       context.suspensionReason === 'animateur_left' ||

@@ -238,6 +238,8 @@ function handleCountdownStart(state: VocalState, event: VocalEvent, ctx: VocalCo
       const newCtx = { 
         ...ctx, 
         currentAnimateurUid: event.currentAnimateurUid,
+        replacementUsed: event.replacementUsed,
+        suspensionCount: event.suspensionCount,
         isProposing: event.currentAnimateurUid === ctx.currentAnimateurUid ? ctx.isProposing : false,
       };
       
@@ -485,6 +487,8 @@ function handleSuspended(state: VocalState, event: VocalEvent, ctx: VocalContext
       const newCtx = { 
         ...ctx, 
         currentAnimateurUid: event.currentAnimateurUid,
+        replacementUsed: event.replacementUsed,
+        suspensionCount: event.suspensionCount,
         isProposing: event.currentAnimateurUid === ctx.currentAnimateurUid ? ctx.isProposing : false,
       };
       

@@ -38,7 +38,7 @@ export type VocalEvent =
   | { type: 'ANIMATEUR_END_SESSION' }
   | { type: 'PARTICIPANT_BANNED'; uid: string }
   | { type: 'REPLACEMENT_REFUSED' }
-  | { type: 'REPLACEMENT_SYNC'; currentAnimateurUid: string; replacementUsed: boolean }
+  | { type: 'REPLACEMENT_SYNC'; currentAnimateurUid: string; replacementUsed: boolean; suspensionCount: number }
   | { type: 'FIRESTORE_SYNC'; suspended: boolean; suspensionCount: number; currentAnimateurUid: string };
 
 // ========== Contexte (donnees accumulees) ==========
