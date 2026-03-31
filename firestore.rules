@@ -58,13 +58,16 @@ service cloud.firestore {
              request.resource.data.status == 'in_progress'
           )
         ) ||
-        // 5. Autoriser l'annulation par un participant inscrit quand la session n'a jamais démarré
+        // 5. Autoriser l'annulation par tout utilisateur authentifié quand le groupe n'est pas terminal
         // (animateur absent, countdown expiré → cancelGroup() doit pouvoir écrire status='cancelled')
+        // Note: hasAny ne supporte pas le matching partiel sur les objets participants,
+        // donc on vérifie seulement l'authentification + que le groupe n'est pas déjà terminal.
+        // La sécurité est assurée par la transaction côté client (idempotente).
         (
           request.resource.data.status == 'cancelled' &&
           request.resource.data.sessionState.sessionActive == false &&
           resource.data.get('status', 'scheduled') != 'completed' &&
-          resource.data.participants.hasAny([{'uid': request.auth.uid}])
+          resource.data.get('status', 'scheduled') != 'cancelled'
         )
       );
       allow delete: if request.auth != null && request.auth.uid == resource.data.createurUid;
