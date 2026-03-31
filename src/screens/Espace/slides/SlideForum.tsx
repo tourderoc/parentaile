@@ -88,7 +88,8 @@ const GroupeCard: React.FC<{
   index: number;
   total: number;
   onClick?: () => void;
-}> = ({ groupe, index, total, onClick }) => {
+  onJoinVocal?: () => void;
+}> = ({ groupe, index, total, onClick, onJoinVocal }) => {
   const navigate = useNavigate();
   const colors = THEME_COLORS[groupe.theme];
   const jours = joursRestants(groupe.dateExpiration);
@@ -244,7 +245,10 @@ const GroupeCard: React.FC<{
         {/* Pied : temps restant + rating */}
         {/* Pied : temps restant + rating ou CTA Début imminent */}
         {salleOuverte && groupe.status !== 'cancelled' && (!estComplet || groupe.participants.some(p => p.uid === auth.currentUser?.uid)) ? (
-          <div className="px-4 py-3.5 bg-gradient-to-r from-emerald-500 to-emerald-400 flex items-center justify-center gap-2 mt-auto">
+          <div
+            className="px-4 py-3.5 bg-gradient-to-r from-emerald-500 to-emerald-400 flex items-center justify-center gap-2 mt-auto hover:from-emerald-600 hover:to-emerald-500 transition-colors"
+            onClick={(e) => { e.stopPropagation(); onJoinVocal?.(); }}
+          >
             <span className="w-2 h-2 rounded-full bg-white animate-pulse shadow-[0_0_8px_rgba(255,255,255,0.8)]" />
             <span className="text-[11px] font-extrabold text-white uppercase tracking-widest">
               Rejoindre · Début imminent
@@ -551,7 +555,7 @@ export const SlideForum = () => {
                           filter: isActive ? 'drop-shadow(0 12px 24px rgba(0,0,0,0.06))' : 'drop-shadow(0 4px 8px rgba(0,0,0,0.02))'
                         }}
                       >
-                        <GroupeCard groupe={groupe} index={i} total={groupesFiltres.length} onClick={() => navigate(`/espace/groupes/${groupe.id}`)} />
+                        <GroupeCard groupe={groupe} index={i} total={groupesFiltres.length} onClick={() => navigate(`/espace/groupes/${groupe.id}`)} onJoinVocal={() => navigate(`/espace/groupes/${groupe.id}/vocal`)} />
                       </div>
                     )}
                   </SwiperSlide>

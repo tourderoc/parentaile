@@ -1115,10 +1115,14 @@ const RoomContent: React.FC<{
   }, [dateVocal, machineDispatch, isTestGroup]);
 
   // Navigate to parent CancellationScreen when machine reaches terminal cancelled state
+  // Delai de 1s pour laisser cancelGroup() ecrire dans Firestore avant l'unmount
   useEffect(() => {
     if (machinePhase === 'SESSION_CANCELLED') {
-      if (onCancelled) onCancelled();
-      else onLeave();
+      const timer = setTimeout(() => {
+        if (onCancelled) onCancelled();
+        else onLeave();
+      }, 1000);
+      return () => clearTimeout(timer);
     }
   }, [machinePhase, onLeave, onCancelled]);
 
