@@ -21,7 +21,7 @@ export const CancellationScreen: React.FC<Props> = ({
   isCreator
 }) => {
   return (
-    <div className="h-screen bg-[#FFFBF0] flex flex-col items-center justify-center px-6 relative overflow-hidden">
+    <div className="min-h-screen bg-[#FFFBF0] flex flex-col items-center justify-center px-6 py-10 overflow-y-auto">
       {/* Background decorations */}
       <div className="absolute top-0 right-0 w-64 h-64 bg-red-100 rounded-full blur-3xl opacity-50 -translate-y-1/2 translate-x-1/2" />
       <div className="absolute bottom-0 left-0 w-64 h-64 bg-orange-100 rounded-full blur-3xl opacity-50 border-white" />

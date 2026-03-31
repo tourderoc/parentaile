@@ -1114,16 +1114,13 @@ const RoomContent: React.FC<{
     }
   }, [dateVocal, machineDispatch, isTestGroup]);
 
-  // Navigate away when machine reaches terminal cancelled state
-  // WE REMOVED AUTO-REDIRECT HERE to allow Firestore writes to finish and show CancellationScreen
-  /*
+  // Navigate to parent CancellationScreen when machine reaches terminal cancelled state
   useEffect(() => {
     if (machinePhase === 'SESSION_CANCELLED') {
       if (onCancelled) onCancelled();
       else onLeave();
     }
   }, [machinePhase, onLeave, onCancelled]);
-  */
 
   // Toast when animateur changes (replacement happened)
   const prevAnimateurUidRef = useRef(firestoreSession?.currentAnimateurUid);
@@ -1588,15 +1585,7 @@ const RoomContent: React.FC<{
             />
           );
         })()}
-        {machinePhase === 'SESSION_CANCELLED' && (
-          <CancellationScreen
-            reason={machineReason === 'animateur_left' ? 'Ce groupe n\'a plus d\'animateur disponible ou a été annulé.' : 'Ce groupe n\'a pas atteint le nombre de participants minimum (3 personnes).'}
-            isCreator={effectiveAnimateurUid === auth.currentUser?.uid}
-            onGoHome={onLeave}
-            onDiscussForum={onLeave}
-            onBrowseGroups={onLeave}
-          />
-        )}
+        {/* CancellationScreen is rendered by parent (step='cancelled') for full-screen display */}
       </AnimatePresence>
 
       {/* Circular layout */}
