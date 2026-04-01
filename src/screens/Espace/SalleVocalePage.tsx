@@ -2191,7 +2191,8 @@ const WaitingRoom: React.FC<{
   isAnimateur: boolean;
   onEnter: () => void;
   onBack: () => void;
-}> = ({ groupeId, groupeTitre, groupeTheme, dateVocal, isTestGroup, participants, createurUid, structureType, structure, sessionPrenom, isAnimateur, onEnter, onBack }) => {
+  onCancelled?: () => void;
+}> = ({ groupeId, groupeTitre, groupeTheme, dateVocal, isTestGroup, participants, createurUid, structureType, structure, sessionPrenom, isAnimateur, onEnter, onBack, onCancelled }) => {
   const currentUser = auth.currentUser;
   const [countdown, setCountdown] = useState('');
   const [sessionStarted, setSessionStarted] = useState(false);
@@ -2251,9 +2252,23 @@ const WaitingRoom: React.FC<{
   }, [dateVocal, isTestGroup, testStartTime]);
 
   const animateurPresent = participants.some((p) => p.uid === createurUid);
+  const hasEnoughParticipants = isTestGroup || participants.length >= 3;
+
+  // Auto-cancel when session time arrives but not enough participants
+  const cancelledRef = useRef(false);
+  useEffect(() => {
+    if (sessionStarted && !hasEnoughParticipants && !cancelledRef.current) {
+      cancelledRef.current = true;
+      cancelGroup(groupeId, 'Nombre de participants insuffisant (minimum 3)').catch(() => {});
+      // Small delay to let Firestore write complete before showing cancellation screen
+      setTimeout(() => {
+        if (onCancelled) onCancelled();
+      }, 1000);
+    }
+  }, [sessionStarted, hasEnoughParticipants, groupeId, onCancelled]);
 
   return (
-    <div 
+    <div
       id="waiting-room-container"
       className="min-h-[100dvh] flex flex-col items-center px-6 pt-12 pb-8 overflow-y-auto"
       style={{
@@ -2272,12 +2287,19 @@ const WaitingRoom: React.FC<{
 
       {/* Countdown or Enter button */}
       {sessionStarted || isTestGroup ? (
-        <button
-          onClick={onEnter}
-          className="mb-5 px-10 py-4 rounded-2xl font-extrabold text-base shadow-xl active:scale-95 transition-all bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-orange-500/30 animate-pulse"
-        >
-          {isAnimateur ? '🎙️ Lancer la session' : '🎙️ Entrer dans la salle'}
-        </button>
+        hasEnoughParticipants ? (
+          <button
+            onClick={onEnter}
+            className="mb-5 px-10 py-4 rounded-2xl font-extrabold text-base shadow-xl active:scale-95 transition-all bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-orange-500/30 animate-pulse"
+          >
+            {isAnimateur ? '🎙️ Lancer la session' : '🎙️ Entrer dans la salle'}
+          </button>
+        ) : (
+          <div className="mb-5 px-8 py-4 rounded-2xl bg-red-500/15 border border-red-400/30 text-center">
+            <p className="text-sm font-bold text-red-300">Participants insuffisants</p>
+            <p className="text-xs text-red-300/60 mt-1">Minimum 3 inscrits requis — annulation en cours...</p>
+          </div>
+        )
       ) : (
         <div className="bg-white/10 backdrop-blur-md rounded-2xl px-6 py-4 flex flex-col items-center mb-5">
           <div className="flex items-center gap-2 mb-2">
@@ -3739,6 +3761,10 @@ export const SalleVocalePage = () => {
         sessionPrenom={sessionPrenom}
         onEnter={handleEnterRoom}
         onBack={() => setStep('prenom')}
+        onCancelled={() => {
+          sessionCancelledRef.current = true;
+          setStep('cancelled');
+        }}
       />
     );
   }

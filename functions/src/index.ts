@@ -146,6 +146,67 @@ export const sendVocalReminders = functions
     return null;
   });
 
+// ========== NETTOYAGE — Suppression des groupes annulés sans interaction ==========
+
+export const cleanupCancelledGroup = functions
+  .region('europe-west1')
+  .firestore.document('groupes/{groupeId}')
+  .onUpdate(async (change, context) => {
+    const before = change.before.data();
+    const after = change.after.data();
+
+    // Ne reagir que si le status vient de passer a 'cancelled'
+    if (before.status === 'cancelled' || after.status !== 'cancelled') return;
+
+    const groupeId = context.params.groupeId;
+    const createurUid = after.createurUid;
+    const db = admin.firestore();
+
+    // Verifier s'il y a des messages d'un autre parent que le createur
+    const messagesSnap = await db
+      .collection('groupes').doc(groupeId)
+      .collection('messages')
+      .limit(50) // Limiter pour performance
+      .get();
+
+    const hasOtherParentMessage = messagesSnap.docs.some(
+      (doc) => doc.data().auteurUid !== createurUid
+    );
+
+    if (hasOtherParentMessage) {
+      console.log(`[Cleanup] Groupe ${groupeId} annule mais a des messages d'autres parents — conservation`);
+      return;
+    }
+
+    // Aucune interaction d'un autre parent → suppression complete
+    console.log(`[Cleanup] Groupe ${groupeId} annule sans interaction — suppression`);
+
+    // Supprimer toutes les sous-collections
+    const subcollections = ['messages', 'evaluations', 'presence', 'participantExits', 'notifications_sent'];
+    for (const sub of subcollections) {
+      const subSnap = await db.collection('groupes').doc(groupeId).collection(sub).get();
+      const batch = db.batch();
+      subSnap.docs.forEach((doc) => batch.delete(doc.ref));
+      if (subSnap.docs.length > 0) {
+        await batch.commit();
+      }
+    }
+
+    // Supprimer les notifications liees au groupe
+    const notifsSnap = await db.collection('parentNotifications')
+      .where('groupeId', '==', groupeId)
+      .get();
+    if (!notifsSnap.empty) {
+      const batch = db.batch();
+      notifsSnap.docs.forEach((doc) => batch.delete(doc.ref));
+      await batch.commit();
+    }
+
+    // Supprimer le document du groupe
+    await db.collection('groupes').doc(groupeId).delete();
+    console.log(`[Cleanup] Groupe ${groupeId} supprime avec succes`);
+  });
+
 // ========== LIVEKIT — Token pour salle vocale ==========
 
 export const getLiveKitToken = functions.https.onCall(async (data, context) => {
