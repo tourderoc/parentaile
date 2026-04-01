@@ -1,10 +1,12 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { UserPlus, LogIn } from 'lucide-react';
+import { UserPlus, LogIn, Download, Share } from 'lucide-react';
+import { usePWAInstall } from '../../hooks/usePWAInstall';
 
 export const Welcome: React.FC = () => {
   const navigate = useNavigate();
+  const { mode, install } = usePWAInstall();
 
   return (
     <div className="min-h-screen bg-[#FFFBF0] flex flex-col items-center justify-between overflow-hidden relative">
@@ -44,6 +46,49 @@ export const Welcome: React.FC = () => {
 
       {/* Action Area */}
       <div className="w-full max-w-md px-6 pb-12 space-y-4 z-10">
+
+        {/* PWA Install Banner */}
+        {mode === 'prompt' && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+            className="bg-white/70 backdrop-blur-sm border border-orange-200 rounded-2xl p-4 flex items-center gap-3"
+          >
+            <div className="w-10 h-10 bg-orange-100 rounded-xl flex items-center justify-center shrink-0">
+              <Download className="w-5 h-5 text-orange-500" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold text-gray-800">Installer l'application</p>
+              <p className="text-xs text-gray-500">Accès rapide depuis votre écran d'accueil</p>
+            </div>
+            <button
+              onClick={install}
+              className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold rounded-xl transition-colors shrink-0"
+            >
+              Installer
+            </button>
+          </motion.div>
+        )}
+
+        {mode === 'ios' && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+            className="bg-white/70 backdrop-blur-sm border border-orange-200 rounded-2xl p-4"
+          >
+            <div className="flex items-center gap-3 mb-2">
+              <div className="w-10 h-10 bg-orange-100 rounded-xl flex items-center justify-center shrink-0">
+                <Download className="w-5 h-5 text-orange-500" />
+              </div>
+              <p className="text-sm font-bold text-gray-800">Installer l'application</p>
+            </div>
+            <p className="text-xs text-gray-500 leading-relaxed">
+              Appuyez sur <Share className="w-3.5 h-3.5 inline-block text-blue-500 -mt-0.5" /> <strong>Partager</strong> puis <strong>« Sur l'écran d'accueil »</strong>
+            </p>
+          </motion.div>
+        )}
 
         <div className="flex gap-4">
           <motion.button
