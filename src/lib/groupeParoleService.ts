@@ -1254,7 +1254,7 @@ export async function banParticipantExplicit(
   // 1. Marquer comme banni dans participantExits
   const exitRef = doc(db, 'groupes', groupeId, 'participantExits', uid);
   await setDoc(exitRef, {
-    count: 3, 
+    count: 3,
     lastExitAt: serverTimestamp(),
     banned: true,
   }, { merge: true });
@@ -1263,11 +1263,22 @@ export async function banParticipantExplicit(
   const groupeRef = doc(db, 'groupes', groupeId);
   const snap = await getDoc(groupeRef);
   if (snap.exists()) {
-    const participants = snap.data().participants || [];
-    const updatedParticipants = participants.map((p: any) => 
+    const groupeData = snap.data();
+    const participants = groupeData.participants || [];
+    const updatedParticipants = participants.map((p: any) =>
       p.uid === uid ? { ...p, banni: true } : p
     );
     await updateDoc(groupeRef, { participants: updatedParticipants });
+
+    // 3. Notifier le banni
+    const groupeTitre: string = groupeData.titre || 'ce groupe';
+    await sendParentNotification(
+      uid,
+      'group_banned',
+      'Vous avez été exclu du groupe',
+      `Vous avez été définitivement banni du groupe "${groupeTitre}" par l'animateur.`,
+      { groupeId, groupeTitre }
+    );
   }
 }
 

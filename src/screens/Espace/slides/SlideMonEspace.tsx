@@ -13,7 +13,7 @@ import {
 } from 'firebase/firestore';
 import { Bell, Users, ChevronRight, LayoutGrid, Loader2, Heart, X, Star } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { onUserProgression, onPendingEvaluations, dismissEvaluation, onGroupesParole } from '../../../lib/groupeParoleService';
+import { onUserProgression, onPendingEvaluations, dismissEvaluation, onGroupesParole, isParticipantBanned } from '../../../lib/groupeParoleService';
 import { AuthWall } from '../../../components/ui/AuthWall';
 import type { GroupeParole, EvaluationPendante, UserProgression } from '../../../types/groupeParole';
 import { getNextBadge, BADGE_THRESHOLDS, THEME_COLORS, THEME_LABELS } from '../../../types/groupeParole';
@@ -77,6 +77,7 @@ export const SlideMonEspace = () => {
   const unreadCount = unreadDoctorCount + unreadParentCount;
   const [myGroupsCount, setMyGroupsCount] = useState(0);
   const [pendingEvals, setPendingEvals] = useState<EvaluationPendante[]>([]);
+  const [filteredPendingEvals, setFilteredPendingEvals] = useState<EvaluationPendante[]>([]);
   const [progression, setProgression] = useState<UserProgression | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [showEvalsModal, setShowEvalsModal] = useState(false);
@@ -179,6 +180,24 @@ export const SlideMonEspace = () => {
     });
     return () => unsub();
   }, [currentUser]);
+
+  // Filter out pending evaluations for groups where the user is banned
+  useEffect(() => {
+    if (!currentUser || pendingEvals.length === 0) {
+      setFilteredPendingEvals([]);
+      return;
+    }
+    Promise.all(
+      pendingEvals.map(async (ev) => {
+        const banned = await isParticipantBanned(ev.groupeId, currentUser.uid).catch(() => false);
+        return banned ? null : ev;
+      })
+    ).then((results) => {
+      setFilteredPendingEvals(results.filter(Boolean) as EvaluationPendante[]);
+    }).catch(() => {
+      setFilteredPendingEvals(pendingEvals);
+    });
+  }, [pendingEvals, currentUser]);
   const [showBadgeModal, setShowBadgeModal] = useState(false);
 
   const handleCardClick = (path: string) => {
@@ -277,12 +296,12 @@ export const SlideMonEspace = () => {
           )}
 
           {/* Card: Donner mon avis OR (Empty) */}
-          {pendingEvals.length > 0 && (
+          {filteredPendingEvals.length > 0 && (
             <SquareCard
               icon={Heart}
               label="Avis"
               description="A donner"
-              count={pendingEvals.length}
+              count={filteredPendingEvals.length}
               bgImage="/assets/backgrounds/profile_bg.png"
               colorClasses="bg-gradient-to-br from-pink-500 to-rose-600"
               onClick={() => setShowEvalsModal(true)}
@@ -452,12 +471,12 @@ export const SlideMonEspace = () => {
 
               {/* Subtitle */}
               <p className="px-6 pt-3 pb-1 text-xs text-gray-400 font-medium">
-                {pendingEvals.length} evaluation{pendingEvals.length > 1 ? 's' : ''} en attente — choisissez un groupe
+                {filteredPendingEvals.length} evaluation{filteredPendingEvals.length > 1 ? 's' : ''} en attente — choisissez un groupe
               </p>
 
               {/* Cards list */}
               <div className="flex-1 overflow-y-auto px-6 pb-8 pt-2 space-y-3">
-                {pendingEvals.map((ev, i) => {
+                {filteredPendingEvals.map((ev, i) => {
                   const colors = THEME_COLORS[ev.groupeTheme] || THEME_COLORS.autre;
                   const themeLabel = THEME_LABELS[ev.groupeTheme] || 'Autre';
                   return (
@@ -504,8 +523,8 @@ export const SlideMonEspace = () => {
                         onClick={(e) => {
                           e.stopPropagation();
                           // Optimistic: remove from local list immediately
-                          const remaining = pendingEvals.filter(p => p.groupeId !== ev.groupeId);
-                          setPendingEvals(remaining);
+                          const remaining = filteredPendingEvals.filter(p => p.groupeId !== ev.groupeId);
+                          setFilteredPendingEvals(remaining);
                           if (remaining.length === 0) setShowEvalsModal(false);
                           dismissEvaluation(ev.groupeId, auth.currentUser?.uid || '');
                         }}

@@ -3273,6 +3273,10 @@ export const SalleVocalePage = () => {
           banni: !!p.banni
         }))
       );
+      // Keep ban ref in sync for callbacks that can't read state
+      isBannedRef.current = (data.participants || []).some(
+        (p: any) => p.uid === auth.currentUser?.uid && p.banni
+      );
 
       // 4. Flow Control
       if (data.status === 'cancelled') {
@@ -3401,6 +3405,7 @@ export const SalleVocalePage = () => {
   };
 
   const pointsAwardedRef = useRef(false);
+  const isBannedRef = useRef(false);
   const voluntaryLeaveRef = useRef(false);
   // Tracks forced cancellation (insufficient participants) — synchronous ref
   // to prevent handleDisconnected from routing to reconnect screen
@@ -3430,7 +3435,7 @@ export const SalleVocalePage = () => {
       const total = sessionTotalRef.current;
       const participationRatio = total > 0 ? elapsed / total : 0;
 
-      if (!pointsAwardedRef.current && groupeId) {
+      if (!pointsAwardedRef.current && groupeId && !isBannedRef.current) {
         pointsAwardedRef.current = true;
         const user = auth.currentUser;
         if (user) {
@@ -3467,7 +3472,7 @@ export const SalleVocalePage = () => {
         setLeftEarly(true);
       }
 
-      if (!pointsAwardedRef.current && groupeId) {
+      if (!pointsAwardedRef.current && groupeId && !isBannedRef.current) {
         pointsAwardedRef.current = true;
         const user = auth.currentUser;
         if (user) {
@@ -3839,14 +3844,17 @@ export const SalleVocalePage = () => {
 
   // ===== End Screen (thank you) =====
   if (step === 'end') {
+    const isCurrentUserBanned = groupeParticipants.some(
+      (p) => p.uid === auth.currentUser?.uid && p.banni
+    );
     return (
       <EndScreen
         groupeTitre={groupeTitre}
-        canEvaluate={!leftEarly}
+        canEvaluate={!leftEarly && !isCurrentUserBanned}
         onEvaluate={() => setStep('evaluation')}
         onLater={async () => {
           const user = auth.currentUser;
-          if (user && groupeId) {
+          if (user && groupeId && !isCurrentUserBanned) {
             try {
               await markEvaluationPending(groupeId, user.uid, user.displayName || 'Parent');
             } catch { /* ignore */ }
@@ -3859,6 +3867,21 @@ export const SalleVocalePage = () => {
 
   // ===== Evaluation Screen =====
   if (step === 'evaluation') {
+    const isCurrentUserBanned = groupeParticipants.some(
+      (p) => p.uid === auth.currentUser?.uid && p.banni
+    );
+    if (isCurrentUserBanned) {
+      return (
+        <CancellationScreen
+          reason="Vous avez été définitivement banni de ce groupe."
+          theme={groupeTheme}
+          onGoHome={handleNavigateAway}
+          onDiscussForum={() => navigate(`/espace/groupes/${groupeId}`)}
+          isCreator={false}
+          onBrowseGroups={() => navigate('/espace/groupes')}
+        />
+      );
+    }
     return (
       <EvaluationScreen
         groupeId={groupeId!}

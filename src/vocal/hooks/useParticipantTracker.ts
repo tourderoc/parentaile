@@ -3,6 +3,7 @@ import { Participant } from 'livekit-client';
 import { VOCAL_CONFIG, VocalEvent } from '../machine';
 import { doc, getDoc, setDoc, updateDoc, increment } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
+import { sendParentNotification } from '../../lib/parentNotificationService';
 
 interface UseParticipantTrackerProps {
   groupeId: string;
@@ -78,11 +79,22 @@ export function useParticipantTracker({
           const groupeRef = doc(db, 'groupes', groupeId);
           const groupeSnap = await getDoc(groupeRef);
           if (groupeSnap.exists()) {
-            const participants = groupeSnap.data().participants || [];
-            const updated = participants.map((p: any) =>
+            const groupeData = groupeSnap.data();
+            const participants = groupeData.participants || [];
+            const updatedParticipants = participants.map((p: any) =>
               p.uid === uid ? { ...p, banni: true } : p
             );
-            await updateDoc(groupeRef, { participants: updated });
+            await updateDoc(groupeRef, { participants: updatedParticipants });
+
+            // Notifier le banni
+            const groupeTitre: string = groupeData.titre || 'ce groupe';
+            sendParentNotification(
+              uid,
+              'group_banned',
+              'Vous avez été exclu du groupe',
+              `Vous avez été définitivement banni du groupe "${groupeTitre}" suite à plusieurs départs de la salle.`,
+              { groupeId, groupeTitre }
+            ).catch(() => {});
           }
         } catch (err) {
           console.error(`[PARTICIPANT_TRACKER] Failed to sync banni flag for ${uid}:`, err);

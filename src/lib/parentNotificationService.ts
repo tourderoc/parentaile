@@ -23,7 +23,8 @@ export type ParentNotifType =
   | 'evaluation_received' // Un participant a évalué votre groupe
   | 'session_ended'     // La session vocale est terminée
   | 'group_created'     // Votre groupe a été créé
-  | 'group_cancelled';  // Votre groupe a été annulé
+  | 'group_cancelled'   // Votre groupe a été annulé
+  | 'group_banned';     // Vous avez été banni d'un groupe
 
 export interface ParentNotification {
   id: string;
@@ -46,7 +47,8 @@ export const NOTIF_CONFIG: Record<ParentNotifType, { icon: string; color: string
   evaluation_received: { icon: '💬', color: 'text-pink-600',   bg: 'bg-pink-50' },
   session_ended:       { icon: '🎙️', color: 'text-violet-600', bg: 'bg-violet-50' },
   group_created:       { icon: '✅', color: 'text-emerald-600', bg: 'bg-emerald-50' },
-  group_cancelled:     { icon: '❌', color: 'text-red-600', bg: 'bg-red-50' },
+  group_cancelled:     { icon: '❌', color: 'text-red-600',     bg: 'bg-red-50' },
+  group_banned:        { icon: '🚫', color: 'text-red-700',     bg: 'bg-red-100' },
 };
 
 // ========== ÉCRITURE ==========
