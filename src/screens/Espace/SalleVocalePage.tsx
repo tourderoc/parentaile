@@ -16,10 +16,10 @@ import {
   ConnectionState,
 } from 'livekit-client';
 import {
-  Mic, MicOff, Crown, Loader2, AlertCircle, Volume2, UserX, MessageCircle,
+  Mic, MicOff, Crown, Loader2, AlertCircle, Volume2, MessageCircle,
   Hand, LogOut, KeyRound, Send, X, CheckCircle2, Users, Clock,
   AlertTriangle, ShieldAlert, Lightbulb, Heart, ChevronDown, Lock,
-  SkipForward, Plus, Square, ArrowRight
+  SkipForward, Plus, Square
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { auth, db } from '../../lib/firebase';
@@ -27,12 +27,15 @@ import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { getLiveKitToken } from '../../lib/liveKitService';
 import { 
   submitEvaluation, markEvaluationPending, getEvaluationStatus, addPoints, 
-  getUserBadge, setPresence, removePresence, advancePhase, 
+  setPresence, removePresence, advancePhase, 
   extendSession, endSession, submitBanFeedback,
-  initSessionStateV2, suspendSession, resumeSession, proposeAsAnimateur, onPresenceList,
-  cancelGroup, incrementAnimateurDisconnect, banParticipantExplicit, isParticipantBanned
+  initSessionStateV2, onPresenceList,
+  cancelGroup, banParticipantExplicit, isParticipantBanned
 } from '../../lib/groupeParoleService';
-import { STRUCTURE_DEFAUT, getBadgeInfo, PHASE_MIC_POLICY, DEFAULT_MIC_POLICY, getBadgeForPoints } from '../../types/groupeParole';
+import { 
+  STRUCTURE_DEFAUT, getBadgeInfo, PHASE_MIC_POLICY, DEFAULT_MIC_POLICY, getBadgeForPoints,
+  type BadgeLevel, type StructureEtape, type SessionState, type MicPolicy, type ParticipantGroupe 
+} from '../../types/groupeParole';
 import { useVocalMachine } from '../../vocal/hooks/useVocalMachine';
 import { SuspensionOverlay } from '../../components/vocal/SuspensionOverlay';
 import { AnimateurWaitOverlay } from '../../components/vocal/AnimateurWaitOverlay';
@@ -363,6 +366,34 @@ const CircleParticipant: React.FC<{
         top: `calc(50% + ${y}px - 36px)`,
       }}
     >
+      {/* Speech Bubble (Minimalist pill) */}
+      <AnimatePresence>
+        {isSpeaking && (
+          <motion.div
+            initial={{ opacity: 0, y: 0, scale: 0.5 }}
+            animate={{ opacity: 1, y: -54, scale: 1 }}
+            exit={{ opacity: 0, y: 0, scale: 0.5 }}
+            className="absolute z-20 px-2 py-1 rounded-full flex items-center gap-1.5 border border-white/20 shadow-xl backdrop-blur-md bg-white/10"
+            style={{ 
+              boxShadow: `0 0 15px ${color}40`,
+            }}
+          >
+            <div className="flex gap-0.5 items-center h-2.5 px-0.5">
+              {[1, 2, 3].map(i => (
+                <motion.div
+                  key={i}
+                  animate={{ height: [3, 8, 3] }}
+                  transition={{ repeat: Infinity, duration: 0.6, delay: i * 0.1, ease: "easeInOut" }}
+                  className="w-1 bg-white/80 rounded-full shadow-[0_0_5px_rgba(255,255,255,0.5)]"
+                />
+              ))}
+            </div>
+            {/* Small subtle tail */}
+            <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rotate-45 bg-white/20 border-r border-b border-white/20" />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Avatar — tappable for moderator actions */}
       <div className="relative cursor-pointer" onClick={onTap}>
         {/* Speaking glow ring */}
@@ -449,11 +480,7 @@ const CircleParticipant: React.FC<{
         <p className="text-[11px] font-bold text-white/90 max-w-[80px] truncate">
           {isLocal ? 'Vous' : isAnimateur ? 'Anim' : name}
         </p>
-        {isSpeaking ? (
-          <p className="text-[9px] font-medium text-emerald-400">
-            {isLocal ? 'Vous parlez' : `${name} parle`}
-          </p>
-        ) : badge !== 'none' ? (
+        {!isSpeaking && badge !== 'none' ? (
           <p className="text-[8px] font-bold" style={{ color: BADGE_RING_COLORS[badge] }}>
             {getBadgeInfo(badge).label}
           </p>
@@ -1149,7 +1176,7 @@ const RoomContent: React.FC<{
   }, [firestoreSession?.currentAnimateurUid, firestoreSession?.currentAnimateurPseudo]);
 
   // Session phase tracking (now Firestore-driven for structured mode)
-  const sessionPhase = useSessionPhase(dateVocal, structureType, structure, firestoreSession, defaultDurationMin);
+  const sessionPhase = useSessionPhase(dateVocal, structureType, structure, firestoreSession || null, defaultDurationMin);
   const prevPhaseRef = useRef(0);
 
   // Handle session end by animateur — notify parent via custom event
@@ -1159,7 +1186,7 @@ const RoomContent: React.FC<{
   useEffect(() => {
     if (firestoreSession && !firestoreSession.sessionActive
         && (groupeStatus === 'in_progress' || groupeStatus === 'completed')) {
-      const isCancelled = machinePhase === 'SESSION_CANCELLED' || sessionCancelledRef.current || groupeStatus === 'cancelled';
+      const isCancelled = machinePhase === 'SESSION_CANCELLED' || sessionCancelledRef.current;
       if (!isCancelled) {
         onSessionEnded?.();
       }
@@ -1652,23 +1679,6 @@ const RoomContent: React.FC<{
                 </div>
               </div>
             </div>
-
-            {/* Speaking label floating */}
-            <AnimatePresence>
-              {speakingName && (
-                <motion.div
-                  initial={{ opacity: 0, y: 15, scale: 0.9 }}
-                  animate={{ opacity: 1, y: 25, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.9, y: 15 }}
-                  className="absolute bottom-[-15px] px-5 py-2 rounded-full bg-[#111426]/90 backdrop-blur-xl border border-orange-500/40 shadow-2xl z-20"
-                >
-                  <p className="text-[10px] uppercase tracking-widest font-extrabold flex items-center gap-2" style={{ color: '#F9A826' }}>
-                    <span className="w-2 h-2 rounded-full bg-[#F9A826] animate-pulse shadow-[0_0_10px_rgba(249,168,38,0.8)]" />
-                    {speakingName === 'Vous' ? 'Vous parlez' : `${speakingName} parle`}
-                  </p>
-                </motion.div>
-              )}
-            </AnimatePresence>
           </div>
 
           {/* Participants around the circle */}
@@ -3238,6 +3248,7 @@ export const SalleVocalePage = () => {
     const unsub = onSnapshot(doc(db, 'groupes', groupeId), async (snap) => {
 
       const data = snap.data();
+      if (!data) return;
       
       // 1. Metadata Sync
       setGroupeTitre(data.titre || '');
