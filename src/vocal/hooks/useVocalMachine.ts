@@ -278,7 +278,9 @@ export function useVocalMachine({
     stateRef.current = result.state;
 
     if (result.sideEffects.length > 0) {
-      executeSideEffects(result.sideEffects);
+      executeSideEffects(result.sideEffects).catch((err) => {
+        console.error('[VOCAL_MACHINE] Unhandled side effect error:', err);
+      });
     }
   }, [executeSideEffects]);
 

@@ -19,7 +19,7 @@ import {
   Mic, MicOff, Crown, Loader2, AlertCircle, Volume2, MessageCircle,
   Hand, LogOut, KeyRound, Send, X, CheckCircle2, Users, Clock,
   AlertTriangle, ShieldAlert, Lightbulb, Heart, ChevronDown, Lock,
-  SkipForward, Plus, Square
+  SkipForward, Plus, Square, Sun
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { auth, db } from '../../lib/firebase';
@@ -999,7 +999,9 @@ const RoomContent: React.FC<{
   sessionCancelledRef: React.RefObject<boolean>;
   groupeStatus: string;
   firestoreSession?: SessionState | null;
-}> = ({ isAnimateur, groupeId, groupeTitre, groupeTheme, dateVocal, onLeave, onCancelled, animateurNotes, structureType, structure, defaultDurationMin, onSessionProgress, onSessionEnded, sessionPrenom, isTestGroup, createurUid, sessionCancelledRef, groupeStatus, firestoreSession }) => {
+  lightMode?: boolean;
+  onToggleLight?: () => void;
+}> = ({ isAnimateur, groupeId, groupeTitre, groupeTheme, dateVocal, onLeave, onCancelled, animateurNotes, structureType, structure, defaultDurationMin, onSessionProgress, onSessionEnded, sessionPrenom, isTestGroup, createurUid, sessionCancelledRef, groupeStatus, firestoreSession, lightMode, onToggleLight }) => {
   useWakeLock(); // Keep screen on during vocal session
   const participants = useParticipants();
   const { localParticipant } = useLocalParticipant();
@@ -1506,8 +1508,21 @@ const RoomContent: React.FC<{
         </div>
       )}
       {/* Header */}
-      <div className="text-center pt-6 pb-2 px-4">
-        <h2 className="text-xl font-extrabold text-white tracking-tight">{groupeTitre}</h2>
+      <div className="text-center pt-6 pb-2 px-4 relative">
+        {/* Interrupteur lumière */}
+        <button
+          onClick={onToggleLight}
+          className={`absolute top-4 right-4 w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 active:scale-90 shadow-md ${
+            lightMode
+              ? 'bg-amber-400 text-white shadow-amber-300/50'
+              : 'bg-white/10 text-white/50'
+          }`}
+          aria-label={lightMode ? 'Éteindre la lumière' : 'Allumer la lumière'}
+        >
+          <Sun size={18} className={lightMode ? 'fill-white' : ''} />
+        </button>
+
+        <h2 className={`text-xl font-extrabold tracking-tight transition-colors duration-700 ${lightMode ? 'text-gray-800' : 'text-white'}`}>{groupeTitre}</h2>
         <div className="w-16 h-[2px] bg-gradient-to-r from-transparent via-orange-400 to-transparent mx-auto mt-2" />
         <div className="flex items-center justify-center gap-2 mt-2">
           {isReplacementAnimateur && (
@@ -1515,23 +1530,23 @@ const RoomContent: React.FC<{
               ANIMATEUR DE REMPLACEMENT
             </span>
           )}
-          <span className="text-sm text-white/60 font-medium">
+          <span className={`text-sm font-medium transition-colors duration-700 ${lightMode ? 'text-gray-600' : 'text-white/60'}`}>
             {structureType === 'structuree' && sessionPhase.currentLabel
               ? sessionPhase.currentLabel
               : 'Session en cours'}
           </span>
-          <span className="text-white/40">&middot;</span>
+          <span className={`transition-colors duration-700 ${lightMode ? 'text-gray-400' : 'text-white/40'}`}>&middot;</span>
           <VocalTimer dateVocal={dateVocal} durationMin={sessionPhase.totalDurationMin} extendedMinutes={firestoreSession?.extendedMinutes} />
-          <span className="text-white/40">&middot;</span>
-          <span className="text-sm text-white/60 font-medium">restantes</span>
+          <span className={`transition-colors duration-700 ${lightMode ? 'text-gray-400' : 'text-white/40'}`}>&middot;</span>
+          <span className={`text-sm font-medium transition-colors duration-700 ${lightMode ? 'text-gray-600' : 'text-white/60'}`}>restantes</span>
         </div>
         {groupeTheme && (
-          <p className="text-sm text-white/40 font-medium mt-1">
+          <p className={`text-sm font-medium mt-1 transition-colors duration-700 ${lightMode ? 'text-gray-500' : 'text-white/40'}`}>
             Theme: {groupeTheme} &middot; {participants.length} participant{participants.length > 1 ? 's' : ''}
           </p>
         )}
         {!groupeTheme && (
-          <p className="text-sm text-white/40 font-medium mt-1">
+          <p className={`text-sm font-medium mt-1 transition-colors duration-700 ${lightMode ? 'text-gray-500' : 'text-white/40'}`}>
             {participants.length} participant{participants.length > 1 ? 's' : ''}
           </p>
         )}
@@ -1723,21 +1738,21 @@ const RoomContent: React.FC<{
 
       {/* Bottom bar */}
       <div className="pb-8 pt-4 px-6">
-        <div className="bg-white/10 backdrop-blur-md rounded-2xl p-3 flex items-center justify-around">
+        <div className={`backdrop-blur-md rounded-2xl p-3 flex items-center justify-around transition-colors duration-700 ${lightMode ? 'bg-black/8 shadow-md' : 'bg-white/10'}`}>
           {/* Mute */}
           <button
             onClick={handleToggleMute}
             className={`flex flex-col items-center gap-1 px-4 py-2 rounded-xl transition-all active:scale-90 ${
               micLocked && localMuted && !isAnimateur
                 ? 'bg-gray-500/20 cursor-not-allowed'
-                : localMuted ? 'bg-red-500/20' : 'bg-white/10'
+                : localMuted ? 'bg-red-500/20' : lightMode ? 'bg-black/5' : 'bg-white/10'
             }`}
           >
             <div className="relative">
               {localMuted ? (
                 <MicOff size={22} className={micLocked && !isAnimateur ? 'text-gray-400' : 'text-red-400'} />
               ) : (
-                <Mic size={22} className="text-white" />
+                <Mic size={22} className={lightMode ? 'text-gray-700' : 'text-white'} />
               )}
               {micLocked && !isAnimateur && (
                 <Lock size={10} className="absolute -bottom-1 -right-1 text-amber-400" />
@@ -1745,23 +1760,23 @@ const RoomContent: React.FC<{
             </div>
             <span className={`text-[10px] font-bold ${
               micLocked && localMuted && !isAnimateur ? 'text-gray-400'
-              : localMuted ? 'text-red-400' : 'text-white/70'
+              : localMuted ? 'text-red-400' : lightMode ? 'text-gray-600' : 'text-white/70'
             }`}>
               {micLocked && !isAnimateur ? 'Verrouille' : 'Muet'}
             </span>
           </button>
 
-          <div className="w-px h-8 bg-white/10" />
+          <div className={`w-px h-8 ${lightMode ? 'bg-black/10' : 'bg-white/10'}`} />
 
           {/* Chat */}
           <button
             onClick={() => setShowChat(!showChat)}
             className={`relative flex flex-col items-center gap-1 px-4 py-2 rounded-xl transition-all active:scale-90 ${
-              showChat ? 'bg-blue-500/20' : 'bg-white/10'
+              showChat ? 'bg-blue-500/20' : lightMode ? 'bg-black/5' : 'bg-white/10'
             }`}
           >
-            <MessageCircle size={22} className={showChat ? 'text-blue-400' : 'text-white'} />
-            <span className={`text-[10px] font-bold ${showChat ? 'text-blue-400' : 'text-white/70'}`}>
+            <MessageCircle size={22} className={showChat ? 'text-blue-400' : lightMode ? 'text-gray-700' : 'text-white'} />
+            <span className={`text-[10px] font-bold ${showChat ? 'text-blue-400' : lightMode ? 'text-gray-600' : 'text-white/70'}`}>
               Chat
             </span>
             {/* Unread badge */}
@@ -1772,22 +1787,22 @@ const RoomContent: React.FC<{
             )}
           </button>
 
-          <div className="w-px h-8 bg-white/10" />
+          <div className={`w-px h-8 ${lightMode ? 'bg-black/10' : 'bg-white/10'}`} />
 
           {/* Raise hand */}
           <button
             onClick={handleRaiseHand}
             className={`flex flex-col items-center gap-1 px-4 py-2 rounded-xl transition-all active:scale-90 ${
-              handRaised ? 'bg-amber-500/20' : 'bg-white/10'
+              handRaised ? 'bg-amber-500/20' : lightMode ? 'bg-black/5' : 'bg-white/10'
             }`}
           >
-            <Hand size={22} className={handRaised ? 'text-amber-400' : 'text-white'} />
-            <span className={`text-[10px] font-bold ${handRaised ? 'text-amber-400' : 'text-white/70'}`}>
+            <Hand size={22} className={handRaised ? 'text-amber-400' : lightMode ? 'text-gray-700' : 'text-white'} />
+            <span className={`text-[10px] font-bold ${handRaised ? 'text-amber-400' : lightMode ? 'text-gray-600' : 'text-white/70'}`}>
               Parole
             </span>
           </button>
 
-          <div className="w-px h-8 bg-white/10" />
+          <div className={`w-px h-8 ${lightMode ? 'bg-black/10' : 'bg-white/10'}`} />
 
           {/* Suggestions (animateur only) */}
           {isAnimateur && (
@@ -1795,14 +1810,13 @@ const RoomContent: React.FC<{
               <button
                 onClick={() => { setShowNotes(!showNotes); setNotesPulse(false); }}
                 className={`relative flex flex-col items-center gap-1 px-4 py-2 rounded-xl transition-all active:scale-90 ${
-                  showNotes ? 'bg-violet-500/20' : 'bg-white/10'
+                  showNotes ? 'bg-violet-500/20' : lightMode ? 'bg-black/5' : 'bg-white/10'
                 }`}
               >
-                <Lightbulb size={22} className={showNotes ? 'text-violet-400' : 'text-white'} />
-                <span className={`text-[10px] font-bold ${showNotes ? 'text-violet-400' : 'text-white/70'}`}>
+                <Lightbulb size={22} className={showNotes ? 'text-violet-400' : lightMode ? 'text-gray-700' : 'text-white'} />
+                <span className={`text-[10px] font-bold ${showNotes ? 'text-violet-400' : lightMode ? 'text-gray-600' : 'text-white/70'}`}>
                   Aide
                 </span>
-                {/* Pulse badge on phase change */}
                 {notesPulse && !showNotes && (
                   <motion.div
                     animate={{ scale: [1, 1.3, 1], opacity: [1, 0.6, 1] }}
@@ -1811,7 +1825,7 @@ const RoomContent: React.FC<{
                   />
                 )}
               </button>
-              <div className="w-px h-8 bg-white/10" />
+              <div className={`w-px h-8 ${lightMode ? 'bg-black/10' : 'bg-white/10'}`} />
             </>
           )}
 
@@ -1826,10 +1840,10 @@ const RoomContent: React.FC<{
                 setShowLeaveConfirm(true);
               }
             }}
-            className="flex flex-col items-center gap-1 px-4 py-2 rounded-xl bg-white/10 transition-all active:scale-90"
+            className={`flex flex-col items-center gap-1 px-4 py-2 rounded-xl transition-all active:scale-90 ${lightMode ? 'bg-black/5' : 'bg-white/10'}`}
           >
-            <LogOut size={22} className="text-white/60" />
-            <span className="text-[10px] font-bold text-white/60">Quitter</span>
+            <LogOut size={22} className={lightMode ? 'text-gray-500' : 'text-white/60'} />
+            <span className={`text-[10px] font-bold ${lightMode ? 'text-gray-500' : 'text-white/60'}`}>Quitter</span>
           </button>
         </div>
       </div>
@@ -2202,7 +2216,9 @@ const WaitingRoom: React.FC<{
   onEnter: () => void;
   onBack: () => void;
   onCancelled?: () => void;
-}> = ({ groupeId, groupeTitre, groupeTheme, dateVocal, isTestGroup, participants, createurUid, structureType, structure, sessionPrenom, isAnimateur, onEnter, onBack, onCancelled }) => {
+  lightMode?: boolean;
+  onToggleLight?: () => void;
+}> = ({ groupeId, groupeTitre, groupeTheme, dateVocal, isTestGroup, participants, createurUid, structureType, structure, sessionPrenom, isAnimateur, onEnter, onBack, onCancelled, lightMode, onToggleLight }) => {
   const currentUser = auth.currentUser;
   const [countdown, setCountdown] = useState('');
   const [sessionStarted, setSessionStarted] = useState(false);
@@ -2280,17 +2296,32 @@ const WaitingRoom: React.FC<{
   return (
     <div
       id="waiting-room-container"
-      className="min-h-[100dvh] flex flex-col items-center px-6 pt-12 pb-8 overflow-y-auto"
+      className="min-h-[100dvh] flex flex-col items-center px-6 pt-12 pb-8 overflow-y-auto relative transition-all duration-700"
       style={{
-        background: 'radial-gradient(ellipse at 50% 30%, #2a3060 0%, #1a1f3a 50%, #12152a 100%)',
+        background: lightMode
+          ? 'radial-gradient(ellipse at 50% 20%, #fffdf5 0%, #fdf4dc 50%, #f5e8c0 100%)'
+          : 'radial-gradient(ellipse at 50% 30%, #2a3060 0%, #1a1f3a 50%, #12152a 100%)',
       }}
     >
+      {/* Interrupteur lumière */}
+      <button
+        onClick={onToggleLight}
+        className={`absolute top-5 right-5 w-11 h-11 rounded-full flex items-center justify-center transition-all duration-300 active:scale-90 shadow-lg ${
+          lightMode
+            ? 'bg-amber-400 text-white shadow-amber-300/50'
+            : 'bg-white/10 text-white/50'
+        }`}
+        aria-label={lightMode ? 'Éteindre la lumière' : 'Allumer la lumière'}
+      >
+        <Sun size={20} className={lightMode ? 'fill-white' : ''} />
+      </button>
+
       {/* Logo */}
       <img src="/app-icon.png" alt="Parent'aile" className="w-20 h-20 rounded-full shadow-xl mb-4" />
 
-      <h2 className="text-xl font-extrabold text-white">{groupeTitre}</h2>
+      <h2 className={`text-xl font-extrabold transition-colors duration-700 ${lightMode ? 'text-gray-800' : 'text-white'}`}>{groupeTitre}</h2>
       {groupeTheme && (
-        <p className="text-sm text-white/40 font-medium mt-1">Theme: {groupeTheme}</p>
+        <p className={`text-sm font-medium mt-1 transition-colors duration-700 ${lightMode ? 'text-gray-500' : 'text-white/40'}`}>Theme: {groupeTheme}</p>
       )}
 
       <div className="w-16 h-[2px] bg-gradient-to-r from-transparent via-orange-400 to-transparent mx-auto mt-3 mb-4" />
@@ -3223,6 +3254,9 @@ export const SalleVocalePage = () => {
   const [currentAnimateurUid, setCurrentAnimateurUid] = useState<string | null>(null);
   const [sessionState, setSessionState] = useState<SessionState | null>(null);
 
+  // Ambiance lumineuse (session locale uniquement)
+  const [lightMode, setLightMode] = useState(false);
+
   // Session Data & Validation
   const [sessionPrenom, setSessionPrenom] = useState('');
   const [animateurNotes, setAnimateurNotes] = useState<AnimateurNotes | null>(null);
@@ -3781,6 +3815,8 @@ export const SalleVocalePage = () => {
           sessionCancelledRef.current = true;
           setStep('cancelled');
         }}
+        lightMode={lightMode}
+        onToggleLight={() => setLightMode(prev => !prev)}
       />
     );
   }
@@ -3925,9 +3961,11 @@ export const SalleVocalePage = () => {
   // ===== Main room =====
   return (
     <div
-      className="h-screen flex flex-col overflow-hidden"
+      className="h-screen flex flex-col overflow-hidden transition-all duration-700"
       style={{
-        background: 'radial-gradient(ellipse at 50% 30%, #2a3060 0%, #1a1f3a 50%, #12152a 100%)',
+        background: lightMode
+          ? 'radial-gradient(ellipse at 50% 20%, #fffdf5 0%, #fdf4dc 50%, #f5e8c0 100%)'
+          : 'radial-gradient(ellipse at 50% 30%, #2a3060 0%, #1a1f3a 50%, #12152a 100%)',
       }}
     >
       {/* @ts-ignore LiveKit types mismatch with React 18 */}
@@ -3964,6 +4002,8 @@ export const SalleVocalePage = () => {
           sessionCancelledRef={sessionCancelledRef}
           groupeStatus={groupeStatus}
           firestoreSession={sessionState}
+          lightMode={lightMode}
+          onToggleLight={() => setLightMode(prev => !prev)}
         />
       </LiveKitRoom>
     </div>
