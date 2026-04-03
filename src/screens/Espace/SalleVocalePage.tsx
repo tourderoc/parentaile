@@ -351,7 +351,8 @@ const CircleParticipant: React.FC<{
   avatarUrl?: string;
   onTap?: () => void;
   badge?: BadgeLevel;
-}> = ({ name, isSpeaking, isMuted, isAnimateur, isLocal, hasHandRaised, warningCount = 0, showWarningBadge = false, angle, radius, color, avatarUrl, onTap, badge = 'none' }) => {
+  lightMode?: boolean;
+}> = ({ name, isSpeaking, isMuted, isAnimateur, isLocal, hasHandRaised, warningCount = 0, showWarningBadge = false, angle, radius, color, avatarUrl, onTap, badge = 'none', lightMode }) => {
   const x = Math.cos(angle) * radius;
   const y = Math.sin(angle) * radius;
 
@@ -373,7 +374,9 @@ const CircleParticipant: React.FC<{
             initial={{ opacity: 0, y: 0, scale: 0.5 }}
             animate={{ opacity: 1, y: -54, scale: 1 }}
             exit={{ opacity: 0, y: 0, scale: 0.5 }}
-            className="absolute z-20 px-2 py-1 rounded-full flex items-center gap-1.5 border border-white/20 shadow-xl backdrop-blur-md bg-white/10"
+            className={`absolute z-20 px-2 py-1 rounded-full flex items-center gap-1.5 border shadow-xl backdrop-blur-md transition-all duration-300 ${
+              lightMode ? 'bg-white/90 border-gray-200' : 'bg-white/10 border-white/20'
+            }`}
             style={{ 
               boxShadow: `0 0 15px ${color}40`,
             }}
@@ -384,12 +387,14 @@ const CircleParticipant: React.FC<{
                   key={i}
                   animate={{ height: [3, 8, 3] }}
                   transition={{ repeat: Infinity, duration: 0.6, delay: i * 0.1, ease: "easeInOut" }}
-                  className="w-1 bg-white/80 rounded-full shadow-[0_0_5px_rgba(255,255,255,0.5)]"
+                  className={`w-1 rounded-full ${lightMode ? 'bg-gray-400' : 'bg-white/80 shadow-[0_0_5px_rgba(255,255,255,0.5)]'}`}
                 />
               ))}
             </div>
             {/* Small subtle tail */}
-            <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rotate-45 bg-white/20 border-r border-b border-white/20" />
+            <div className={`absolute -bottom-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rotate-45 border-r border-b transition-colors duration-300 ${
+              lightMode ? 'bg-white/90 border-gray-200' : 'bg-white/20 border-white/20'
+            }`} />
           </motion.div>
         )}
       </AnimatePresence>
@@ -413,7 +418,9 @@ const CircleParticipant: React.FC<{
           style={{
             background: avatarUrl ? 'transparent' : `linear-gradient(135deg, ${color}, ${color}cc)`,
             border: isSpeaking ? `3px solid ${color}` : `3px solid ${BADGE_RING_COLORS[badge]}`,
-            boxShadow: isSpeaking ? `0 0 25px ${color}80, 0 8px 32px rgba(0,0,0,0.5)` : '0 8px 32px rgba(0,0,0,0.4)'
+            boxShadow: isSpeaking 
+              ? `0 0 25px ${color}80, 0 8px 32px rgba(0,0,0,${lightMode ? '0.1' : '0.5'})` 
+              : `0 8px 32px rgba(0,0,0,${lightMode ? '0.1' : '0.4'})`
           }}
         >
           {avatarUrl ? (
@@ -437,14 +444,18 @@ const CircleParticipant: React.FC<{
           )}
 
           {isMuted && !isSpeaking && (
-            <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-gray-600 rounded-full flex items-center justify-center shadow-lg">
-              <MicOff size={11} className="text-white" />
+            <div className={`absolute -bottom-1 -right-1 w-6 h-6 rounded-full flex items-center justify-center shadow-lg transition-colors duration-300 ${
+              lightMode ? 'bg-gray-300' : 'bg-gray-600'
+            }`}>
+              <MicOff size={11} className={lightMode ? 'text-gray-600' : 'text-white'} />
             </div>
           )}
 
           {/* Animateur crown */}
           {isAnimateur && (
-            <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-6 h-6 bg-amber-500 rounded-full flex items-center justify-center shadow-lg border-2 border-[#1a1f3a]">
+            <div className={`absolute -top-2 left-1/2 -translate-x-1/2 w-6 h-6 bg-amber-500 rounded-full flex items-center justify-center shadow-lg border-2 transition-colors duration-300 ${
+              lightMode ? 'border-amber-100' : 'border-[#1a1f3a]'
+            }`}>
               <Crown size={11} className="text-white" />
             </div>
           )}
@@ -454,7 +465,9 @@ const CircleParticipant: React.FC<{
             <motion.div
               initial={{ scale: 0, y: 5 }}
               animate={{ scale: 1, y: 0 }}
-              className="absolute -top-2 -left-2 w-7 h-7 bg-amber-400 rounded-full flex items-center justify-center shadow-lg border-2 border-[#1a1f3a]"
+              className={`absolute -top-2 -left-2 w-7 h-7 bg-amber-400 rounded-full flex items-center justify-center shadow-lg border-2 transition-colors duration-300 ${
+                lightMode ? 'border-amber-100' : 'border-[#1a1f3a]'
+              }`}
             >
               <span className="text-sm">✋</span>
             </motion.div>
@@ -465,9 +478,9 @@ const CircleParticipant: React.FC<{
             <motion.div
               initial={{ scale: 0 }}
               animate={{ scale: 1 }}
-              className={`absolute -bottom-1 -left-1 w-6 h-6 rounded-full flex items-center justify-center shadow-lg border-2 border-[#1a1f3a] ${
+              className={`absolute -bottom-1 -left-1 w-6 h-6 rounded-full flex items-center justify-center shadow-lg border-2 transition-colors duration-300 ${
                 warningCount >= 2 ? 'bg-red-500' : 'bg-amber-500'
-              }`}
+              } ${lightMode ? 'border-amber-100' : 'border-[#1a1f3a]'}`}
             >
               <AlertTriangle size={10} className="text-white" />
             </motion.div>
@@ -477,7 +490,9 @@ const CircleParticipant: React.FC<{
 
       {/* Name label */}
       <div className="mt-2 text-center">
-        <p className="text-[11px] font-bold text-white/90 max-w-[80px] truncate">
+        <p className={`text-[11px] font-bold max-w-[80px] truncate transition-colors duration-700 ${
+          lightMode ? 'text-gray-800' : 'text-white/90'
+        }`}>
           {isLocal ? 'Vous' : isAnimateur ? 'Anim' : name}
         </p>
         {!isSpeaking && badge !== 'none' ? (
@@ -688,12 +703,15 @@ const SessionProgressBar: React.FC<{
   structureType: 'libre' | 'structuree';
   structure: StructureEtape[];
   phase: SessionPhase;
-}> = ({ structureType, structure, phase }) => {
+  lightMode?: boolean;
+}> = ({ structureType, structure, phase, lightMode }) => {
   if (structureType === 'structuree' && structure.length > 0) {
     return (
       <div className="px-6 mt-2 mb-1">
         {/* Segmented bar */}
-        <div className="flex gap-[2px] h-1.5 rounded-full overflow-hidden border border-white/5">
+        <div className={`flex gap-[2px] h-1.5 rounded-full overflow-hidden border transition-colors duration-700 ${
+          lightMode ? 'border-black/5 bg-black/[0.07]' : 'border-white/5 bg-white/[0.07]'
+        }`}>
           {structure.map((etape, i) => {
             const widthPct = (etape.dureeMinutes / phase.totalDurationMin) * 100;
             const isPast = i < phase.currentIndex;
@@ -702,7 +720,7 @@ const SessionProgressBar: React.FC<{
               <div
                 key={i}
                 className="relative overflow-hidden"
-                style={{ width: `${widthPct}%`, background: 'rgba(255,255,255,0.07)' }}
+                style={{ width: `${widthPct}%` }}
               >
                 {isPast && (
                   <div className="absolute inset-0 bg-violet-500" />
@@ -730,12 +748,12 @@ const SessionProgressBar: React.FC<{
             return (
               <p
                 key={i}
-                className={`text-[9px] font-medium truncate ${
+                className={`text-[9px] font-medium truncate transition-colors duration-700 ${
                   isCurrent
-                    ? phase.phaseTimeStatus === 'danger' ? 'text-red-300 font-bold'
-                    : phase.phaseTimeStatus === 'warning' ? 'text-orange-300 font-bold'
-                    : 'text-violet-300 font-bold'
-                    : 'text-white/25'
+                    ? phase.phaseTimeStatus === 'danger' ? (lightMode ? 'text-red-600 font-bold' : 'text-red-300 font-bold')
+                    : phase.phaseTimeStatus === 'warning' ? (lightMode ? 'text-orange-600 font-bold' : 'text-orange-300 font-bold')
+                    : (lightMode ? 'text-violet-700 font-bold' : 'text-violet-300 font-bold')
+                    : (lightMode ? 'text-gray-400' : 'text-white/25')
                 }`}
                 style={{ width: `${widthPct}%` }}
               >
@@ -751,7 +769,9 @@ const SessionProgressBar: React.FC<{
   // Libre mode: single continuous bar
   return (
     <div className="px-6 mt-2 mb-1">
-      <div className="h-1.5 rounded-full overflow-hidden border border-white/5" style={{ background: 'rgba(255,255,255,0.07)' }}>
+      <div className={`h-1.5 rounded-full overflow-hidden border transition-all duration-700 ${
+        lightMode ? 'border-black/5 bg-black/[0.07]' : 'border-white/5 bg-white/[0.07]'
+      }`}>
         <motion.div
           className="h-full rounded-full"
           style={{ background: 'linear-gradient(to right, #8b5cf6, #f97316)' }}
@@ -874,23 +894,49 @@ const AnimateurPhaseControls: React.FC<{
   onAdvancePhase: () => void;
   onExtendTime: () => void;
   onEndSession: () => void;
-}> = ({ currentIndex, totalPhases, currentLabel, phaseTimeStatus, extendedMinutes, onAdvancePhase, onExtendTime, onEndSession }) => {
+  lightMode?: boolean;
+}> = ({ currentIndex, totalPhases, currentLabel, phaseTimeStatus, extendedMinutes, onAdvancePhase, onExtendTime, onEndSession, lightMode }) => {
   const [showEndConfirm, setShowEndConfirm] = useState(false);
-  const isLastPhase = currentIndex >= totalPhases - 1;
+  const isLastPhase = currentIndex === totalPhases - 1;
 
   return (
-    <div className="px-6 py-2">
-      <div className="bg-white/5 backdrop-blur-sm rounded-xl p-3 border border-white/10">
-        {/* Advance phase button */}
+    <div className="px-6 pb-2">
+      <div className={`rounded-xl p-3 shadow-lg transition-all duration-700 ${
+        lightMode ? 'bg-black/[0.06] border border-black/5' : 'bg-white/5 border border-white/5'
+      }`}>
+        <div className="flex items-center justify-between mb-2">
+          <span className={`text-[10px] font-bold uppercase tracking-wider transition-colors duration-700 ${
+            lightMode ? 'text-gray-500' : 'text-white/40'
+          }`}>
+            Controles Animateur
+          </span>
+          <div className="flex items-center gap-1.5">
+            <div className={`w-1.5 h-1.5 rounded-full animate-pulse shadow-[0_0_8px] ${
+              phaseTimeStatus === 'danger' ? 'bg-red-500 shadow-red-500/50' :
+              phaseTimeStatus === 'warning' ? 'bg-orange-500 shadow-orange-500/50' :
+              'bg-emerald-500 shadow-emerald-500/50'
+            }`} />
+            <span className={`text-[10px] font-bold transition-colors duration-700 ${
+              phaseTimeStatus === 'danger' ? 'text-red-400' :
+              phaseTimeStatus === 'warning' ? 'text-orange-400' :
+              lightMode ? 'text-emerald-700' : 'text-emerald-400'
+            }`}>
+              {phaseTimeStatus === 'danger' ? 'Temps depasse' :
+               phaseTimeStatus === 'warning' ? 'Temps limite' :
+               'Rythme OK'}
+            </span>
+          </div>
+        </div>
+
         {!isLastPhase && (
           <button
             onClick={onAdvancePhase}
-            className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-lg font-bold text-sm transition-all active:scale-95 ${
+            className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-lg font-bold text-sm transition-all active:scale-95 shadow-sm ${
               phaseTimeStatus === 'danger'
-                ? 'bg-red-500/30 text-red-300 border border-red-500/40'
+                ? (lightMode ? 'bg-red-500 text-white' : 'bg-red-500/30 text-red-300 border border-red-500/40')
                 : phaseTimeStatus === 'warning'
-                ? 'bg-orange-500/30 text-orange-300 border border-orange-500/40'
-                : 'bg-violet-500/30 text-violet-300 border border-violet-500/40'
+                ? (lightMode ? 'bg-orange-500 text-white' : 'bg-orange-500/30 text-orange-300 border border-orange-500/40')
+                : (lightMode ? 'bg-violet-600 text-white' : 'bg-violet-500/30 text-violet-300 border border-violet-500/40')
             }`}
           >
             <SkipForward size={16} />
@@ -903,10 +949,10 @@ const AnimateurPhaseControls: React.FC<{
           <button
             onClick={onExtendTime}
             disabled={extendedMinutes > 0}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold transition-all active:scale-95 ${
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold transition-all active:scale-95 shadow-sm ${
               extendedMinutes > 0
-                ? 'bg-white/5 text-white/30 cursor-not-allowed'
-                : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                ? (lightMode ? 'bg-black/5 text-gray-400 cursor-not-allowed' : 'bg-white/5 text-white/30 cursor-not-allowed')
+                : (lightMode ? 'bg-amber-400 text-white overflow-hidden' : 'bg-amber-500/20 text-amber-300 border border-amber-500/30')
             }`}
           >
             <Plus size={14} />
@@ -917,7 +963,9 @@ const AnimateurPhaseControls: React.FC<{
           {!showEndConfirm ? (
             <button
               onClick={() => setShowEndConfirm(true)}
-              className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold bg-red-500/20 text-red-300 border border-red-500/30 transition-all active:scale-95"
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold transition-all active:scale-95 shadow-sm ${
+                lightMode ? 'bg-red-500 text-white' : 'bg-red-500/20 text-red-300 border border-red-500/30'
+              }`}
             >
               <Square size={14} />
               Terminer
@@ -926,13 +974,15 @@ const AnimateurPhaseControls: React.FC<{
             <div className="flex-1 flex gap-1">
               <button
                 onClick={onEndSession}
-                className="flex-1 py-2 rounded-lg text-xs font-bold bg-red-500 text-white transition-all active:scale-95"
+                className="flex-1 py-2 rounded-lg text-xs font-bold bg-red-600 text-white transition-all active:scale-95 shadow-md"
               >
                 Confirmer
               </button>
               <button
                 onClick={() => setShowEndConfirm(false)}
-                className="flex-1 py-2 rounded-lg text-xs font-bold bg-white/10 text-white/60 transition-all active:scale-95"
+                className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all active:scale-95 ${
+                  lightMode ? 'bg-gray-200 text-gray-700' : 'bg-white/10 text-white/60'
+                }`}
               >
                 Annuler
               </button>
@@ -1556,6 +1606,7 @@ const RoomContent: React.FC<{
           structureType={structureType}
           structure={structure}
           phase={sessionPhase}
+          lightMode={lightMode}
         />
       </div>
 
@@ -1570,6 +1621,7 @@ const RoomContent: React.FC<{
           onAdvancePhase={handleAdvancePhase}
           onExtendTime={handleExtendTime}
           onEndSession={handleEndSession}
+          lightMode={lightMode}
         />
       )}
 
@@ -1657,22 +1709,27 @@ const RoomContent: React.FC<{
             <div className="relative w-40 h-40 rounded-full flex items-center justify-center">
               {/* Outer Ring / Table Edge */}
               <div 
-                className="absolute inset-0 rounded-full border-[3px] border-white/10 shadow-[inset_0_4px_30px_rgba(255,255,255,0.05),_0_8px_32px_rgba(0,0,0,0.5)]" 
-                style={{ background: 'linear-gradient(145deg, rgba(255,255,255,0.05) 0%, rgba(0,0,0,0.2) 100%)' }}
+                className={`absolute inset-0 rounded-full border-[3px] shadow-[inset_0_4px_30px_rgba(255,255,255,0.05),_0_8px_32px_rgba(0,0,0,0.5)] transition-all duration-700 ${
+                  lightMode ? 'border-black/5 bg-black/[0.03]' : 'border-white/10 bg-gradient-to-br from-white/5 to-black/20'
+                }`}
               />
 
               {/* Inner Table Surface (Glass) */}
-              <div className="absolute inset-3 rounded-full overflow-hidden bg-[#151932]/60 backdrop-blur-md border border-white/5 flex items-center justify-center">
+              <div className={`absolute inset-3 rounded-full overflow-hidden backdrop-blur-md border flex items-center justify-center transition-all duration-700 ${
+                lightMode ? 'bg-white/40 border-black/[0.08]' : 'bg-[#151932]/60 border-white/5'
+              }`}>
                 
                 {/* Embedded subtle motif */}
-                <div className="absolute w-28 h-28 opacity-20 bg-gradient-to-tr from-white/10 to-transparent rounded-full rotate-45 blur-[2px]" />
+                <div className={`absolute w-28 h-28 opacity-20 rounded-full rotate-45 blur-[2px] ${
+                  lightMode ? 'bg-gradient-to-tr from-black/10 to-transparent' : 'bg-gradient-to-tr from-white/10 to-transparent'
+                }`} />
 
                 {/* Center Core (Glowing sound waves) */}
                 <div className={`relative z-10 w-20 h-20 rounded-full flex items-center justify-center transition-all duration-700 ${
-                  speakingName ? 'bg-orange-500/20 shadow-[0_0_30px_rgba(249,168,38,0.5)]' : 'bg-white/5 shadow-inner'
+                  speakingName ? 'bg-orange-500/20 shadow-[0_0_30px_rgba(249,168,38,0.5)]' : lightMode ? 'bg-black/[0.05] shadow-inner' : 'bg-white/5 shadow-inner'
                 }`}>
                   <div className={`absolute inset-0 rounded-full border transition-all duration-700 ${
-                    speakingName ? 'border-orange-400/50 scale-110' : 'border-white/10 scale-100'
+                    speakingName ? 'border-orange-400/50 scale-110' : lightMode ? 'border-black/10 scale-100' : 'border-white/10 scale-100'
                   }`} />
                   
                   {/* Dynamic Sound Waves */}
@@ -1689,7 +1746,7 @@ const RoomContent: React.FC<{
                        ))}
                      </div>
                   ) : (
-                    <Mic className="text-white/20 w-8 h-8" />
+                    <Mic className={`transition-colors duration-700 w-8 h-8 ${lightMode ? 'text-gray-400' : 'text-white/20'}`} />
                   )}
                 </div>
               </div>
@@ -1722,6 +1779,7 @@ const RoomContent: React.FC<{
                 radius={circleRadius}
                 color={color}
                 badge={participantBadges[p.identity] || 'none'}
+                lightMode={lightMode}
                 onTap={isEffectiveAnimateur && !isLocal ? () => setModTarget({
                   identity: p.identity,
                   name: p.name || 'Parent',
@@ -1738,7 +1796,9 @@ const RoomContent: React.FC<{
 
       {/* Bottom bar */}
       <div className="pb-8 pt-4 px-6">
-        <div className={`backdrop-blur-md rounded-2xl p-3 flex items-center justify-around transition-colors duration-700 ${lightMode ? 'bg-black/8 shadow-md' : 'bg-white/10'}`}>
+        <div className={`backdrop-blur-md rounded-2xl p-3 flex items-center justify-around transition-all duration-700 ${
+          lightMode ? 'bg-black/[0.12] shadow-lg border border-black/5' : 'bg-white/10'
+        }`}>
           {/* Mute */}
           <button
             onClick={handleToggleMute}
@@ -2342,19 +2402,23 @@ const WaitingRoom: React.FC<{
           </div>
         )
       ) : (
-        <div className="bg-white/10 backdrop-blur-md rounded-2xl px-6 py-4 flex flex-col items-center mb-5">
+        <div className={`backdrop-blur-md rounded-2xl px-6 py-4 flex flex-col items-center mb-5 transition-all duration-700 ${
+          lightMode ? 'bg-black/[0.06] border border-black/5' : 'bg-white/10'
+        }`}>
           <div className="flex items-center gap-2 mb-2">
             <Clock size={16} className="text-orange-400" />
-            <p className="text-sm font-medium text-white/60">La session commence dans</p>
+            <p className={`text-sm font-medium transition-colors duration-700 ${lightMode ? 'text-gray-600' : 'text-white/60'}`}>La session commence dans</p>
           </div>
-          <p className="text-3xl font-mono font-extrabold text-white tracking-wider">{countdown}</p>
+          <p className={`text-3xl font-mono font-extrabold tracking-wider transition-colors duration-700 ${lightMode ? 'text-gray-800' : 'text-white'}`}>{countdown}</p>
         </div>
       )}
 
       {/* Status cards */}
       <div className="w-full max-w-sm space-y-3">
         {/* Participants */}
-        <div className="bg-white/10 backdrop-blur-md border border-white/5 rounded-2xl p-4">
+        <div className={`backdrop-blur-md rounded-2xl p-4 transition-all duration-700 ${
+          lightMode ? 'bg-black/[0.06] border border-black/5 shadow-sm' : 'bg-white/10 border border-white/5'
+        }`}>
           <div className="flex items-center gap-3 mb-3">
             <div className="w-10 h-10 bg-blue-500/20 rounded-full flex items-center justify-center shrink-0">
               <Users size={18} className="text-blue-400" />
