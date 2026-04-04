@@ -36,6 +36,9 @@ type NotificationCallback = (payload: PushNotificationPayload) => void;
 let messaging: ReturnType<typeof getMessaging> | null = null;
 let foregroundCallbacks: NotificationCallback[] = [];
 
+// Guard: n'initialiser le token FCM qu'une seule fois par session browser
+let pushInitialized = false;
+
 // ============================================
 // FONCTIONS
 // ============================================
@@ -244,6 +247,8 @@ export function onForegroundNotification(callback: NotificationCallback): () => 
  * @param uid - UID Firebase Auth (optionnel, pour les rappels groupes vocaux)
  */
 export async function initializePushNotifications(tokenIds: string[], uid?: string): Promise<boolean> {
+  if (pushInitialized) return true;
+
   try {
     const supported = await isPushSupported();
     if (!supported) {
@@ -269,6 +274,7 @@ export async function initializePushNotifications(tokenIds: string[], uid?: stri
       await registerFcmTokenForAccount(uid, fcmToken);
     }
 
+    pushInitialized = true;
     return success;
   } catch (error) {
     console.error('[PushNotifications] Erreur initialisation:', error);
