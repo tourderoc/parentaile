@@ -3598,8 +3598,10 @@ export const SalleVocalePage = () => {
     const inRoom = step === 'waiting' || step === 'room';
 
     if (!inRoom) {
-      // Not in room — remove presence immediately
-      removePresence(groupeId, uid).catch(() => {});
+      // Not in room — remove presence only if still authenticated
+      if (auth.currentUser) {
+        removePresence(groupeId, uid).catch(() => {});
+      }
       return;
     }
 

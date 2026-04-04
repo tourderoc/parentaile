@@ -29,9 +29,6 @@ export const sendVocalReminders = functions
     for (const doc of snapshot.docs) {
       const data = doc.data();
 
-      // Exclure les groupes test
-      if (data.isTestGroup) continue;
-
       const dateVocal = data.dateVocal?.toDate?.() || new Date(data.dateVocal);
       const minutesLeft = Math.round((dateVocal.getTime() - now) / 60000);
 
@@ -230,76 +227,35 @@ export const getLiveKitToken = functions.https.onCall(async (data, context) => {
 
   const groupe = groupeSnap.data()!;
   const uid = context.auth.uid;
-  const isTestGroup = groupe.isTestGroup === true;
 
-  // --- Groupe test : vérifier mot de passe, skip timing ---
-  if (isTestGroup) {
-    if (groupe.passwordVocal && password !== groupe.passwordVocal) {
-      throw new functions.https.HttpsError(
-        'permission-denied',
-        'Mot de passe incorrect'
-      );
-    }
-
-    // Auto-inscrire le participant s'il ne l'est pas déjà
-    const isAlreadyParticipant = (groupe.participants || []).some(
-      (p: any) => p.uid === uid
+  // Vérifier que l'utilisateur est inscrit
+  const isParticipant = (groupe.participants || []).some(
+    (p: any) => p.uid === uid
+  );
+  if (!isParticipant) {
+    throw new functions.https.HttpsError(
+      'permission-denied',
+      'Vous devez être inscrit au groupe pour rejoindre le vocal'
     );
-    if (!isAlreadyParticipant) {
-      // Récupérer le pseudo pour l'inscription
-      const accSnap = await db.collection('accounts').doc(uid).get();
-      const accPseudo = accSnap.exists ? accSnap.data()?.pseudo || 'Parent' : 'Parent';
+  }
 
-      // Premier vrai inscrit → devient créateur/animateur
-      const shouldBecomeCreator =
-        groupe.participants.length === 0 ||
-        groupe.createurUid === '__test__';
+  // Vérifier la fenêtre temporelle (15 min avant → 60 min après le début)
+  const dateVocal = groupe.dateVocal?.toDate?.() || new Date(groupe.dateVocal);
+  const now = Date.now();
+  const diff = dateVocal.getTime() - now;
+  const minutesBefore = diff / 60000;
 
-      await groupeRef.update({
-        participants: admin.firestore.FieldValue.arrayUnion({
-          uid,
-          pseudo: accPseudo,
-          inscritVocal: true,
-          dateInscription: admin.firestore.Timestamp.now(),
-        }),
-        ...(shouldBecomeCreator ? {
-          createurUid: uid,
-          createurPseudo: accPseudo,
-        } : {}),
-      });
-    }
-  } else {
-    // --- Groupe normal : vérifications standard ---
-
-    // Vérifier que l'utilisateur est inscrit
-    const isParticipant = (groupe.participants || []).some(
-      (p: any) => p.uid === uid
+  if (minutesBefore > 15) {
+    throw new functions.https.HttpsError(
+      'failed-precondition',
+      'La salle ouvre 15 minutes avant le vocal'
     );
-    if (!isParticipant) {
-      throw new functions.https.HttpsError(
-        'permission-denied',
-        'Vous devez être inscrit au groupe pour rejoindre le vocal'
-      );
-    }
-
-    // Vérifier la fenêtre temporelle (15 min avant → 60 min après le début)
-    const dateVocal = groupe.dateVocal?.toDate?.() || new Date(groupe.dateVocal);
-    const now = Date.now();
-    const diff = dateVocal.getTime() - now;
-    const minutesBefore = diff / 60000;
-
-    if (minutesBefore > 15) {
-      throw new functions.https.HttpsError(
-        'failed-precondition',
-        'La salle ouvre 15 minutes avant le vocal'
-      );
-    }
-    if (minutesBefore < -60) {
-      throw new functions.https.HttpsError(
-        'failed-precondition',
-        'Le vocal est terminé'
-      );
-    }
+  }
+  if (minutesBefore < -60) {
+    throw new functions.https.HttpsError(
+      'failed-precondition',
+      'Le vocal est terminé'
+    );
   }
 
   // Récupérer le pseudo
@@ -319,13 +275,7 @@ export const getLiveKitToken = functions.https.onCall(async (data, context) => {
   }
 
   // Déterminer si l'utilisateur est l'animateur (créateur du groupe ou de remplacement)
-  let isAnimateur = false;
-  if (isTestGroup) {
-     const freshGroupe = (await groupeRef.get()).data()!;
-     isAnimateur = freshGroupe.createurUid === uid || freshGroupe.sessionState?.currentAnimateurUid === uid;
-  } else {
-     isAnimateur = groupe.createurUid === uid || groupe.sessionState?.currentAnimateurUid === uid;
-  }
+  const isAnimateur = groupe.createurUid === uid || groupe.sessionState?.currentAnimateurUid === uid;
 
   // Générer le token LiveKit
   const apiKey = functions.config().livekit?.api_key || process.env.LIVEKIT_API_KEY;
