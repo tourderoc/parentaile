@@ -1044,14 +1044,13 @@ const RoomContent: React.FC<{
   onSessionProgress?: (elapsedMin: number, totalDurationMin: number) => void;
   onSessionEnded?: () => void;
   sessionPrenom: string;
-  isTestGroup: boolean;
   createurUid: string;
   sessionCancelledRef: React.RefObject<boolean>;
   groupeStatus: string;
   firestoreSession?: SessionState | null;
   lightMode?: boolean;
   onToggleLight?: () => void;
-}> = ({ isAnimateur, groupeId, groupeTitre, groupeTheme, dateVocal, onLeave, onCancelled, animateurNotes, structureType, structure, defaultDurationMin, onSessionProgress, onSessionEnded, sessionPrenom, isTestGroup, createurUid, sessionCancelledRef, groupeStatus, firestoreSession, lightMode, onToggleLight }) => {
+}> = ({ isAnimateur, groupeId, groupeTitre, groupeTheme, dateVocal, onLeave, onCancelled, animateurNotes, structureType, structure, defaultDurationMin, onSessionProgress, onSessionEnded, sessionPrenom, createurUid, sessionCancelledRef, groupeStatus, firestoreSession, lightMode, onToggleLight }) => {
   useWakeLock(); // Keep screen on during vocal session
   const participants = useParticipants();
   const { localParticipant } = useLocalParticipant();
@@ -1135,7 +1134,6 @@ const RoomContent: React.FC<{
     localUid: localParticipant?.identity || auth.currentUser?.uid || '',
     localPseudo: sessionPrenom || 'Parent',
     liveKitParticipants: participants,
-    isTestGroup,
     firestoreSession: firestoreSession ? {
       ...firestoreSession,
       suspended: !!firestoreSession.suspended,
@@ -1167,18 +1165,10 @@ const RoomContent: React.FC<{
     }
   }, [isEffectiveAnimateur, groupeStatus, groupeId, sessionPrenom]);
 
-  // Dispatch HOUR_REACHED when dateVocal passes (or immediately for test groups)
+  // Dispatch HOUR_REACHED when dateVocal passes
   const hourReachedRef = useRef(false);
   useEffect(() => {
     if (hourReachedRef.current) return;
-    if (isTestGroup) {
-      hourReachedRef.current = true;
-      // Defer by one tick so CONDITIONS_CHANGED (always dispatched on first render)
-      // updates the machine context BEFORE HOUR_REACHED evaluates it.
-      // Without this, HOUR_REACHED reads participantCount=0 and animateurPresent=false.
-      setTimeout(() => machineDispatch({ type: 'HOUR_REACHED' }), 0);
-      return;
-    }
     const now = Date.now();
     const delay = dateVocal.getTime() - now;
     if (delay <= 0) {
@@ -1191,7 +1181,7 @@ const RoomContent: React.FC<{
       }, delay);
       return () => clearTimeout(timer);
     }
-  }, [dateVocal, machineDispatch, isTestGroup]);
+  }, [dateVocal, machineDispatch]);
 
   // Navigate to parent CancellationScreen when machine reaches terminal cancelled state
   // Delai de 1s pour laisser cancelGroup() ecrire dans Firestore avant l'unmount
@@ -2266,7 +2256,6 @@ const WaitingRoom: React.FC<{
   groupeTitre: string;
   groupeTheme?: string;
   dateVocal: Date;
-  isTestGroup: boolean;
   participants: ParticipantGroupe[];
   createurUid: string;
   structureType?: 'libre' | 'structuree';
@@ -2278,13 +2267,11 @@ const WaitingRoom: React.FC<{
   onCancelled?: () => void;
   lightMode?: boolean;
   onToggleLight?: () => void;
-}> = ({ groupeId, groupeTitre, groupeTheme, dateVocal, isTestGroup, participants, createurUid, structureType, structure, sessionPrenom, isAnimateur, onEnter, onBack, onCancelled, lightMode, onToggleLight }) => {
+}> = ({ groupeId, groupeTitre, groupeTheme, dateVocal, participants, createurUid, structureType, structure, sessionPrenom, isAnimateur, onEnter, onBack, onCancelled, lightMode, onToggleLight }) => {
   const currentUser = auth.currentUser;
   const [countdown, setCountdown] = useState('');
   const [sessionStarted, setSessionStarted] = useState(false);
   const [remotePresences, setRemotePresences] = useState<{uid:string, pseudo:string, status?:string, mood?:string}[]>([]);
-  // For test group: fake 15min countdown starting from now
-  const [testStartTime] = useState(() => new Date(Date.now() + 15 * 60 * 1000));
 
   useEffect(() => {
     return onPresenceList(groupeId, (list) => {
@@ -2314,7 +2301,7 @@ const WaitingRoom: React.FC<{
 
   // Countdown to session start
   useEffect(() => {
-    const targetTime = isTestGroup ? testStartTime : dateVocal;
+    const targetTime = dateVocal;
 
     const update = () => {
       const now = Date.now();
@@ -2335,10 +2322,10 @@ const WaitingRoom: React.FC<{
     update();
     const interval = setInterval(update, 1000);
     return () => clearInterval(interval);
-  }, [dateVocal, isTestGroup, testStartTime]);
+  }, [dateVocal]);
 
   const animateurPresent = participants.some((p) => p.uid === createurUid);
-  const hasEnoughParticipants = isTestGroup || participants.length >= 3;
+  const hasEnoughParticipants = participants.length >= 3;
 
   // Auto-cancel when session time arrives but not enough participants
   const cancelledRef = useRef(false);
@@ -2387,7 +2374,7 @@ const WaitingRoom: React.FC<{
       <div className="w-16 h-[2px] bg-gradient-to-r from-transparent via-orange-400 to-transparent mx-auto mt-3 mb-4" />
 
       {/* Countdown or Enter button */}
-      {sessionStarted || isTestGroup ? (
+      {sessionStarted ? (
         hasEnoughParticipants ? (
           <button
             onClick={onEnter}
@@ -3302,7 +3289,6 @@ export const SalleVocalePage = () => {
   const [groupeDescription, setGroupeDescription] = useState('');
   const [dateVocal, setDateVocal] = useState<Date>(new Date());
   const [createurUid, setCreateurUid] = useState('');
-  const [isTestGroup, setIsTestGroup] = useState(false);
   const [structureType, setStructureType] = useState<'libre' | 'structuree'>('libre');
   const [structure, setStructure] = useState<StructureEtape[]>([]);
   const [customDurationMin, setCustomDurationMin] = useState<number | undefined>(undefined);
@@ -3324,11 +3310,6 @@ export const SalleVocalePage = () => {
   // Session Data & Validation
   const [sessionPrenom, setSessionPrenom] = useState('');
   const [animateurNotes, setAnimateurNotes] = useState<AnimateurNotes | null>(null);
-  const [passwordInput, setPasswordInput] = useState('');
-  const [passwordError, setPasswordError] = useState('');
-  const [connectingAfterPassword, setConnectingAfterPassword] = useState(false);
-  const [passwordValidated, setPasswordValidated] = useState(false);
-
   // Dynamic role calculation
   const isAnimateur = auth.currentUser?.uid === (currentAnimateurUid || createurUid);
 
@@ -3354,7 +3335,6 @@ export const SalleVocalePage = () => {
       setGroupeDescription(data.description || '');
       setDateVocal(data.dateVocal?.toDate?.() || new Date());
       setCreateurUid(data.createurUid || '');
-      setIsTestGroup(!!data.isTestGroup);
       setStructureType(data.structureType || 'libre');
       setStructure(data.structureType === 'structuree' ? (data.structure || STRUCTURE_DEFAUT) : []);
       if (data.durationMin) setCustomDurationMin(data.durationMin);
@@ -3400,13 +3380,8 @@ export const SalleVocalePage = () => {
         const vocalTime = data.dateVocal?.toDate?.() || new Date();
         const minutesBefore = (vocalTime.getTime() - now) / 60000;
 
-        if (minutesBefore > 15 && !data.isTestGroup) {
+        if (minutesBefore > 15) {
           setStep('too_early');
-          return;
-        }
-
-        if (data.isTestGroup && data.passwordVocal && !passwordValidated) {
-          setStep('password');
           return;
         }
 
@@ -3452,46 +3427,12 @@ export const SalleVocalePage = () => {
     });
 
     return () => unsub();
-  }, [groupeId, step, passwordValidated]);
-
-  // Submit password
-  const handlePasswordSubmit = async () => {
-    if (!passwordInput.trim()) return;
-    setPasswordError('');
-    setConnectingAfterPassword(true);
-    try {
-      await connectToRoom(passwordInput.trim());
-      setPasswordValidated(true);
-
-      // Check skipCharte
-      const currentUser = auth.currentUser;
-      if (currentUser) {
-        const accSnap = await getDoc(doc(db, 'accounts', currentUser.uid));
-        if (accSnap.exists()) {
-          setSessionPrenom(accSnap.data()?.pseudo || currentUser.displayName || '');
-          if (accSnap.data()?.skipCharte) {
-            setStep('prenom');
-            return;
-          }
-        }
-      }
-      setStep('charte');
-    } catch (err: any) {
-      const msg = err?.message || '';
-      if (msg.includes('mot de passe') || msg.includes('password')) {
-        setPasswordError('Mot de passe incorrect');
-      } else {
-        setError(msg || 'Impossible de rejoindre la salle vocale');
-      }
-    } finally {
-      setConnectingAfterPassword(false);
-    }
-  };
+  }, [groupeId, step]);
 
   // Enter room from waiting room
   const handleEnterRoom = async () => {
-    // Logic check: if not test group and < 3 registered, cancel instead of joining
-    if (!isTestGroup && groupeParticipants.length < 3) {
+    // Logic check: if < 3 registered, cancel instead of joining
+    if (groupeParticipants.length < 3) {
        await cancelGroup(groupeId!, 'Nombre de participants insuffisant (minimum 3)');
        setStep('cancelled');
        return;
@@ -3503,7 +3444,7 @@ export const SalleVocalePage = () => {
     }
     setConnectingToRoom(true);
     try {
-      await connectToRoom(passwordValidated ? passwordInput : undefined);
+      await connectToRoom();
       setStep('room');
     } catch (err: any) {
       console.error('Erreur connexion salle:', err);
@@ -3767,46 +3708,6 @@ export const SalleVocalePage = () => {
     );
   }
 
-  // ===== Password =====
-  if (step === 'password') {
-    return (
-      <div className="h-screen bg-[#FFFBF0] flex flex-col items-center justify-center gap-4 px-6">
-        <div className="w-20 h-20 bg-orange-50 rounded-full flex items-center justify-center">
-          <KeyRound size={36} className="text-orange-400" />
-        </div>
-        <h2 className="text-lg font-extrabold text-gray-800">Salle protegee</h2>
-        <p className="text-sm text-gray-400 text-center font-medium">
-          Entrez le mot de passe pour acceder a la salle vocale
-        </p>
-        <input
-          type="password"
-          value={passwordInput}
-          onChange={(e) => { setPasswordInput(e.target.value); setPasswordError(''); }}
-          onKeyDown={(e) => { if (e.key === 'Enter') handlePasswordSubmit(); }}
-          placeholder="Mot de passe"
-          className="w-full max-w-xs px-4 py-3 bg-white border-2 border-gray-200 rounded-2xl text-center text-sm font-bold text-gray-700 outline-none focus:border-orange-400 transition-colors placeholder:text-gray-300"
-          autoFocus
-        />
-        {passwordError && <p className="text-xs font-bold text-red-500">{passwordError}</p>}
-        <button
-          onClick={handlePasswordSubmit}
-          disabled={!passwordInput.trim() || connectingAfterPassword}
-          className="px-8 py-3 bg-orange-500 text-white rounded-2xl font-bold text-sm shadow-lg shadow-orange-500/30 disabled:opacity-50 flex items-center gap-2"
-        >
-          {connectingAfterPassword ? (
-            <><Loader2 size={16} className="animate-spin" /> Connexion...</>
-          ) : 'Entrer'}
-        </button>
-        <button
-          onClick={handleLeave}
-          className="text-xs font-bold text-gray-400 hover:text-gray-600 transition-colors"
-        >
-          Retour au groupe
-        </button>
-      </div>
-    );
-  }
-
   // ===== Charte =====
   if (step === 'charte') {
     return (
@@ -3867,7 +3768,6 @@ export const SalleVocalePage = () => {
         groupeTitre={groupeTitre}
         groupeTheme={groupeTheme}
         dateVocal={dateVocal}
-        isTestGroup={isTestGroup}
         participants={groupeParticipants}
         createurUid={createurUid}
         structureType={structureType}
@@ -4061,7 +3961,6 @@ export const SalleVocalePage = () => {
           onSessionProgress={handleSessionProgress}
           onSessionEnded={handleSessionEnded}
           sessionPrenom={sessionPrenom}
-          isTestGroup={isTestGroup}
           createurUid={createurUid}
           sessionCancelledRef={sessionCancelledRef}
           groupeStatus={groupeStatus}

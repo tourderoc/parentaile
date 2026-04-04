@@ -505,28 +505,14 @@ export const GroupeDetailPage = () => {
               </div>
 
               {/* Temps restant */}
-              {!groupe.isTestGroup && (
-                <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 bg-orange-50 rounded-lg flex items-center justify-center">
-                    <Clock size={14} className="text-orange-400" />
-                  </div>
-                  <span className="text-xs font-semibold text-orange-500">
-                    Encore {jours} jour{jours > 1 ? 's' : ''}
-                  </span>
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 bg-orange-50 rounded-lg flex items-center justify-center">
+                  <Clock size={14} className="text-orange-400" />
                 </div>
-              )}
-
-              {/* Bouton accès salle vocale pour groupe test */}
-              {groupe.isTestGroup && user && (
-                <motion.button
-                  whileTap={{ scale: 0.97 }}
-                  onClick={() => navigate(`/espace/groupes/${groupeId}/vocal`)}
-                  className="w-full py-3 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-2xl font-bold text-sm shadow-lg shadow-emerald-500/30 flex items-center justify-center gap-2"
-                >
-                  <Mic size={16} />
-                  Entrer dans la salle vocale
-                </motion.button>
-              )}
+                <span className="text-xs font-semibold text-orange-500">
+                  Encore {jours} jour{jours > 1 ? 's' : ''}
+                </span>
+              </div>
 
               {/* Bouton inscription */}
               {!isParticipant && !estComplet && (!groupe.status || groupe.status === 'scheduled') && (

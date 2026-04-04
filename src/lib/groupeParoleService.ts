@@ -141,8 +141,6 @@ export function onGroupesParole(
           })),
           messages: [],
           messageCount: d.messageCount || 0,
-          passwordVocal: d.passwordVocal,
-          isTestGroup: d.isTestGroup || false,
           status: d.status || undefined,
           sessionState: d.sessionState ? {
             currentPhaseIndex: d.sessionState.currentPhaseIndex ?? 0,
@@ -197,8 +195,6 @@ export function onGroupeParole(
       })),
       messages: [],
       messageCount: d.messageCount || 0,
-      passwordVocal: d.passwordVocal,
-      isTestGroup: d.isTestGroup || false,
     } as GroupeParole);
   }, (error) => {
     console.error('Erreur chargement groupe:', error);
@@ -978,167 +974,6 @@ export async function incrementAnimateurDisconnect(groupeId: string): Promise<nu
     });
   });
   return newCount;
-}
-
-// ========== GROUPE TEST ==========
-const TEST_GROUP_ID = 'groupe-test-vocal';
-
-/**
- * Seed un groupe de parole test dans Firestore s'il n'existe pas déjà.
- * - Pas de contrainte horaire (isTestGroup = true)
- * - Mot de passe : "tunisien"
- * - Expiration en 2027
- * - Le premier inscrit devient le créateur
- */
-export async function seedTestGroup(): Promise<void> {
-  const ref = doc(db, 'groupes', TEST_GROUP_ID);
-  const snap = await getDoc(ref);
-
-  if (!snap.exists()) {
-    // Créer le groupe test
-    await setDoc(ref, {
-      titre: 'Salle de test vocal',
-      description:
-        'Groupe de test pour vérifier le fonctionnement de la salle vocale. Acces par mot de passe.',
-      theme: 'autre',
-      createurUid: '__test__',
-      createurPseudo: 'Systeme',
-      dateCreation: serverTimestamp(),
-      dateVocal: Timestamp.fromDate(new Date('2027-01-01T00:00:00')),
-      dateExpiration: Timestamp.fromDate(new Date('2027-12-31T23:59:59')),
-      participantsMax: 5,
-      structureType: 'libre',
-      participants: [],
-      isTestGroup: true,
-      passwordVocal: 'tunisien',
-    });
-    console.log('[SEED] Groupe test vocal créé:', TEST_GROUP_ID);
-  }
-}
-
-/**
- * Reset complet du groupe test : participants, sessionState, presence, evaluations, status.
- */
-export async function resetTestGroup(): Promise<void> {
-  const ref = doc(db, 'groupes', TEST_GROUP_ID);
-  const snap = await getDoc(ref);
-  if (!snap.exists()) return;
-
-  // Clear subcollections: presence, evaluations, notifications_sent
-  const batch = writeBatch(db);
-  for (const sub of ['presence', 'evaluations', 'notifications_sent']) {
-    const subSnap = await getDocs(collection(db, 'groupes', TEST_GROUP_ID, sub));
-    subSnap.docs.forEach((d) => batch.delete(d.ref));
-  }
-  await batch.commit();
-
-  await updateDoc(ref, {
-    participants: [],
-    createurUid: '__test__',
-    createurPseudo: 'Systeme',
-    status: deleteField(),
-    sessionState: deleteField(),
-  });
-  console.log('[RESET] Groupe test vocal réinitialisé (complet)');
-}
-
-/**
- * Met à jour la configuration du groupe test.
- */
-export async function updateTestGroup(config: {
-  theme: ThemeGroupe;
-  structureType: 'libre' | 'structuree';
-  structure?: StructureEtape[];
-  durationMin?: number;
-  titre?: string;
-  createurUid?: string;
-  createurPseudo?: string;
-  dateVocal?: Date;
-  status?: string;
-  fakeParticipantCount?: number;
-}): Promise<void> {
-  const ref = doc(db, 'groupes', TEST_GROUP_ID);
-  const updates: Record<string, unknown> = {
-    theme: config.theme,
-    structureType: config.structureType,
-  };
-  if (config.structureType === 'structuree' && config.structure) {
-    updates.structure = config.structure;
-    updates.durationMin = deleteField();
-  } else {
-    updates.structure = deleteField();
-    if (config.durationMin) updates.durationMin = config.durationMin;
-  }
-  if (config.titre) updates.titre = config.titre;
-  if (config.createurUid) {
-    updates.createurUid = config.createurUid;
-    updates.createurPseudo = config.createurPseudo || 'Parent';
-  }
-  if (config.dateVocal) {
-    updates.dateVocal = Timestamp.fromDate(config.dateVocal);
-  }
-  if (config.status) {
-    updates.status = config.status;
-  } else {
-    updates.status = deleteField();
-  }
-
-  // Build participants array with fakes
-  const fakeCount = config.fakeParticipantCount ?? 0;
-  const fakeParticipants = Array.from({ length: fakeCount }, (_, i) => ({
-    uid: `fake-parent-${i + 1}`,
-    pseudo: `Parent ${i + 1}`,
-    inscritVocal: true,
-    dateInscription: new Date(),
-  }));
-  updates.participants = fakeParticipants;
-
-  await updateDoc(ref, updates);
-}
-
-/**
- * Ajoute des presences fictives dans la subcollection presence du groupe test.
- */
-export async function addFakePresences(count: number): Promise<void> {
-  // Clear existing presences first
-  const presSnap = await getDocs(collection(db, 'groupes', TEST_GROUP_ID, 'presence'));
-  const batch = writeBatch(db);
-  presSnap.docs.forEach((d) => batch.delete(d.ref));
-  await batch.commit();
-
-  // Add fake presences
-  for (let i = 0; i < count; i++) {
-    const uid = `fake-parent-${i + 1}`;
-    await setDoc(doc(db, 'groupes', TEST_GROUP_ID, 'presence', uid), {
-      uid,
-      pseudo: `Parent ${i + 1}`,
-      joinedAt: serverTimestamp(),
-      mood: ['😊', '😐', '😔', '💪', '🤗'][i % 5],
-    });
-  }
-}
-
-/**
- * Simule un sessionState specifique sur le groupe test.
- */
-export async function simulateSessionState(state: {
-  suspended?: boolean;
-  suspensionReason?: 'animateur_left' | 'below_minimum';
-  suspensionCount?: number;
-  sessionActive?: boolean;
-}): Promise<void> {
-  const updates: Record<string, unknown> = {
-    'sessionState.currentPhaseIndex': 0,
-    'sessionState.extendedMinutes': 0,
-    'sessionState.sessionActive': state.sessionActive ?? true,
-    'sessionState.phaseStartedAt': serverTimestamp(),
-    'sessionState.sessionStartedAt': serverTimestamp(),
-  };
-  if (state.suspended !== undefined) updates['sessionState.suspended'] = state.suspended;
-  if (state.suspensionReason) updates['sessionState.suspensionReason'] = state.suspensionReason;
-  if (state.suspensionCount !== undefined) updates['sessionState.suspensionCount'] = state.suspensionCount;
-
-  await updateDoc(doc(db, 'groupes', TEST_GROUP_ID), updates);
 }
 
 // ========== Signalement de bannissement ==========

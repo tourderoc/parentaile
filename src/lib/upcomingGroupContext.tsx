@@ -55,7 +55,6 @@ function findUpcomingGroup(groupes: GroupeParole[], uid: string): { group: Group
 
   // Filtrer : groupes ou le user est participant, pas un test group, ET non annulés
   const myGroups = groupes.filter(g =>
-    !g.isTestGroup &&
     g.status !== 'cancelled' &&
     g.status !== 'completed' &&
     g.participants.some(p => p.uid === uid && !p.banni)

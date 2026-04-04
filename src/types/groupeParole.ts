@@ -52,8 +52,6 @@ export interface GroupeParole {
   participants: ParticipantGroupe[];
   messages: MessageGroupe[];
   messageCount?: number;
-  passwordVocal?: string;
-  isTestGroup?: boolean;
   sessionState?: SessionState;
   status?: GroupeStatus;
   reprogrammedFromId?: string;

@@ -83,7 +83,6 @@ interface UseVocalMachineProps {
   localUid: string;
   localPseudo: string;
   liveKitParticipants: Participant[];
-  isTestGroup: boolean;
   /** Firestore sessionState from parent — avoids double listener */
   firestoreSession?: {
     suspended: boolean;
@@ -126,7 +125,6 @@ export function useVocalMachine({
   localUid,
   localPseudo,
   liveKitParticipants,
-  isTestGroup,
   firestoreSession,
   participantPoints,
 }: UseVocalMachineProps): VocalMachineOutput {
@@ -374,12 +372,8 @@ export function useVocalMachine({
     const threshold = VOCAL_CONFIG.PROPOSE_AFTER_SEC + (relayRank * VOCAL_CONFIG.RANK_DELAY_SEC);
     if (elapsed < threshold) return false;
 
-    // In test groups, always allow (after delay)
-    if (isTestGroup) return true;
-
-    // In non-test groups, need >= 3 participants to propose
     return participantCount >= VOCAL_CONFIG.MIN_PARTICIPANTS;
-  }, [machineState, localUid, effectiveAnimateurUid, isTestGroup, participantCount, relayRank, hasRefused]);
+  }, [machineState, localUid, effectiveAnimateurUid, participantCount, relayRank, hasRefused]);
 
   // ---------- Actions ----------
   const proposeAsReplacement = useCallback(async () => {
@@ -387,7 +381,7 @@ export function useVocalMachine({
     if (!user) return;
 
     // Double-check: enough participants?
-    if (!isTestGroup && participantCount < VOCAL_CONFIG.MIN_PARTICIPANTS) {
+    if (participantCount < VOCAL_CONFIG.MIN_PARTICIPANTS) {
       console.warn('[VOCAL_MACHINE] Cannot propose: below minimum participants');
       return;
     }
@@ -414,7 +408,7 @@ export function useVocalMachine({
         reason: 'Transaction échouée — un autre participant a peut-être pris le relais',
       });
     }
-  }, [groupeId, localPseudo, isTestGroup, participantCount, dispatch]);
+  }, [groupeId, localPseudo, participantCount, dispatch]);
 
   const refuseRelay = useCallback(() => {
     setHasRefused(true);

@@ -102,10 +102,10 @@ const GroupeCard: React.FC<{
   const salleOuverte = !vocalPassé && groupe.status !== 'cancelled' && (groupe.dateVocal.getTime() - Date.now()) < 15 * 60000;
 
   useEffect(() => {
-    if (!salleOuverte && !groupe.isTestGroup) return;
+    if (!salleOuverte) return;
     const unsub = onPresenceCount(groupe.id, setOnlineCount);
     return unsub;
-  }, [salleOuverte, groupe.id, groupe.isTestGroup]);
+  }, [salleOuverte, groupe.id]);
 
   return (
     <motion.div
@@ -143,17 +143,6 @@ const GroupeCard: React.FC<{
             <span className="text-[10px] font-extrabold bg-white/25 text-white px-2 py-0.5 rounded-full backdrop-blur-md shadow-sm">
               {index + 1}/{total}
             </span>
-            {groupe.isTestGroup && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  navigate('/espace/test-config');
-                }}
-                className="w-7 h-7 bg-white/25 backdrop-blur-md rounded-lg flex items-center justify-center hover:bg-white/40 transition-colors shadow-sm"
-              >
-                <Settings size={14} className="text-white" />
-              </button>
-            )}
             {estComplet && (
               <span className="text-[9px] font-bold bg-white/25 text-white px-2 py-0.5 rounded-full uppercase tracking-wider backdrop-blur-md shadow-sm">
                 Complet
