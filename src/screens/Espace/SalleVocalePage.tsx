@@ -1077,15 +1077,19 @@ const RoomContent: React.FC<{
   const [warningCounts, setWarningCounts] = useState<Record<string, number>>({});
   const [localWarnings, setLocalWarnings] = useState(0);
   const [banInfo, setBanInfo] = useState<{ banned: boolean; groupeTitre: string } | null>(null);
+  const fetchedUidsRef = useRef(new Set<string>());
 
-  // Fetch badges and points for all participants
+  // Fetch badges and points — only for UIDs not already fetched (cache par session)
   useEffect(() => {
-    const identities = participants.map((p) => p.identity);
+    const identities = participants.map((p) => p.identity).filter(Boolean) as string[];
+    const newIds = identities.filter(id => !fetchedUidsRef.current.has(id));
+    if (newIds.length === 0) return;
+
     const fetchStats = async () => {
       const badges: Record<string, BadgeLevel> = {};
       const points: Record<string, number> = {};
-      for (const id of identities) {
-        if (!id) continue;
+      for (const id of newIds) {
+        fetchedUidsRef.current.add(id);
         const snap = await getDoc(doc(db, 'accounts', id));
         if (snap.exists()) {
           const data = snap.data();
@@ -1093,8 +1097,8 @@ const RoomContent: React.FC<{
           badges[id] = data.badge || getBadgeForPoints(data.points || 0);
         }
       }
-      setParticipantPoints(points);
-      setParticipantBadges(badges);
+      setParticipantPoints(prev => ({ ...prev, ...points }));
+      setParticipantBadges(prev => ({ ...prev, ...badges }));
     };
     fetchStats();
   }, [participants.length]);

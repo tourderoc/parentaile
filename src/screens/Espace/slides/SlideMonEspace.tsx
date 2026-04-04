@@ -17,7 +17,6 @@ import { onUserProgression, onPendingEvaluations, dismissEvaluation, onGroupesPa
 import { AuthWall } from '../../../components/ui/AuthWall';
 import type { GroupeParole, EvaluationPendante, UserProgression } from '../../../types/groupeParole';
 import { getNextBadge, BADGE_THRESHOLDS, THEME_COLORS, THEME_LABELS } from '../../../types/groupeParole';
-import { onUnreadParentNotifCount } from '../../../lib/parentNotificationService';
 
 const SquareCard = ({ icon: Icon, label, description, count, bgImage, onClick, colorClasses, isBadge }: any) => (
   <motion.button
@@ -68,12 +67,11 @@ const SquareCard = ({ icon: Icon, label, description, count, bgImage, onClick, c
   </motion.button>
 );
 
-export const SlideMonEspace = () => {
+export const SlideMonEspace = ({ unreadParentCount = 0 }: { unreadParentCount?: number }) => {
   const navigate = useNavigate();
   const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(auth.currentUser);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [unreadDoctorCount, setUnreadDoctorCount] = useState(0);
-  const [unreadParentCount, setUnreadParentCount] = useState(0);
   const unreadCount = unreadDoctorCount + unreadParentCount;
   const [myGroupsCount, setMyGroupsCount] = useState(0);
   const [pendingEvals, setPendingEvals] = useState<EvaluationPendante[]>([]);
@@ -124,15 +122,6 @@ export const SlideMonEspace = () => {
 
     setup();
     return () => unsubscribes.forEach((u) => u());
-  }, [currentUser]);
-
-  // Unread parent notifications count (groupes, badges, etc.)
-  useEffect(() => {
-    if (!currentUser) {
-      setUnreadParentCount(0);
-      return;
-    }
-    return onUnreadParentNotifCount(currentUser.uid, setUnreadParentCount);
   }, [currentUser]);
 
   // My groups count

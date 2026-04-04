@@ -1,5 +1,7 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { auth } from '../../lib/firebase';
+import { onUnreadParentNotifCount } from '../../lib/parentNotificationService';
 import { Swiper, SwiperSlide } from 'swiper/react';
 import type { SwiperClass } from 'swiper/react';
 import 'swiper/css';
@@ -39,6 +41,14 @@ export const EspaceMain = () => {
   const [activeSlide, setActiveSlide] = useState(() =>
     sectionToSlide[section || 'dashboard'] ?? 0
   );
+  const [unreadParentCount, setUnreadParentCount] = useState(0);
+
+  // Single listener for parent notifications — shared by BottomNavSwiper and SlideMonEspace
+  useEffect(() => {
+    const user = auth.currentUser;
+    if (!user) return;
+    return onUnreadParentNotifCount(user.uid, setUnreadParentCount);
+  }, []);
 
   // Ref to track section for use in callbacks without stale closures
   const sectionRef = useRef(section);
@@ -110,7 +120,7 @@ export const EspaceMain = () => {
           </SwiperSlide>
           <SwiperSlide>
             <div className="h-full overflow-y-auto">
-              <SlideMonEspace />
+              <SlideMonEspace unreadParentCount={unreadParentCount} />
             </div>
           </SwiperSlide>
           <SwiperSlide>
@@ -128,6 +138,7 @@ export const EspaceMain = () => {
           <BottomNavSwiper
             activeIndex={activeSlide}
             onNavigate={handleNavigate}
+            unreadParentCount={unreadParentCount}
           />
         )}
       </div>

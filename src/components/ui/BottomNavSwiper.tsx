@@ -5,16 +5,15 @@ import { motion } from 'framer-motion';
 import { auth, db } from '../../lib/firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { collection, query, where, orderBy, getDocs, onSnapshot } from 'firebase/firestore';
-import { onUnreadParentNotifCount } from '../../lib/parentNotificationService';
 
 interface BottomNavSwiperProps {
   activeIndex: number;
   onNavigate: (index: number) => void;
+  unreadParentCount?: number;
 }
 
-export const BottomNavSwiper: React.FC<BottomNavSwiperProps> = ({ activeIndex, onNavigate }) => {
+export const BottomNavSwiper: React.FC<BottomNavSwiperProps> = ({ activeIndex, onNavigate, unreadParentCount = 0 }) => {
   const [unreadDoctorCount, setUnreadDoctorCount] = useState(0);
-  const [unreadParentCount, setUnreadParentCount] = useState(0);
   const unreadCount = unreadDoctorCount + unreadParentCount;
   const [currentUser, setCurrentUser] = useState<User | null>(auth.currentUser);
   const navigate = useNavigate();
@@ -64,12 +63,6 @@ export const BottomNavSwiper: React.FC<BottomNavSwiperProps> = ({ activeIndex, o
 
     setupListeners();
     return () => unsubscribes.forEach(unsub => unsub());
-  }, [currentUser]);
-
-  // Notifications parentales (groupes, badges, etc.)
-  useEffect(() => {
-    if (!currentUser) return;
-    return onUnreadParentNotifCount(currentUser.uid, setUnreadParentCount);
   }, [currentUser]);
 
   const navItems = [
