@@ -211,7 +211,7 @@ export const getLiveKitToken = functions.https.onCall(async (data, context) => {
     throw new functions.https.HttpsError('unauthenticated', 'Connexion requise');
   }
 
-  const { groupeId, password } = data;
+  const { groupeId } = data;
   if (!groupeId || typeof groupeId !== 'string') {
     throw new functions.https.HttpsError('invalid-argument', 'groupeId requis');
   }
