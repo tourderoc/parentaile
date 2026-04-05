@@ -22,9 +22,11 @@ import {
   SkipForward, Plus, Square, Sun
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { getLiveKitToken } from '../../lib/liveKitService';
+import { UserAvatar } from '../../components/ui/UserAvatar';
+import type { AvatarConfig } from '../../lib/avatarTypes';
 import { auth, db } from '../../lib/firebase';
 import { doc, getDoc, onSnapshot } from 'firebase/firestore';
-import { getLiveKitToken } from '../../lib/liveKitService';
 import { 
   submitEvaluation, markEvaluationPending, getEvaluationStatus, addPoints, 
   advancePhase, 
@@ -352,7 +354,7 @@ const CircleParticipant: React.FC<{
   onTap?: () => void;
   badge?: BadgeLevel;
   lightMode?: boolean;
-}> = ({ name, isSpeaking, isMuted, isAnimateur, isLocal, hasHandRaised, warningCount = 0, showWarningBadge = false, angle, radius, color, avatarUrl, onTap, badge = 'none', lightMode }) => {
+}> = ({ name, isSpeaking, isMuted, isAnimateur, isLocal, hasHandRaised, warningCount = 0, showWarningBadge = false, angle, radius, color, avatarConfig, onTap, badge = 'none', lightMode }) => {
   const x = Math.cos(angle) * radius;
   const y = Math.sin(angle) * radius;
 
@@ -416,15 +418,15 @@ const CircleParticipant: React.FC<{
             isSpeaking ? 'scale-110 z-10' : 'hover:scale-105'
           }`}
           style={{
-            background: avatarUrl ? 'transparent' : `linear-gradient(135deg, ${color}, ${color}cc)`,
+            background: avatarConfig ? 'transparent' : `linear-gradient(135deg, ${color}, ${color}cc)`,
             border: isSpeaking ? `3px solid ${color}` : `3px solid ${BADGE_RING_COLORS[badge]}`,
             boxShadow: isSpeaking 
               ? `0 0 25px ${color}80, 0 8px 32px rgba(0,0,0,${lightMode ? '0.1' : '0.5'})` 
               : `0 8px 32px rgba(0,0,0,${lightMode ? '0.1' : '0.4'})`
           }}
         >
-          {avatarUrl ? (
-            <img src={avatarUrl} alt={name} className="w-full h-full rounded-full object-cover" />
+          {avatarConfig ? (
+            <UserAvatar config={avatarConfig} size={76} className="w-full h-full object-cover" />
           ) : (
             <span className="text-2xl font-extrabold text-white">
               {name.charAt(0).toUpperCase()}
@@ -1757,6 +1759,16 @@ const RoomContent: React.FC<{
             const angle = -Math.PI / 2 + (2 * Math.PI * index) / count;
             const color = AVATAR_COLORS[index % AVATAR_COLORS.length];
 
+            let avatarConfig: AvatarConfig | null = null;
+            try {
+              if (p.metadata) {
+                const meta = JSON.parse(p.metadata);
+                avatarConfig = meta.avatar || null;
+              }
+            } catch (e) {
+              console.error('Error parsing participant metadata:', e);
+            }
+
             return (
               <CircleParticipant
                 key={p.identity}
@@ -1773,6 +1785,7 @@ const RoomContent: React.FC<{
                 radius={circleRadius}
                 color={color}
                 badge={participantBadges[p.identity] || 'none'}
+                avatarConfig={avatarConfig}
                 lightMode={lightMode}
                 onTap={isEffectiveAnimateur && !isLocal ? () => setModTarget({
                   identity: p.identity,

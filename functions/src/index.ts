@@ -412,8 +412,10 @@ export const getLiveKitToken = functions.https.onCall(async (data, context) => {
 
   // Récupérer le pseudo (priorité au pseudo de session passé en paramètre)
   let pseudo = data.pseudo;
+  const accountSnap = await db.collection('accounts').doc(uid).get();
+  const avatar = accountSnap.exists ? accountSnap.data()?.avatar || null : null;
+
   if (!pseudo || typeof pseudo !== 'string') {
-    const accountSnap = await db.collection('accounts').doc(uid).get();
     pseudo = accountSnap.exists
       ? accountSnap.data()?.pseudo || 'Parent'
       : 'Parent';
@@ -450,7 +452,7 @@ export const getLiveKitToken = functions.https.onCall(async (data, context) => {
     identity: uid,
     name: pseudo,
     ttl: '1h',
-    metadata: JSON.stringify({ isAnimateur, groupeId }),
+    metadata: JSON.stringify({ isAnimateur, groupeId, avatar }),
   });
 
   token.addGrant({
