@@ -37,7 +37,8 @@ let messaging: ReturnType<typeof getMessaging> | null = null;
 let foregroundCallbacks: NotificationCallback[] = [];
 
 // Guard: n'initialiser le token FCM qu'une seule fois par session browser
-let pushInitialized = false;
+// Promise-lock pour éviter la race condition si 2 appels simultanés au démarrage
+let pushInitPromise: Promise<boolean> | null = null;
 
 // ============================================
 // FONCTIONS
@@ -247,39 +248,42 @@ export function onForegroundNotification(callback: NotificationCallback): () => 
  * @param uid - UID Firebase Auth (optionnel, pour les rappels groupes vocaux)
  */
 export async function initializePushNotifications(tokenIds: string[], uid?: string): Promise<boolean> {
-  if (pushInitialized) return true;
+  // Si déjà en cours ou terminé, retourner la même Promise — pas de double exécution
+  if (pushInitPromise) return pushInitPromise;
 
-  try {
-    const supported = await isPushSupported();
-    if (!supported) {
-      console.log('[PushNotifications] Push non supporté sur ce navigateur');
+  pushInitPromise = (async () => {
+    try {
+      const supported = await isPushSupported();
+      if (!supported) {
+        console.log('[PushNotifications] Push non supporté sur ce navigateur');
+        return false;
+      }
+
+      const fcmToken = await getFcmToken();
+      if (!fcmToken) {
+        console.log('[PushNotifications] Impossible d\'obtenir le token FCM');
+        return false;
+      }
+
+      let success = true;
+      for (const tokenId of tokenIds) {
+        const registered = await registerFcmTokenForParent(tokenId, fcmToken);
+        if (!registered) success = false;
+      }
+
+      if (uid) {
+        await registerFcmTokenForAccount(uid, fcmToken);
+      }
+
+      return success;
+    } catch (error) {
+      console.error('[PushNotifications] Erreur initialisation:', error);
+      pushInitPromise = null; // Permettre retry si erreur
       return false;
     }
+  })();
 
-    const fcmToken = await getFcmToken();
-    if (!fcmToken) {
-      console.log('[PushNotifications] Impossible d\'obtenir le token FCM');
-      return false;
-    }
-
-    // Enregistrer le token FCM pour chaque enfant (notifications médecin)
-    let success = true;
-    for (const tokenId of tokenIds) {
-      const registered = await registerFcmTokenForParent(tokenId, fcmToken);
-      if (!registered) success = false;
-    }
-
-    // Enregistrer aussi sur le compte utilisateur (rappels groupes vocaux)
-    if (uid) {
-      await registerFcmTokenForAccount(uid, fcmToken);
-    }
-
-    pushInitialized = true;
-    return success;
-  } catch (error) {
-    console.error('[PushNotifications] Erreur initialisation:', error);
-    return false;
-  }
+  return pushInitPromise;
 }
 
 /**
