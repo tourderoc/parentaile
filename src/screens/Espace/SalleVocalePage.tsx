@@ -27,9 +27,9 @@ import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { getLiveKitToken } from '../../lib/liveKitService';
 import { 
   submitEvaluation, markEvaluationPending, getEvaluationStatus, addPoints, 
-  setPresence, removePresence, advancePhase, 
+  advancePhase, 
   extendSession, endSession, submitBanFeedback,
-  initSessionStateV2, onPresenceList,
+  initSessionStateV2,
   cancelGroup, banParticipantExplicit, isParticipantBanned
 } from '../../lib/groupeParoleService';
 import { 
@@ -2275,19 +2275,7 @@ const WaitingRoom: React.FC<{
   const currentUser = auth.currentUser;
   const [countdown, setCountdown] = useState('');
   const [sessionStarted, setSessionStarted] = useState(false);
-  const [remotePresences, setRemotePresences] = useState<{uid:string, pseudo:string, status?:string, mood?:string}[]>([]);
-
-  useEffect(() => {
-    return onPresenceList(groupeId, (list) => {
-      // Only keep OTHER users with status 'waiting' (not self — self is always shown locally)
-      const uid = currentUser?.uid;
-      setRemotePresences(
-        list.filter(p => p.uid !== uid && (!p.status || p.status === 'waiting'))
-      );
-    });
-  }, [groupeId, currentUser?.uid]);
-
-  // Build the FINAL display list: current user (guaranteed) + remote presences
+  // Build the FINAL display list: current user (guaranteed) + registered participants
   const displayPresences = useMemo(() => {
     const me = currentUser ? {
       uid: currentUser.uid,
@@ -2295,13 +2283,16 @@ const WaitingRoom: React.FC<{
       isMe: true as const,
     } : null;
     
-    const others = remotePresences.map(p => ({
-      ...p,
-      isMe: false as const,
-    }));
+    const others = participants
+      .filter(p => p.uid !== currentUser?.uid)
+      .map(p => ({
+        uid: p.uid,
+        pseudo: p.pseudo,
+        isMe: false as const,
+      }));
     
     return me ? [me, ...others] : others;
-  }, [currentUser, sessionPrenom, remotePresences]);
+  }, [currentUser, sessionPrenom, participants]);
 
   // Countdown to session start
   useEffect(() => {
@@ -2524,10 +2515,7 @@ const WaitingRoom: React.FC<{
               <button
                 key={emoji}
                 onClick={() => {
-                  const uid = auth.currentUser?.uid;
-                  if (uid && groupeId) {
-                    setPresence(groupeId, uid, { mood: emoji, pseudo: sessionPrenom || auth.currentUser?.displayName || 'Parent' }).catch(() => {});
-                  }
+                  // Mood selection in waiting room disabled (was using Firestore presence)
                 }}
                 className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center text-xl hover:bg-white/20 active:scale-90 transition-all"
               >
@@ -3581,67 +3569,7 @@ export const SalleVocalePage = () => {
     navigate('/espace/mon-espace');
   }, [navigate]);
 
-  // Presence tracking: single unified effect for set/remove
-  // Uses delayed removal to survive React StrictMode double-mount
-  const presenceCleanupRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    // 1. ALWAYS clear any pending cleanup first to prevent "disappearing" flicker
-    if (presenceCleanupRef.current) {
-      clearTimeout(presenceCleanupRef.current);
-      presenceCleanupRef.current = null;
-    }
-
-    const uid = auth.currentUser?.uid;
-    if (!groupeId || !uid) return;
-
-    const inRoom = step === 'waiting' || step === 'room';
-
-    if (!inRoom) {
-      // Not in room — remove presence only if still authenticated
-      if (auth.currentUser) {
-        removePresence(groupeId, uid).catch(() => {});
-      }
-      return;
-    }
-
-    // 2. Set/Update presence
-    setPresence(groupeId, uid, { 
-      pseudo: sessionPrenom || 'Parent',
-      status: step 
-    }).catch(() => {});
-
-    // 3. Heartbeat every 30s
-    const interval = setInterval(() => {
-      setPresence(groupeId, uid, { 
-        pseudo: sessionPrenom || 'Parent',
-        status: step 
-      }).catch(() => {});
-    }, 30000);
-
-    return () => {
-      clearInterval(interval);
-      // Delayed removal: survives React StrictMode double-mount and rapid state updates
-      const capturedUid = uid;
-      const capturedGroupeId = groupeId;
-      presenceCleanupRef.current = setTimeout(() => {
-        removePresence(capturedGroupeId, capturedUid).catch(() => {});
-        presenceCleanupRef.current = null;
-      }, 3000); // 3-second grace period for stability
-    };
-  }, [step, groupeId, sessionPrenom, auth.currentUser?.uid]);
-
-  // Cleanup presence on tab/browser close (immediate, no delay needed)
-  useEffect(() => {
-    const uid = auth.currentUser?.uid;
-    if (!groupeId || !uid) return;
-
-    const cleanup = () => {
-      removePresence(groupeId, uid).catch(() => {});
-    };
-    window.addEventListener('beforeunload', cleanup);
-    return () => window.removeEventListener('beforeunload', cleanup);
-  }, [groupeId]);
+  // (Presence tracking via Firestore has been removed to conserve reads/writes)
 
   // Determine if user is animateur (before LiveKit connection, based on createurUid)
   const currentUser = auth.currentUser;

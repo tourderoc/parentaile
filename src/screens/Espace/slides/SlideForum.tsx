@@ -6,7 +6,7 @@ import { Users, Mic, Clock, Plus, MessageCircle, Filter, Loader2, Heart, Setting
 import { Swiper, SwiperSlide } from 'swiper/react';
 import 'swiper/css';
 import { auth } from '../../../lib/firebase';
-import { onGroupeRating, onPresenceCount } from '../../../lib/groupeParoleService';
+import { onGroupeRating } from '../../../lib/groupeParoleService';
 import { useUpcomingGroup } from '../../../lib/upcomingGroupContext';
 import type { GroupeParole, ThemeGroupe } from '../../../types/groupeParole';
 import { THEME_LABELS, THEME_COLORS, THEME_SHORT_LABELS } from '../../../types/groupeParole';
@@ -98,15 +98,7 @@ const GroupeCard: React.FC<{
   const estComplet = placesRestantes === 0;
   const vocalPassé = isVocalPassé(groupe.dateVocal);
 
-  // Presence temps reel : ecouter quand la salle est ouverte (15 min avant → 60 min apres)
-  const [onlineCount, setOnlineCount] = useState(0);
   const salleOuverte = !vocalPassé && groupe.status !== 'cancelled' && (groupe.dateVocal.getTime() - Date.now()) < 15 * 60000;
-
-  useEffect(() => {
-    if (!salleOuverte) return;
-    const unsub = onPresenceCount(groupe.id, setOnlineCount);
-    return unsub;
-  }, [salleOuverte, groupe.id]);
 
   return (
     <motion.div
@@ -217,13 +209,7 @@ const GroupeCard: React.FC<{
                   Passé
                 </span>
               )}
-              {!vocalPassé && onlineCount > 0 && (
-                <span className="text-[9px] font-bold bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-full ml-auto flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
-                  {onlineCount} en ligne
-                </span>
-              )}
-              {!vocalPassé && onlineCount === 0 && (
+              {!vocalPassé && (
                 <span className="text-[9px] font-bold bg-orange-50 text-orange-500 px-2 py-0.5 rounded-full ml-auto">
                   À venir
                 </span>

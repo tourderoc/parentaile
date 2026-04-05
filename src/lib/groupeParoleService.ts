@@ -341,76 +341,7 @@ export async function quitterGroupe(
   });
 }
 
-// ========== PRESENCE TEMPS REEL ==========
 
-/**
- * Marque un utilisateur comme present dans la salle d'un groupe.
- * Ecrit dans groupes/{groupeId}/presence/{uid}
- */
-export async function setPresence(
-  groupeId: string,
-  uid: string,
-  data?: { pseudo?: string; mood?: string; ready?: boolean; status?: string }
-): Promise<void> {
-  const presenceRef = doc(db, 'groupes', groupeId, 'presence', uid);
-  await setDoc(presenceRef, {
-    uid,
-    lastSeen: serverTimestamp(),
-    ...data,
-  }, { merge: true });
-}
-
-/**
- * Supprime la presence d'un utilisateur.
- */
-export async function removePresence(
-  groupeId: string,
-  uid: string
-): Promise<void> {
-  try {
-    await deleteDoc(doc(db, 'groupes', groupeId, 'presence', uid));
-  } catch {
-    // Ignorer si le doc n'existe pas
-  }
-}
-
-/**
- * Ecoute le nombre de participants presents en temps reel.
- * Retourne une fonction unsubscribe.
- */
-export function onPresenceCount(
-  groupeId: string,
-  callback: (count: number) => void
-): () => void {
-  return onSnapshot(
-    collection(db, 'groupes', groupeId, 'presence'),
-    (snapshot) => callback(snapshot.size),
-    () => callback(0)
-  );
-}
-
-/**
- * Retourne la liste complète des présences.
- */
-export function onPresenceList(
-  groupeId: string,
-  callback: (presences: { uid: string; pseudo: string; status?: string; mood?: string; ready?: boolean }[]) => void
-): () => void {
-  return onSnapshot(
-    collection(db, 'groupes', groupeId, 'presence'),
-    (snapshot) => {
-      const list = snapshot.docs.map((doc) => ({
-        uid: doc.id,
-        pseudo: doc.data().pseudo || '',
-        status: doc.data().status,
-        mood: doc.data().mood,
-        ready: doc.data().ready,
-      }));
-      callback(list);
-    },
-    () => callback([])
-  );
-}
 
 // ========== ÉVALUATIONS ==========
 
