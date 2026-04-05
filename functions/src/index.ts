@@ -228,24 +228,6 @@ export const handleVocalReminder = functions
     }
 
     // --- ENVOI DE RAPPEL ---
-    // Récupérer les FCM tokens en parallèle
-    const accountSnaps = await Promise.all(
-      participants
-        .filter((p: any) => p.uid)
-        .map((p: any) => db.collection('accounts').doc(p.uid).get())
-    );
-
-    const fcmTokens = accountSnaps
-      .map(snap => snap.data()?.fcmToken)
-      .filter((t): t is string => !!t);
-
-    if (fcmTokens.length === 0) {
-      console.log(`[Reminder] No FCM tokens for ${groupeId}`);
-      await dedupRef.set({ sentAt: admin.firestore.FieldValue.serverTimestamp() });
-      res.status(200).send('No tokens');
-      return;
-    }
-
     // Construire le message
     const title = type === '30min'
       ? 'Votre groupe dans 30 min'
@@ -259,26 +241,53 @@ export const handleVocalReminder = functions
       ? `"${data.titre}" — La salle d'attente est ouverte`
       : `"${data.titre}" — ${participants.length} parent${participants.length > 1 ? 's' : ''} vous attendent`;
 
-    // Envoyer
-    try {
-      await admin.messaging().sendEachForMulticast({
-        tokens: fcmTokens,
-        notification: { title, body },
-        data: {
-          link: `/espace/groupes/${groupeId}/vocal`,
+    // Récupérer les FCM tokens en parallèle
+    const accountSnaps = await Promise.all(
+      participants
+        .filter((p: any) => p.uid)
+        .map((p: any) => db.collection('accounts').doc(p.uid).get())
+    );
+
+    // Envoyer notifs in-app + FCM en parallèle pour chaque participant
+    const reminderPromises = participants
+      .filter((p: any) => p.uid)
+      .map(async (p: any, i: number) => {
+        // Notification in-app
+        const notifId = `reminder_${type}_${groupeId}_${p.uid}`;
+        await db.collection('parentNotifications').doc(notifId).set({
           type: 'vocal_reminder',
+          recipientUid: p.uid,
+          title,
+          body,
+          read: false,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
           groupeId,
-        },
-        webpush: {
-          fcmOptions: {
-            link: `/espace/groupes/${groupeId}/vocal`,
-          },
-        },
+          groupeTitre: data.titre,
+          reminderType: type,
+        });
+
+        // FCM push
+        const token = accountSnaps[i]?.data()?.fcmToken;
+        if (token) {
+          await admin.messaging().send({
+            token,
+            notification: { title, body },
+            data: {
+              link: `/espace/groupes/${groupeId}/vocal`,
+              type: 'vocal_reminder',
+              groupeId,
+            },
+            webpush: {
+              fcmOptions: {
+                link: `/espace/groupes/${groupeId}/vocal`,
+              },
+            },
+          }).catch(() => {});
+        }
       });
-      console.log(`[Reminder] ${type} sent for ${groupeId} to ${fcmTokens.length} tokens`);
-    } catch (err) {
-      console.error(`[Reminder] Error sending for ${groupeId}:`, err);
-    }
+
+    await Promise.all(reminderPromises);
+    console.log(`[Reminder] ${type} sent for ${groupeId} (${participants.length} participants)`);
 
     await dedupRef.set({ sentAt: admin.firestore.FieldValue.serverTimestamp() });
     res.status(200).send('OK');
