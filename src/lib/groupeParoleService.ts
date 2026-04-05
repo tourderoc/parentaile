@@ -11,7 +11,9 @@ import {
   serverTimestamp,
   Timestamp,
   query,
+  where,
   orderBy,
+  limit,
   onSnapshot,
   arrayUnion,
   increment,
@@ -104,14 +106,20 @@ export async function createGroupeParole(data: CreateGroupeData): Promise<string
 
 /**
  * Écoute en temps réel les groupes de parole non expirés.
+ * Filtre : groupes des 3 derniers jours + futurs (max 100).
  * Retourne une fonction unsubscribe pour arrêter l'écoute.
  */
 export function onGroupesParole(
   callback: (groupes: GroupeParole[]) => void
 ): () => void {
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - 3); // 3 jours en arrière (sessions en cours ou récentes)
+
   const q = query(
     collection(db, 'groupes'),
-    orderBy('dateCreation', 'desc')
+    where('dateVocal', '>=', Timestamp.fromDate(cutoff)),
+    orderBy('dateVocal', 'asc'),
+    limit(100)
   );
 
   return onSnapshot(q, (snapshot) => {

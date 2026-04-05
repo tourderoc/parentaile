@@ -19,6 +19,10 @@ export interface UpcomingGroupContextType {
   urgency: Urgency;
   /** Masquer la carte pour ce groupe (dismiss) */
   dismiss: () => void;
+  /** Tous les groupes chargés — partagé pour éviter les listeners dupliqués */
+  allGroupes: GroupeParole[];
+  /** True pendant le chargement initial */
+  groupesLoading: boolean;
 }
 
 // ============================================
@@ -30,6 +34,8 @@ const UpcomingGroupContext = createContext<UpcomingGroupContextType>({
   minutesLeft: 0,
   urgency: 'none',
   dismiss: () => {},
+  allGroupes: [],
+  groupesLoading: true,
 });
 
 export const useUpcomingGroup = () => useContext(UpcomingGroupContext);
@@ -96,6 +102,7 @@ function findUpcomingGroup(groupes: GroupeParole[], uid: string): { group: Group
 export const UpcomingGroupProvider = ({ children }: { children: React.ReactNode }) => {
   const [uid, setUid] = useState<string | null>(null);
   const [groupes, setGroupes] = useState<GroupeParole[]>([]);
+  const [groupesLoading, setGroupesLoading] = useState(true);
   const [upcomingGroup, setUpcomingGroup] = useState<GroupeParole | null>(null);
   const [minutesLeft, setMinutesLeft] = useState(0);
   const [urgency, setUrgency] = useState<Urgency>('none');
@@ -117,7 +124,10 @@ export const UpcomingGroupProvider = ({ children }: { children: React.ReactNode 
       setGroupes([]);
       return;
     }
-    const unsub = onGroupesParole((g) => setGroupes(g));
+    const unsub = onGroupesParole((g) => {
+      setGroupes(g);
+      setGroupesLoading(false);
+    });
     return unsub;
   }, [uid]);
 
@@ -155,7 +165,7 @@ export const UpcomingGroupProvider = ({ children }: { children: React.ReactNode 
   };
 
   return (
-    <UpcomingGroupContext.Provider value={{ upcomingGroup, minutesLeft, urgency, dismiss }}>
+    <UpcomingGroupContext.Provider value={{ upcomingGroup, minutesLeft, urgency, dismiss, allGroupes: groupes, groupesLoading }}>
       {children}
     </UpcomingGroupContext.Provider>
   );

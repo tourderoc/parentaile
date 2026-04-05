@@ -13,7 +13,8 @@ import {
 } from 'firebase/firestore';
 import { Bell, Users, ChevronRight, LayoutGrid, Loader2, Heart, X, Star } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { onUserProgression, onPendingEvaluations, dismissEvaluation, onGroupesParole, isParticipantBanned } from '../../../lib/groupeParoleService';
+import { onUserProgression, onPendingEvaluations, dismissEvaluation, isParticipantBanned } from '../../../lib/groupeParoleService';
+import { useUpcomingGroup } from '../../../lib/upcomingGroupContext';
 import { AuthWall } from '../../../components/ui/AuthWall';
 import type { GroupeParole, EvaluationPendante, UserProgression } from '../../../types/groupeParole';
 import { getNextBadge, BADGE_THRESHOLDS, THEME_COLORS, THEME_LABELS } from '../../../types/groupeParole';
@@ -69,6 +70,7 @@ const SquareCard = ({ icon: Icon, label, description, count, bgImage, onClick, c
 
 export const SlideMonEspace = ({ unreadParentCount = 0 }: { unreadParentCount?: number }) => {
   const navigate = useNavigate();
+  const { allGroupes } = useUpcomingGroup();
   const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(auth.currentUser);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [unreadDoctorCount, setUnreadDoctorCount] = useState(0);
@@ -124,27 +126,20 @@ export const SlideMonEspace = ({ unreadParentCount = 0 }: { unreadParentCount?: 
     return () => unsubscribes.forEach((u) => u());
   }, [currentUser]);
 
-  // My groups count
+  // My groups count — dérivé du contexte global, pas de listener dédié
   useEffect(() => {
     if (!currentUser) {
       setMyGroupsCount(0);
       setIsLoading(false);
       return;
     }
-
-    const unsub = onGroupesParole((groupes: GroupeParole[]) => {
-      const uid = currentUser.uid;
-      const mine = groupes.filter(
-        (g) =>
-          g.createurUid === uid ||
-          g.participants.some((p) => p.uid === uid)
-      );
-      setMyGroupsCount(mine.length);
-      setIsLoading(false);
-    });
-
-    return () => unsub();
-  }, [currentUser]);
+    const uid = currentUser.uid;
+    const mine = allGroupes.filter(
+      (g) => g.createurUid === uid || g.participants.some((p) => p.uid === uid)
+    );
+    setMyGroupsCount(mine.length);
+    setIsLoading(false);
+  }, [currentUser, allGroupes]);
 
   // User progression (points & badges)
   useEffect(() => {

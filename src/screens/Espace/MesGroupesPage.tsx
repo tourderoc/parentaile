@@ -4,7 +4,8 @@ import { ArrowLeft, Users, Mic, Clock, Crown, Calendar, Inbox, Radio, Lock, Hear
 import { motion, AnimatePresence } from 'framer-motion';
 import { auth } from '../../lib/firebase';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
-import { onGroupesParole, onGroupeRating } from '../../lib/groupeParoleService';
+import { onGroupeRating } from '../../lib/groupeParoleService';
+import { useUpcomingGroup } from '../../lib/upcomingGroupContext';
 import type { GroupeParole } from '../../types/groupeParole';
 import { THEME_COLORS, THEME_SHORT_LABELS } from '../../types/groupeParole';
 
@@ -264,31 +265,14 @@ const Section: React.FC<{
 export const MesGroupesPage = () => {
   const navigate = useNavigate();
   const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(auth.currentUser);
-  const [allGroupes, setAllGroupes] = useState<GroupeParole[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const { allGroupes, groupesLoading: isLoading } = useUpcomingGroup();
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (user) => {
       setCurrentUser(user);
-      if (!user) setIsLoading(false);
     });
     return () => unsub();
   }, []);
-
-  useEffect(() => {
-    if (!currentUser) {
-      setAllGroupes([]);
-      setIsLoading(false);
-      return;
-    }
-
-    const unsub = onGroupesParole((groupes: GroupeParole[]) => {
-      setAllGroupes(groupes);
-      setIsLoading(false);
-    });
-
-    return () => unsub();
-  }, [currentUser]);
 
   const uid = currentUser?.uid || '';
   const now = new Date();

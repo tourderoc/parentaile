@@ -6,7 +6,8 @@ import { Users, Mic, Clock, Plus, MessageCircle, Filter, Loader2, Heart, Setting
 import { Swiper, SwiperSlide } from 'swiper/react';
 import 'swiper/css';
 import { auth } from '../../../lib/firebase';
-import { onGroupesParole, onGroupeRating, onPresenceCount } from '../../../lib/groupeParoleService';
+import { onGroupeRating, onPresenceCount } from '../../../lib/groupeParoleService';
+import { useUpcomingGroup } from '../../../lib/upcomingGroupContext';
 import type { GroupeParole, ThemeGroupe } from '../../../types/groupeParole';
 import { THEME_LABELS, THEME_COLORS, THEME_SHORT_LABELS } from '../../../types/groupeParole';
 import { CreateGroupeParole } from './CreateGroupeParole';
@@ -275,8 +276,7 @@ export const SlideForum = () => {
   const [filterDate, setFilterDate] = useState<'aujourdhui' | 'demain' | '3jours' | 'toutes'>('toutes');
   const [filterCreator, setFilterCreator] = useState('');
   const [filterSort, setFilterSort] = useState<'recents' | 'actifs'>('recents');
-  const [groupes, setGroupes] = useState<GroupeParole[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { allGroupes: groupes, groupesLoading: loading } = useUpcomingGroup();
 
   // Ouvrir la création avec prefill si on arrive via navigate state (reprogrammer)
   useEffect(() => {
@@ -288,14 +288,6 @@ export const SlideForum = () => {
       window.history.replaceState({}, '', location.pathname);
     }
   }, [location.state]);
-
-  useEffect(() => {
-    const unsubscribe = onGroupesParole((data) => {
-      setGroupes(data);
-      setLoading(false);
-    });
-    return () => unsubscribe();
-  }, []);
 
   const groupesFiltres = useMemo(() => {
     let result = [...groupes];
