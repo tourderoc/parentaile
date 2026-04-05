@@ -2,8 +2,8 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Bell, Stethoscope, CheckCheck, Trash2, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { auth, db } from '../../lib/firebase';
-import { collection, query, where, orderBy, getDocs, onSnapshot } from 'firebase/firestore';
+import { auth } from '../../lib/firebase';
+import { useUser } from '../../lib/userContext';
 import { onParentNotifications, markParentNotifAsRead, markAllParentNotifsAsRead, deleteParentNotification, deleteAllParentNotifs, NOTIF_CONFIG } from '../../lib/parentNotificationService';
 import type { ParentNotification } from '../../lib/parentNotificationService';
 import { MessageHistory } from './MessageHistory';
@@ -12,28 +12,10 @@ type Tab = 'all' | 'groups' | 'medecin';
 
 export const MesMessagesPage = () => {
   const navigate = useNavigate();
+  const { currentUser: user, tokenIds, loading } = useUser();
   const [tab, setTab] = useState<Tab>('all');
   const [parentNotifs, setParentNotifs] = useState<ParentNotification[]>([]);
-  const [hasToken, setHasToken] = useState(false);
-  const [loading, setLoading] = useState(true);
-
-  const user = auth.currentUser;
-
-  // Check si l'utilisateur a un token (enfant lié)
-  useEffect(() => {
-    if (!user) { setLoading(false); return; }
-    const checkToken = async () => {
-      try {
-        const childrenRef = collection(db, 'accounts', user.uid, 'children');
-        const snap = await getDocs(query(childrenRef, orderBy('addedAt', 'desc')));
-        setHasToken(snap.docs.length > 0);
-      } catch {
-        setHasToken(false);
-      }
-      setLoading(false);
-    };
-    checkToken();
-  }, [user]);
+  const hasToken = tokenIds.length > 0;
 
   // Écouter les notifications parentales
   useEffect(() => {

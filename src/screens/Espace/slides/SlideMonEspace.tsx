@@ -2,19 +2,17 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { auth, db } from '../../../lib/firebase';
-import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import {
   collection,
   query,
   where,
-  orderBy,
-  getDocs,
   onSnapshot,
 } from 'firebase/firestore';
 import { Bell, Users, ChevronRight, LayoutGrid, Loader2, Heart, X, Star } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { onUserProgression, onPendingEvaluations, dismissEvaluation, isParticipantBanned } from '../../../lib/groupeParoleService';
 import { useUpcomingGroup } from '../../../lib/upcomingGroupContext';
+import { useUser } from '../../../lib/userContext';
 import { AuthWall } from '../../../components/ui/AuthWall';
 import type { GroupeParole, EvaluationPendante, UserProgression } from '../../../types/groupeParole';
 import { getNextBadge, BADGE_THRESHOLDS, THEME_COLORS, THEME_LABELS } from '../../../types/groupeParole';
@@ -71,7 +69,7 @@ const SquareCard = ({ icon: Icon, label, description, count, bgImage, onClick, c
 export const SlideMonEspace = ({ unreadParentCount = 0 }: { unreadParentCount?: number }) => {
   const navigate = useNavigate();
   const { allGroupes } = useUpcomingGroup();
-  const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(auth.currentUser);
+  const { currentUser, tokenIds } = useUser();
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [unreadDoctorCount, setUnreadDoctorCount] = useState(0);
   const unreadCount = unreadDoctorCount + unreadParentCount;
@@ -82,49 +80,25 @@ export const SlideMonEspace = ({ unreadParentCount = 0 }: { unreadParentCount?: 
   const [isLoading, setIsLoading] = useState(true);
   const [showEvalsModal, setShowEvalsModal] = useState(false);
 
-  // Auth listener
+  // Unread doctor notifications count (via token) — tokenIds from UserContext
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (user) => {
-      setCurrentUser(user);
-      if (!user) setIsLoading(false);
-    });
-    return () => unsub();
-  }, []);
-
-  // Unread doctor notifications count (via token)
-  useEffect(() => {
-    if (!currentUser) {
+    if (!currentUser || tokenIds.length === 0) {
       setUnreadDoctorCount(0);
       return;
     }
 
-    let unsubscribes: (() => void)[] = [];
+    const unsubscribes: (() => void)[] = [];
+    const chunks: string[][] = [];
+    for (let i = 0; i < tokenIds.length; i += 10) chunks.push(tokenIds.slice(i, i + 10));
 
-    const setup = async () => {
-      try {
-        const childrenRef = collection(db, 'accounts', currentUser.uid, 'children');
-        const childrenSnap = await getDocs(query(childrenRef, orderBy('addedAt', 'desc')));
-        const tokenIds = childrenSnap.docs.map((d) => d.id);
+    for (const chunk of chunks) {
+      const q = query(collection(db, 'notifications'), where('tokenId', 'in', chunk), where('read', '==', false));
+      const unsub = onSnapshot(q, (snapshot) => setUnreadDoctorCount(snapshot.docs.length), () => {});
+      unsubscribes.push(unsub);
+    }
 
-        if (tokenIds.length === 0) return;
-
-        const chunks: string[][] = [];
-        for (let i = 0; i < tokenIds.length; i += 10) {
-          chunks.push(tokenIds.slice(i, i + 10));
-        }
-
-        for (const chunk of chunks) {
-          const notifRef = collection(db, 'notifications');
-          const q = query(notifRef, where('tokenId', 'in', chunk), where('read', '==', false));
-          const unsub = onSnapshot(q, (snapshot) => setUnreadDoctorCount(snapshot.docs.length), () => {});
-          unsubscribes.push(unsub);
-        }
-      } catch {}
-    };
-
-    setup();
     return () => unsubscribes.forEach((u) => u());
-  }, [currentUser]);
+  }, [currentUser, tokenIds]);
 
   // My groups count — dérivé du contexte global, pas de listener dédié
   useEffect(() => {

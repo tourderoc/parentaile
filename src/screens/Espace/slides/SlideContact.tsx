@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import { MessageComposer } from '../MessageComposer';
 import { AuthWall } from '../../../components/ui/AuthWall';
+import { useUser } from '../../../lib/userContext';
 
 interface Child {
   tokenId: string;
@@ -39,10 +40,16 @@ interface Child {
 
 export const SlideContact = () => {
   const navigate = useNavigate();
+  const { currentUser: user, children: contextChildren, loading: contextLoading, reloadChildren } = useUser();
 
-  // Children state
+  // Children state — initialisé depuis le contexte, recharge après mutation
   const [children, setChildren] = useState<Child[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    setChildren(contextChildren);
+    setIsLoading(contextLoading);
+  }, [contextChildren, contextLoading]);
   const [editingChild, setEditingChild] = useState<string | null>(null);
   const [editNickname, setEditNickname] = useState('');
   const [showAddChild, setShowAddChild] = useState(false);
@@ -56,39 +63,9 @@ export const SlideContact = () => {
   // View toggle: 'compose' (default) or 'manage'
   const [view, setView] = useState<'compose' | 'manage'>('compose');
 
-  const loadChildren = async () => {
-    const user = auth.currentUser;
-    if (!user) {
-      setIsLoading(false);
-      return;
-    }
-
-    try {
-      const childrenRef = collection(db, 'accounts', user.uid, 'children');
-      const q = query(childrenRef, orderBy('addedAt', 'desc'));
-      const snapshot = await getDocs(q);
-
-      const childrenData: Child[] = snapshot.docs.map(d => ({
-        tokenId: d.id,
-        nickname: d.data().nickname,
-        addedAt: d.data().addedAt?.toDate?.() || new Date()
-      }));
-
-      setChildren(childrenData);
-    } catch (err) {
-      console.error('Erreur chargement enfants:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadChildren();
-  }, [navigate]);
 
   const handleSaveNickname = async (tokenId: string) => {
     if (!editNickname.trim()) return;
-    const user = auth.currentUser;
     if (!user) return;
 
     try {
@@ -107,7 +84,6 @@ export const SlideContact = () => {
   };
 
   const handleDeleteChild = async (tokenId: string) => {
-    const user = auth.currentUser;
     if (!user) return;
 
     try {
@@ -145,7 +121,6 @@ export const SlideContact = () => {
         return;
       }
 
-      const user = auth.currentUser;
       if (!user) throw new Error('Non connecte');
 
       const childRef = doc(db, 'accounts', user.uid, 'children', newToken.trim());
@@ -154,7 +129,7 @@ export const SlideContact = () => {
         addedAt: serverTimestamp()
       });
 
-      await loadChildren();
+      await reloadChildren();
 
       setShowAddChild(false);
       setAddMode('choice');
@@ -177,7 +152,7 @@ export const SlideContact = () => {
   }
 
   // ========== NOT AUTHENTICATED: Show auth prompt ==========
-  if (!auth.currentUser) {
+  if (!user) {
     return (
       <AuthWall 
         title="Espace Privé" 

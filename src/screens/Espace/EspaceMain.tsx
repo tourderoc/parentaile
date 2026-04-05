@@ -14,6 +14,7 @@ import { BottomNavSwiper } from '../../components/ui/BottomNavSwiper';
 import { SwiperModeContext } from '../../lib/swiperContext';
 import { UpcomingGroupProvider } from '../../lib/upcomingGroupContext';
 import { UpcomingGroupCard } from '../../components/ui/UpcomingGroupCard';
+import { UserProvider } from '../../lib/userContext';
 
 const sectionToSlide: Record<string, number> = {
   'dashboard': 0,
@@ -96,6 +97,7 @@ export const EspaceMain = () => {
   }, []);
 
   return (
+    <UserProvider>
     <UpcomingGroupProvider>
     <SwiperModeContext.Provider value={{ isSwiperMode: true, navigateToSlide: handleNavigate }}>
       <div className="h-screen flex flex-col bg-[#FFFBF0]">
@@ -144,6 +146,7 @@ export const EspaceMain = () => {
       </div>
     </SwiperModeContext.Provider>
     </UpcomingGroupProvider>
+    </UserProvider>
   );
 };
 

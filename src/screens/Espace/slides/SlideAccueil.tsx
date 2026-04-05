@@ -1,8 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { auth, db } from '../../../lib/firebase';
-import { signOut, onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
-import { collection, getDocs, query, orderBy, doc, getDoc, onSnapshot } from 'firebase/firestore';
+import { auth } from '../../../lib/firebase';
+import { signOut } from 'firebase/auth';
 import { LogOut, Loader2, MessageSquarePlus, LayoutGrid, Users, Settings, ShieldCheck } from 'lucide-react';
 import { UserAvatar } from '../../../components/ui/UserAvatar';
 import type { AvatarConfig } from '../../../lib/avatarTypes';
@@ -11,6 +10,7 @@ import { Swiper, SwiperSlide } from 'swiper/react';
 import 'swiper/css';
 import { DoctorNotifications } from '../../../components/ui/DoctorNotifications';
 import { useSwiperMode } from '../../../lib/swiperContext';
+import { useUser } from '../../../lib/userContext';
 import { initializePushNotifications, clearAppBadge, onForegroundNotification } from '../../../lib/pushNotifications';
 import { markAllAsReadForTokens } from '../../../lib/doctorNotifications';
 
@@ -49,65 +49,7 @@ const getSectionCards = (hasChildren: boolean) => [
 export const SlideAccueil = () => {
   const navigate = useNavigate();
   const { navigateToSlide } = useSwiperMode();
-  const [tokenIds, setTokenIds] = useState<string[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [pseudo, setPseudo] = useState<string>('');
-  const [avatarConfig, setAvatarConfig] = useState<AvatarConfig | null>(null);
-  const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(auth.currentUser);
-
-  // Listen to account changes (avatar, pseudo) in real-time
-  useEffect(() => {
-    let unsubAccount: (() => void) | null = null;
-
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setCurrentUser(user);
-      if (unsubAccount) { unsubAccount(); unsubAccount = null; }
-      if (!user) {
-        setIsLoading(false);
-        setTokenIds([]);
-        setPseudo('');
-        setAvatarConfig(null);
-      } else {
-        // Real-time listener for pseudo + avatar
-        const accountRef = doc(db, 'accounts', user.uid);
-        unsubAccount = onSnapshot(accountRef, (snap) => {
-          if (snap.exists()) {
-            setPseudo(snap.data().pseudo || '');
-            if (snap.data().avatar) {
-              setAvatarConfig(snap.data().avatar);
-            }
-          }
-        });
-        loadData(user);
-      }
-    });
-    return () => {
-      unsubscribe();
-      if (unsubAccount) unsubAccount();
-    };
-  }, []);
-
-  const loadData = async (user: FirebaseUser) => {
-    try {
-      const accountRef = doc(db, 'accounts', user.uid);
-      const accountSnap = await getDoc(accountRef);
-      if (accountSnap.exists()) {
-        setPseudo(accountSnap.data().pseudo || '');
-        if (accountSnap.data().avatar) {
-          setAvatarConfig(accountSnap.data().avatar);
-        }
-      }
-
-      const childrenRef = collection(db, 'accounts', user.uid, 'children');
-      const q = query(childrenRef, orderBy('addedAt', 'desc'));
-      const snapshot = await getDocs(q);
-      setTokenIds(snapshot.docs.map(d => d.id));
-    } catch (error) {
-      console.error('Erreur chargement données:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const { currentUser, pseudo, avatarConfig, tokenIds, loading: isLoading } = useUser();
 
   // Push notifications + badge
   useEffect(() => {

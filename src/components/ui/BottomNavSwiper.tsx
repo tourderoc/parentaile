@@ -2,9 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Home, MessageSquarePlus, LayoutGrid, Users, Settings } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { auth, db } from '../../lib/firebase';
-import { onAuthStateChanged, User } from 'firebase/auth';
-import { collection, query, where, orderBy, getDocs, onSnapshot } from 'firebase/firestore';
+import { db } from '../../lib/firebase';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { useUser } from '../../lib/userContext';
 
 interface BottomNavSwiperProps {
   activeIndex: number;
@@ -15,55 +15,25 @@ interface BottomNavSwiperProps {
 export const BottomNavSwiper: React.FC<BottomNavSwiperProps> = ({ activeIndex, onNavigate, unreadParentCount = 0 }) => {
   const [unreadDoctorCount, setUnreadDoctorCount] = useState(0);
   const unreadCount = unreadDoctorCount + unreadParentCount;
-  const [currentUser, setCurrentUser] = useState<User | null>(auth.currentUser);
+  const { currentUser, tokenIds } = useUser();
   const navigate = useNavigate();
 
+  // Notifications médecin — tokenIds depuis UserContext, pas de lecture /accounts/children
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setCurrentUser(user);
-    });
-    return () => unsubscribe();
-  }, []);
+    if (!currentUser || tokenIds.length === 0) return;
 
-  // Notifications médecin (via token)
-  useEffect(() => {
-    if (!currentUser) return;
+    const unsubscribes: (() => void)[] = [];
+    const chunks: string[][] = [];
+    for (let i = 0; i < tokenIds.length; i += 10) chunks.push(tokenIds.slice(i, i + 10));
 
-    let unsubscribes: (() => void)[] = [];
+    for (const chunk of chunks) {
+      const q = query(collection(db, 'notifications'), where('tokenId', 'in', chunk), where('read', '==', false));
+      const unsub = onSnapshot(q, (snapshot) => setUnreadDoctorCount(snapshot.docs.length), () => {});
+      unsubscribes.push(unsub);
+    }
 
-    const setupListeners = async () => {
-      try {
-        const childrenRef = collection(db, 'accounts', currentUser.uid, 'children');
-        const childrenSnap = await getDocs(query(childrenRef, orderBy('addedAt', 'desc')));
-        const tokenIds = childrenSnap.docs.map(d => d.id);
-
-        if (tokenIds.length === 0) return;
-
-        const chunks: string[][] = [];
-        for (let i = 0; i < tokenIds.length; i += 10) {
-          chunks.push(tokenIds.slice(i, i + 10));
-        }
-
-        for (const chunk of chunks) {
-          const notifRef = collection(db, 'notifications');
-          const q = query(
-            notifRef,
-            where('tokenId', 'in', chunk),
-            where('read', '==', false)
-          );
-
-          const unsub = onSnapshot(q, (snapshot) => {
-            setUnreadDoctorCount(snapshot.docs.length);
-          }, () => {});
-
-          unsubscribes.push(unsub);
-        }
-      } catch {}
-    };
-
-    setupListeners();
     return () => unsubscribes.forEach(unsub => unsub());
-  }, [currentUser]);
+  }, [currentUser, tokenIds]);
 
   const navItems = [
     { id: 'accueil', label: 'Accueil', icon: Home },
