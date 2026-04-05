@@ -410,11 +410,14 @@ export const getLiveKitToken = functions.https.onCall(async (data, context) => {
     );
   }
 
-  // Récupérer le pseudo
-  const accountSnap = await db.collection('accounts').doc(uid).get();
-  const pseudo = accountSnap.exists
-    ? accountSnap.data()?.pseudo || 'Parent'
-    : 'Parent';
+  // Récupérer le pseudo (priorité au pseudo de session passé en paramètre)
+  let pseudo = data.pseudo;
+  if (!pseudo || typeof pseudo !== 'string') {
+    const accountSnap = await db.collection('accounts').doc(uid).get();
+    pseudo = accountSnap.exists
+      ? accountSnap.data()?.pseudo || 'Parent'
+      : 'Parent';
+  }
 
   // Vérifier si le participant est banni (défense en profondeur)
   const exitSnap = await db.collection('groupes').doc(groupeId)

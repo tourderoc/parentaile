@@ -14,11 +14,15 @@ interface LiveKitTokenResponse {
  * Vérifie côté serveur : auth, inscription, fenêtre temporelle.
  * Pour les groupes test, passe le mot de passe optionnel.
  */
-export async function getLiveKitToken(groupeId: string, password?: string): Promise<LiveKitTokenResponse> {
-  const callable = httpsCallable<{ groupeId: string; password?: string }, LiveKitTokenResponse>(
+export async function getLiveKitToken(groupeId: string, pseudo?: string, password?: string): Promise<LiveKitTokenResponse> {
+  const callable = httpsCallable<{ groupeId: string; pseudo?: string; password?: string }, LiveKitTokenResponse>(
     functions,
     'getLiveKitToken'
   );
-  const result = await callable({ groupeId, ...(password ? { password } : {}) });
+  const result = await callable({ 
+    groupeId, 
+    ...(pseudo ? { pseudo } : {}),
+    ...(password ? { password } : {}) 
+  });
   return result.data;
 }

@@ -493,7 +493,7 @@ const CircleParticipant: React.FC<{
         <p className={`text-[11px] font-bold max-w-[80px] truncate transition-colors duration-700 ${
           lightMode ? 'text-gray-800' : 'text-white/90'
         }`}>
-          {isLocal ? 'Vous' : isAnimateur ? 'Anim' : name}
+          {isLocal ? `Vous (${name})` : isAnimateur ? `Anim (${name})` : name}
         </p>
         {!isSpeaking && badge !== 'none' ? (
           <p className="text-[8px] font-bold" style={{ color: BADGE_RING_COLORS[badge] }}>
@@ -1505,7 +1505,7 @@ const RoomContent: React.FC<{
     const chatMsg: VocalChatMessage = {
       id: `${Date.now()}-${user.uid}`,
       auteurUid: user.uid,
-      auteurPseudo: user.displayName || 'Anonyme',
+      auteurPseudo: sessionPrenom || user.displayName || 'Anonyme',
       contenu: text,
       timestamp: Date.now(),
     };
@@ -3307,7 +3307,7 @@ export const SalleVocalePage = () => {
 
   // Connect to LiveKit
   const connectToRoom = async (password?: string) => {
-    const result = await getLiveKitToken(groupeId!, password);
+    const result = await getLiveKitToken(groupeId!, sessionPrenom, password);
     setToken(result.token);
     setWsUrl(result.wsUrl);
   };
