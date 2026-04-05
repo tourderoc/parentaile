@@ -352,7 +352,10 @@ export const SlideMonEspace = ({ unreadParentCount = 0 }: { unreadParentCount?: 
                     <div className="space-y-3">
                       {progression.history
                         .slice()
-                        .sort((a, b) => b.date.getTime() - a.date.getTime())
+                        .sort((a, b) => {
+                          const getMs = (d: any) => d?.toDate ? d.toDate().getTime() : new Date(d).getTime();
+                          return getMs(b.date) - getMs(a.date);
+                        })
                         .slice(0, 5)
                         .map((entry, i) => (
                           <div key={i} className="flex items-center justify-between border-b border-gray-100 pb-3">
