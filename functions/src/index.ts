@@ -448,11 +448,12 @@ export const getLiveKitToken = functions.https.onCall(async (data, context) => {
 
   const roomName = `parentaile-${groupeId}`;
 
+  const mood = data.mood || null;
   const token = new AccessToken(apiKey, apiSecret, {
     identity: uid,
     name: pseudo,
     ttl: '1h',
-    metadata: JSON.stringify({ isAnimateur, groupeId, avatar }),
+    metadata: JSON.stringify({ isAnimateur, groupeId, avatar, mood }),
   });
 
   token.addGrant({

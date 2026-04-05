@@ -353,8 +353,24 @@ const CircleParticipant: React.FC<{
   avatarUrl?: string;
   onTap?: () => void;
   badge?: BadgeLevel;
+  avatarConfig?: AvatarConfig | null;
+  mood?: string | null;
   lightMode?: boolean;
-}> = ({ name, isSpeaking, isMuted, isAnimateur, isLocal, hasHandRaised, warningCount = 0, showWarningBadge = false, angle, radius, color, avatarConfig, onTap, badge = 'none', lightMode }) => {
+}> = ({ name, isSpeaking, isMuted, isAnimateur, isLocal, hasHandRaised, warningCount = 0, showWarningBadge = false, angle, radius, color, avatarConfig, mood: initialMood, onTap, badge = 'none', lightMode }) => {
+  const [mood, setMood] = useState<string | null>(initialMood || null);
+
+  // Hide mood after 60 seconds
+  useEffect(() => {
+    if (initialMood) {
+      setMood(initialMood);
+      const timer = setTimeout(() => {
+        setMood(null);
+      }, 60000);
+      return () => clearTimeout(timer);
+    } else {
+      setMood(null);
+    }
+  }, [initialMood]);
   const x = Math.cos(angle) * radius;
   const y = Math.sin(angle) * radius;
 
@@ -369,6 +385,26 @@ const CircleParticipant: React.FC<{
         top: `calc(50% + ${y}px - 36px)`,
       }}
     >
+      {/* Mood Bubble (Top left) - Persistent for 60s handled by parent */}
+      <AnimatePresence>
+        {mood && (
+          <motion.div
+            initial={{ scale: 0, opacity: 0, y: 10 }}
+            animate={{ scale: 1, opacity: 1, y: 0 }}
+            exit={{ scale: 0, opacity: 0, y: -10 }}
+            className="absolute -top-10 -left-2 w-10 h-10 bg-white rounded-2xl shadow-xl flex items-center justify-center text-xl z-20 border-2 border-orange-100"
+            style={{ 
+              boxShadow: '0 8px 16px rgba(0,0,0,0.15)',
+              transformOrigin: 'bottom center'
+            }}
+          >
+            {mood}
+            {/* Small tail */}
+            <div className="absolute -bottom-1 left-4 w-2 h-2 bg-white rotate-45 border-r border-b border-orange-100" />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Speech Bubble (Minimalist pill) */}
       <AnimatePresence>
         {isSpeaking && (
@@ -1760,10 +1796,12 @@ const RoomContent: React.FC<{
             const color = AVATAR_COLORS[index % AVATAR_COLORS.length];
 
             let avatarConfig: AvatarConfig | null = null;
+            let mood: string | null = null;
             try {
               if (p.metadata) {
                 const meta = JSON.parse(p.metadata);
                 avatarConfig = meta.avatar || null;
+                mood = meta.mood || null;
               }
             } catch (e) {
               console.error('Error parsing participant metadata:', e);
@@ -1786,6 +1824,7 @@ const RoomContent: React.FC<{
                 color={color}
                 badge={participantBadges[p.identity] || 'none'}
                 avatarConfig={avatarConfig}
+                mood={mood}
                 lightMode={lightMode}
                 onTap={isEffectiveAnimateur && !isLocal ? () => setModTarget({
                   identity: p.identity,
@@ -2145,7 +2184,7 @@ const RoomContent: React.FC<{
 };
 
 // ========== Mic Test with Audio Level ==========
-const MicTest: React.FC = () => {
+const MicTest: React.FC<{ lightMode?: boolean }> = ({ lightMode }) => {
   const [micOk, setMicOk] = useState(false);
   const [checking, setChecking] = useState(true);
   const [micError, setMicError] = useState(false);
@@ -2210,13 +2249,15 @@ const MicTest: React.FC = () => {
   const bars = 8;
 
   return (
-    <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4">
+    <div className={`backdrop-blur-md rounded-2xl p-4 transition-all duration-700 ${
+      lightMode ? 'bg-black/[0.06] border border-black/5 shadow-sm' : 'bg-white/10'
+    }`}>
       <div className="flex items-center gap-3">
         <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${
-          checking ? 'bg-white/10' : micOk ? (soundDetected ? 'bg-emerald-500/20' : 'bg-amber-500/20') : 'bg-red-500/20'
+          checking ? (lightMode ? 'bg-black/5' : 'bg-white/10') : micOk ? (soundDetected ? 'bg-emerald-500/20' : 'bg-amber-500/20') : 'bg-red-500/20'
         }`}>
           {checking ? (
-            <Loader2 size={18} className="text-white/40 animate-spin" />
+            <Loader2 size={18} className={`${lightMode ? 'text-gray-400' : 'text-white/40'} animate-spin`} />
           ) : micOk ? (
             soundDetected ? (
               <CheckCircle2 size={18} className="text-emerald-400" />
@@ -2229,7 +2270,7 @@ const MicTest: React.FC = () => {
         </div>
         <div className="flex-1 min-w-0">
           <p className={`text-sm font-bold ${
-            checking ? 'text-white/40' : micOk ? (soundDetected ? 'text-emerald-400' : 'text-white') : 'text-red-400'
+            checking ? (lightMode ? 'text-gray-400' : 'text-white/40') : micOk ? (soundDetected ? 'text-emerald-400' : lightMode ? 'text-gray-800' : 'text-white') : 'text-red-400'
           }`}>
             {checking
               ? 'Verification du micro...'
@@ -2240,7 +2281,7 @@ const MicTest: React.FC = () => {
               : 'Parlez pour tester...'}
           </p>
           {micError && (
-            <p className="text-[11px] text-red-300/60 font-medium">Autorisez l'acces au micro</p>
+            <p className="text-[11px] text-red-400 font-medium opacity-80">Autorisez l'acces au micro</p>
           )}
 
           {/* Audio level bar */}
@@ -2254,7 +2295,7 @@ const MicTest: React.FC = () => {
                   <div
                     key={i}
                     className={`h-3 flex-1 rounded-sm transition-all duration-75 ${
-                      active ? color : 'bg-white/10'
+                      active ? color : (lightMode ? 'bg-black/10' : 'bg-white/10')
                     }`}
                   />
                 );
@@ -2282,9 +2323,11 @@ const WaitingRoom: React.FC<{
   onEnter: () => void;
   onBack: () => void;
   onCancelled?: () => void;
+  selectedMood?: string | null;
+  onMoodChange?: (mood: string) => void;
   lightMode?: boolean;
   onToggleLight?: () => void;
-}> = ({ groupeId, groupeTitre, groupeTheme, dateVocal, participants, createurUid, structureType, structure, sessionPrenom, isAnimateur, onEnter, onBack, onCancelled, lightMode, onToggleLight }) => {
+}> = ({ groupeId, groupeTitre, groupeTheme, dateVocal, participants, createurUid, structureType, structure, sessionPrenom, isAnimateur, onEnter, onBack, onCancelled, selectedMood, onMoodChange, lightMode, onToggleLight }) => {
   const currentUser = auth.currentUser;
   const [countdown, setCountdown] = useState('');
   const [sessionStarted, setSessionStarted] = useState(false);
@@ -2419,19 +2462,19 @@ const WaitingRoom: React.FC<{
               <Users size={18} className="text-blue-400" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-bold text-white">
+              <p className={`text-sm font-bold transition-colors duration-700 ${lightMode ? 'text-gray-800' : 'text-white'}`}>
                 {participants.length} participant{participants.length > 1 ? 's' : ''} inscrit{participants.length > 1 ? 's' : ''}
               </p>
-              <p className="text-[11px] text-white/40 font-medium truncate">
+              <p className={`text-[11px] font-medium transition-colors duration-700 truncate ${lightMode ? 'text-gray-500' : 'text-white/40'}`}>
                 Inscrits de la premiere heure et arrivants
               </p>
             </div>
           </div>
           
-          <div className="w-full h-px bg-white/5 my-3" />
+          <div className={`w-full h-px my-3 transition-colors duration-700 ${lightMode ? 'bg-black/5' : 'bg-white/5'}`} />
 
           {/* Inscrits au groupe */}
-          <p className="text-[10px] uppercase tracking-wider font-extrabold text-white/30 mb-2 px-1">
+          <p className={`text-[10px] uppercase tracking-wider font-extrabold mb-2 px-1 transition-colors duration-700 ${lightMode ? 'text-gray-400' : 'text-white/30'}`}>
             Inscrits :
           </p>
           <div className="flex flex-wrap gap-2 mb-3">
@@ -2446,10 +2489,10 @@ const WaitingRoom: React.FC<{
               return (
                 <div
                   key={p.uid}
-                  className={`flex items-center gap-1.5 rounded-full pl-1 pr-3 py-1 border ${
-                    isMe ? 'bg-orange-500/15 border-orange-400/30' :
-                    isPresent ? 'bg-white/5 border-white/10' :
-                    'bg-white/[0.03] border-white/5'
+                  className={`flex items-center gap-1.5 rounded-full pl-1 pr-3 py-1 border transition-all duration-700 ${
+                    isMe ? (lightMode ? 'bg-orange-500/10 border-orange-400/20' : 'bg-orange-500/15 border-orange-400/30') :
+                    isPresent ? (lightMode ? 'bg-black/5 border-black/5' : 'bg-white/5 border-white/10') :
+                    (lightMode ? 'bg-black/[0.02] border-black/5' : 'bg-white/[0.03] border-white/5')
                   }`}
                 >
                   <div className="relative">
@@ -2463,10 +2506,10 @@ const WaitingRoom: React.FC<{
                       <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-400 border border-[#1a1f3a] shadow-[0_0_4px_rgba(52,211,153,0.6)]" />
                     )}
                   </div>
-                  <span className={`text-[11px] font-medium ${
-                    isMe ? 'text-orange-300' :
-                    isPresent ? 'text-white/80' :
-                    'text-white/30'
+                  <span className={`text-[11px] font-medium transition-colors duration-700 ${
+                    isMe ? (lightMode ? 'text-orange-600' : 'text-orange-300') :
+                    isPresent ? (lightMode ? 'text-gray-700' : 'text-white/80') :
+                    (lightMode ? 'text-gray-300' : 'text-white/30')
                   }`}>
                     {displayName}{isMe ? ' (vous)' : ''}
                   </span>
@@ -2480,14 +2523,20 @@ const WaitingRoom: React.FC<{
         <MicTest />
 
         {/* Animateur status */}
-        <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4 flex items-center gap-3">
+        <div className={`backdrop-blur-md rounded-2xl p-4 flex items-center gap-3 transition-all duration-700 ${
+          lightMode ? 'bg-black/[0.06] border border-black/5 shadow-sm' : 'bg-white/10'
+        }`}>
           <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${
-            animateurPresent || isAnimateur ? 'bg-amber-500/20' : 'bg-white/10'
+            animateurPresent || isAnimateur ? 'bg-amber-500/20' : (lightMode ? 'bg-black/5' : 'bg-white/10')
           }`}>
-            <Crown size={18} className={animateurPresent || isAnimateur ? 'text-amber-400' : 'text-white/30'} />
+            <Crown size={18} className={animateurPresent || isAnimateur ? 'text-amber-400' : (lightMode ? 'text-gray-400' : 'text-white/30')} />
           </div>
           <div className="flex-1">
-            <p className={`text-sm font-bold ${animateurPresent || isAnimateur ? 'text-white' : 'text-white/40'}`}>
+            <p className={`text-sm font-bold transition-colors duration-700 ${
+              animateurPresent || isAnimateur 
+                ? (lightMode ? 'text-gray-800' : 'text-white') 
+                : (lightMode ? 'text-gray-400' : 'text-white/40')
+            }`}>
               {isAnimateur
                 ? 'Vous etes l\'animateur'
                 : animateurPresent
@@ -2499,20 +2548,22 @@ const WaitingRoom: React.FC<{
 
         {/* Mini-briefing : structure de la session */}
         {structureType === 'structuree' && structure && structure.length > 0 && (
-          <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4">
-            <p className="text-xs font-bold text-white/60 uppercase tracking-wider mb-3">Programme</p>
+          <div className={`backdrop-blur-md rounded-2xl p-4 transition-all duration-700 ${
+            lightMode ? 'bg-black/[0.06] border border-black/5 shadow-sm' : 'bg-white/10'
+          }`}>
+            <p className={`text-xs font-bold uppercase tracking-wider mb-3 transition-colors duration-700 ${lightMode ? 'text-gray-500' : 'text-white/60'}`}>Programme</p>
             <div className="space-y-2">
               {structure.map((phase, i) => (
                 <div key={i} className="flex items-center gap-2">
                   <span className="w-5 h-5 rounded-full bg-orange-500/20 text-orange-400 text-[10px] font-bold flex items-center justify-center shrink-0">
                     {i + 1}
                   </span>
-                  <span className="text-sm text-white/80 font-medium flex-1">{phase.label}</span>
-                  <span className="text-xs text-white/40 font-medium">{phase.dureeMinutes} min</span>
+                  <span className={`text-sm font-medium flex-1 transition-colors duration-700 ${lightMode ? 'text-gray-700' : 'text-white/80'}`}>{phase.label}</span>
+                  <span className={`text-xs font-medium transition-colors duration-700 ${lightMode ? 'text-gray-400' : 'text-white/40'}`}>{phase.dureeMinutes} min</span>
                 </div>
               ))}
             </div>
-            <div className="mt-2 pt-2 border-t border-white/10 text-right">
+            <div className={`mt-2 pt-2 border-t text-right transition-colors duration-700 ${lightMode ? 'border-black/5' : 'border-white/10'}`}>
               <span className="text-xs text-orange-400 font-bold">
                 Total : {structure.reduce((s, p) => s + p.dureeMinutes, 0)} min
               </span>
@@ -2521,16 +2572,23 @@ const WaitingRoom: React.FC<{
         )}
 
         {/* Mood selector : humeur du jour */}
-        <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4">
-          <p className="text-xs font-bold text-white/60 uppercase tracking-wider mb-3">Votre humeur</p>
+        <div className={`backdrop-blur-md rounded-2xl p-4 transition-all duration-700 ${
+          lightMode ? 'bg-black/[0.06] border border-black/5 shadow-sm' : 'bg-white/10'
+        }`}>
+          <p className={`text-xs font-bold uppercase tracking-wider mb-3 transition-colors duration-700 ${lightMode ? 'text-gray-500' : 'text-white/60'}`}>Votre humeur</p>
           <div className="flex justify-center gap-3">
             {['😊', '😐', '😔', '💪', '🤗'].map((emoji) => (
               <button
                 key={emoji}
-                onClick={() => {
-                  // Mood selection in waiting room disabled (was using Firestore presence)
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onMoodChange?.(emoji);
                 }}
-                className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center text-xl hover:bg-white/20 active:scale-90 transition-all"
+                className={`w-10 h-10 rounded-xl flex items-center justify-center text-xl transition-all active:scale-95 ${
+                  selectedMood === emoji 
+                    ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/20' 
+                    : (lightMode ? 'bg-black/5 text-gray-400 hover:bg-black/10' : 'bg-white/10 text-white/70 hover:bg-white/20')
+                }`}
               >
                 {emoji}
               </button>
@@ -2541,7 +2599,7 @@ const WaitingRoom: React.FC<{
 
       <button
         onClick={onBack}
-        className="mt-6 text-xs font-bold text-white/30 hover:text-white/60 transition-colors"
+        className={`mt-6 text-xs font-bold transition-colors duration-700 ${lightMode ? 'text-gray-400 hover:text-gray-600' : 'text-white/30 hover:text-white/60'}`}
       >
         Retour
       </button>
@@ -3314,13 +3372,14 @@ export const SalleVocalePage = () => {
 
   // Session Data & Validation
   const [sessionPrenom, setSessionPrenom] = useState('');
+  const [selectedMood, setSelectedMood] = useState<string | null>(null);
   const [animateurNotes, setAnimateurNotes] = useState<AnimateurNotes | null>(null);
   // Dynamic role calculation
   const isAnimateur = auth.currentUser?.uid === (currentAnimateurUid || createurUid);
 
   // Connect to LiveKit
   const connectToRoom = async (password?: string) => {
-    const result = await getLiveKitToken(groupeId!, sessionPrenom, password);
+    const result = await getLiveKitToken(groupeId!, sessionPrenom, selectedMood || undefined, password);
     setToken(result.token);
     setWsUrl(result.wsUrl);
   };
@@ -3726,6 +3785,8 @@ export const SalleVocalePage = () => {
           sessionCancelledRef.current = true;
           setStep('cancelled');
         }}
+        selectedMood={selectedMood}
+        onMoodChange={setSelectedMood}
         lightMode={lightMode}
         onToggleLight={() => setLightMode(prev => !prev)}
       />
