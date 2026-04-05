@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { auth, db } from '../../lib/firebase';
-import { collection, getDocs, query, where, orderBy, deleteDoc, doc, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, orderBy, limit, deleteDoc, doc, onSnapshot } from 'firebase/firestore';
+import { useUser } from '../../lib/userContext';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -79,6 +80,7 @@ const formatShortDate = (date: Date) =>
  */
 export const MessageHistory = () => {
   const navigate = useNavigate();
+  const { children: contextChildren, tokenIds, loading: userLoading } = useUser();
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
@@ -87,29 +89,18 @@ export const MessageHistory = () => {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // Charger tous les messages de tous les enfants
+  // Charger les messages — tokenIds depuis UserContext, limit(50) par chunk
   useEffect(() => {
-    const user = auth.currentUser;
-    if (!user) { setIsLoading(false); return; }
+    if (userLoading) return;
+    if (tokenIds.length === 0) { setIsLoading(false); return; }
+
+    const childrenMap = new Map<string, string>();
+    contextChildren.forEach(c => childrenMap.set(c.tokenId, c.nickname || 'Enfant'));
 
     let unsubscribes: (() => void)[] = [];
 
-    const setup = async () => {
+    const setup = () => {
       try {
-        const childrenRef = collection(db, 'accounts', user.uid, 'children');
-        const childrenSnap = await getDocs(query(childrenRef, orderBy('addedAt', 'desc')));
-
-        if (childrenSnap.empty) {
-          setIsLoading(false);
-          return;
-        }
-
-        const childrenMap = new Map<string, string>();
-        childrenSnap.docs.forEach(d => {
-          childrenMap.set(d.id, d.data().nickname || 'Enfant');
-        });
-
-        const tokenIds = Array.from(childrenMap.keys());
 
         // Firestore 'in' queries limited to 10
         const chunks: string[][] = [];
@@ -121,7 +112,8 @@ export const MessageHistory = () => {
           const q = query(
             collection(db, 'messages'),
             where('tokenId', 'in', chunk),
-            orderBy('createdAt', 'desc')
+            orderBy('createdAt', 'desc'),
+            limit(50)
           );
 
           const unsub = onSnapshot(q, (snapshot) => {
@@ -163,7 +155,7 @@ export const MessageHistory = () => {
 
     setup();
     return () => unsubscribes.forEach(u => u());
-  }, []);
+  }, [tokenIds, userLoading, contextChildren]);
 
   // Clear badge
   useEffect(() => { clearAppBadge(); }, []);

@@ -10,11 +10,11 @@ import {
 } from 'firebase/firestore';
 import { Bell, Users, ChevronRight, LayoutGrid, Loader2, Heart, X, Star } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { onUserProgression, onPendingEvaluations, dismissEvaluation, isParticipantBanned } from '../../../lib/groupeParoleService';
+import { onPendingEvaluations, dismissEvaluation, isParticipantBanned } from '../../../lib/groupeParoleService';
 import { useUpcomingGroup } from '../../../lib/upcomingGroupContext';
 import { useUser } from '../../../lib/userContext';
 import { AuthWall } from '../../../components/ui/AuthWall';
-import type { GroupeParole, EvaluationPendante, UserProgression } from '../../../types/groupeParole';
+import type { GroupeParole, EvaluationPendante } from '../../../types/groupeParole';
 import { getNextBadge, BADGE_THRESHOLDS, THEME_COLORS, THEME_LABELS } from '../../../types/groupeParole';
 
 const SquareCard = ({ icon: Icon, label, description, count, bgImage, onClick, colorClasses, isBadge }: any) => (
@@ -69,14 +69,14 @@ const SquareCard = ({ icon: Icon, label, description, count, bgImage, onClick, c
 export const SlideMonEspace = ({ unreadParentCount = 0 }: { unreadParentCount?: number }) => {
   const navigate = useNavigate();
   const { allGroupes } = useUpcomingGroup();
-  const { currentUser, tokenIds } = useUser();
+  const { currentUser, tokenIds, points, badge, participationHistory } = useUser();
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [unreadDoctorCount, setUnreadDoctorCount] = useState(0);
   const unreadCount = unreadDoctorCount + unreadParentCount;
   const [myGroupsCount, setMyGroupsCount] = useState(0);
   const [pendingEvals, setPendingEvals] = useState<EvaluationPendante[]>([]);
   const [filteredPendingEvals, setFilteredPendingEvals] = useState<EvaluationPendante[]>([]);
-  const [progression, setProgression] = useState<UserProgression | null>(null);
+  const progression = currentUser ? { points, badge, history: participationHistory } : null;
   const [isLoading, setIsLoading] = useState(true);
   const [showEvalsModal, setShowEvalsModal] = useState(false);
 
@@ -115,17 +115,6 @@ export const SlideMonEspace = ({ unreadParentCount = 0 }: { unreadParentCount?: 
     setIsLoading(false);
   }, [currentUser, allGroupes]);
 
-  // User progression (points & badges)
-  useEffect(() => {
-    if (!currentUser) {
-      setProgression(null);
-      return;
-    }
-    const unsub = onUserProgression(currentUser.uid, (prog: any) => {
-      setProgression(prog);
-    });
-    return () => unsub();
-  }, [currentUser]);
 
   // Pending evaluations
   useEffect(() => {

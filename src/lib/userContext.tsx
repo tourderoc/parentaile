@@ -2,6 +2,8 @@ import { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import { doc, collection, query, orderBy, getDocs, onSnapshot } from 'firebase/firestore';
 import { auth, db } from './firebase';
+import type { BadgeLevel } from '../types/groupeParole';
+import { getBadgeForPoints } from '../types/groupeParole';
 
 // ============================================
 // TYPES
@@ -20,6 +22,12 @@ export interface UserContextType {
   pseudo: string;
   /** Config avatar (temps réel) */
   avatarConfig: any | null;
+  /** Points de participation (temps réel) */
+  points: number;
+  /** Badge actuel (temps réel) */
+  badge: BadgeLevel;
+  /** Historique de participation (temps réel) */
+  participationHistory: any[];
   /** Enfants liés (tokenIds) — chargé une seule fois */
   children: ChildToken[];
   /** IDs des tokens uniquement */
@@ -38,6 +46,9 @@ const UserContext = createContext<UserContextType>({
   currentUser: null,
   pseudo: '',
   avatarConfig: null,
+  points: 0,
+  badge: 'none',
+  participationHistory: [],
   children: [],
   tokenIds: [],
   loading: true,
@@ -54,6 +65,9 @@ export const UserProvider = ({ children: reactChildren }: { children: React.Reac
   const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(auth.currentUser);
   const [pseudo, setPseudo] = useState('');
   const [avatarConfig, setAvatarConfig] = useState<any | null>(null);
+  const [points, setPoints] = useState(0);
+  const [badge, setBadge] = useState<BadgeLevel>('none');
+  const [participationHistory, setParticipationHistory] = useState<any[]>([]);
   const [childTokens, setChildTokens] = useState<ChildToken[]>([]);
   const [loading, setLoading] = useState(true);
   const accountUnsubRef = useRef<(() => void) | null>(null);
@@ -85,16 +99,24 @@ export const UserProvider = ({ children: reactChildren }: { children: React.Reac
       if (!user) {
         setPseudo('');
         setAvatarConfig(null);
+        setPoints(0);
+        setBadge('none');
+        setParticipationHistory([]);
         setChildTokens([]);
         setLoading(false);
         return;
       }
 
-      // Single real-time listener for pseudo + avatar
+      // Single real-time listener for pseudo + avatar + progression
       accountUnsubRef.current = onSnapshot(doc(db, 'accounts', user.uid), (snap) => {
         if (snap.exists()) {
-          setPseudo(snap.data().pseudo || '');
-          setAvatarConfig(snap.data().avatar || null);
+          const data = snap.data();
+          setPseudo(data.pseudo || '');
+          setAvatarConfig(data.avatar || null);
+          const p = data.points || 0;
+          setPoints(p);
+          setBadge((data.badge as BadgeLevel) || getBadgeForPoints(p));
+          setParticipationHistory(data.participationHistory || []);
         }
         setLoading(false);
       });
@@ -120,6 +142,9 @@ export const UserProvider = ({ children: reactChildren }: { children: React.Reac
       currentUser,
       pseudo,
       avatarConfig,
+      points,
+      badge,
+      participationHistory,
       children: childTokens,
       tokenIds,
       loading,
