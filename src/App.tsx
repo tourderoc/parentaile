@@ -1,5 +1,7 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { UserProvider } from './lib/userContext';
+import { UpcomingGroupProvider } from './lib/upcomingGroupContext';
 import { LegalNotice } from './screens/LegalNotice';
 import { Shop } from './screens/Shop';
 import { KidsBooks } from './screens/Shop/KidsBooks';
@@ -49,7 +51,11 @@ const Layout = () => {
 const App = () => {
   return (
     <Router>
-      <Layout />
+      <UserProvider>
+        <UpcomingGroupProvider>
+          <Layout />
+        </UpcomingGroupProvider>
+      </UserProvider>
     </Router>
   );
 };
