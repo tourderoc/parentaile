@@ -278,6 +278,21 @@ export async function rejoindreGroupe(
   groupeId: string,
   participant: { uid: string; pseudo: string }
 ): Promise<void> {
+  // 1. Lire le groupe pour vérifier la date du vocal
+  const groupeDoc = await getDoc(doc(db, 'groupes', groupeId));
+  if (!groupeDoc.exists()) throw new Error('Groupe introuvable');
+  
+  const data = groupeDoc.data();
+  const dateVocalValue = data.dateVocal;
+  const dateVocal = dateVocalValue instanceof Timestamp ? dateVocalValue.toDate() : new Date(dateVocalValue);
+  
+  // 2. Interdire l'inscription à moins de 5 minutes du début (ou si déjà passé)
+  const limitTime = dateVocal.getTime() - 5 * 60000;
+  if (Date.now() > limitTime) {
+    throw new Error('Les inscriptions sont closes pour ce groupe (début imminent ou déjà passé).');
+  }
+
+  // 3. Procéder à l'inscription
   await updateDoc(doc(db, 'groupes', groupeId), {
     participants: arrayUnion({
       uid: participant.uid,

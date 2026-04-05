@@ -37,6 +37,11 @@ function isVocalPassé(date: Date): boolean {
   return date.getTime() < Date.now();
 }
 
+function isInscriptionClose(date: Date): boolean {
+  // Inscriptions closes 5 minutes avant le début
+  return Date.now() > (date.getTime() - 5 * 60000);
+}
+
 // --- Composants ---
 
 const ThemeChip: React.FC<{
@@ -285,7 +290,7 @@ export const SlideForum = () => {
     if (placesDispoOnly) {
       result = result.filter(g => 
         g.participants.length < g.participantsMax &&
-        !isVocalPassé(g.dateVocal)
+        !isInscriptionClose(g.dateVocal)
       );
     }
 

@@ -189,6 +189,11 @@ export const GroupeDetailPage = () => {
     [groupe]
   );
   const estComplet = placesRestantes === 0;
+  const estInscriptionPossible = useMemo(() => {
+    if (!groupe) return false;
+    const limit = groupe.dateVocal.getTime() - 5 * 60000;
+    return Date.now() < limit;
+  }, [groupe]);
 
   // Charger le pseudo
   useEffect(() => {
@@ -516,19 +521,26 @@ export const GroupeDetailPage = () => {
 
               {/* Bouton inscription */}
               {!isParticipant && !estComplet && (!groupe.status || groupe.status === 'scheduled') && (
-                <motion.button
-                  whileTap={{ scale: 0.97 }}
-                  onClick={handleJoinGroupe}
-                  disabled={joining}
-                  className="w-full py-3 bg-gradient-to-r from-orange-400 to-orange-500 text-white rounded-2xl font-bold text-sm shadow-lg shadow-orange-500/30 hover:from-orange-500 hover:to-orange-600 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-                >
-                  {joining ? (
-                    <Loader2 size={16} className="animate-spin" />
-                  ) : (
-                    <Users size={16} />
-                  )}
-                  {joining ? 'Inscription...' : "S'inscrire au groupe"}
-                </motion.button>
+                estInscriptionPossible ? (
+                  <motion.button
+                    whileTap={{ scale: 0.97 }}
+                    onClick={handleJoinGroupe}
+                    disabled={joining}
+                    className="w-full py-3 bg-gradient-to-r from-orange-400 to-orange-500 text-white rounded-2xl font-bold text-sm shadow-lg shadow-orange-500/30 hover:from-orange-500 hover:to-orange-600 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {joining ? (
+                      <Loader2 size={16} className="animate-spin" />
+                    ) : (
+                      <Users size={16} />
+                    )}
+                    {joining ? 'Inscription...' : "S'inscrire au groupe"}
+                  </motion.button>
+                ) : (
+                  <div className="w-full py-3 bg-gray-100 text-gray-400 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 border border-gray-200">
+                    <Lock size={14} />
+                    <span>Inscriptions closes (début imminent)</span>
+                  </div>
+                )
               )}
 
               {isParticipant && (
