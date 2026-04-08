@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { auth, db } from '../../lib/firebase';
-import { signOut, updateEmail, updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
+import { signOut, updateEmail, updatePassword, EmailAuthProvider, reauthenticateWithCredential, deleteUser, GoogleAuthProvider, reauthenticateWithPopup } from 'firebase/auth';
 import {
   doc,
   updateDoc,
-  getDoc
+  getDoc,
+  deleteDoc,
+  collection,
+  getDocs
 } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -24,7 +27,8 @@ import {
   Bell,
   Volume2,
   Smile,
-  Settings
+  Settings,
+  AlertTriangle
 } from 'lucide-react';
 import {
   getUserPreferences,
@@ -53,7 +57,7 @@ export const EspaceSettings = () => {
   const [pseudo, setPseudo] = useState('');
 
   // Edit account states
-  const [editModal, setEditModal] = useState<'pseudo' | 'email' | 'password' | null>(null);
+  const [editModal, setEditModal] = useState<'pseudo' | 'email' | 'password' | 'delete' | null>(null);
   const [newPseudo, setNewPseudo] = useState('');
   const [newEmail, setNewEmail] = useState('');
   const [currentPassword, setCurrentPassword] = useState('');
@@ -148,7 +152,7 @@ export const EspaceSettings = () => {
     }
   };
 
-  const openEditModal = (type: 'pseudo' | 'email' | 'password') => {
+  const openEditModal = (type: 'pseudo' | 'email' | 'password' | 'delete') => {
     setEditError(null);
     setEditSuccess(null);
     setCurrentPassword('');
@@ -270,6 +274,60 @@ export const EspaceSettings = () => {
         setEditError('Veuillez vous reconnecter pour changer le mot de passe');
       } else {
         setEditError('Erreur lors de la mise a jour');
+      }
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    setIsSaving(true);
+    setEditError(null);
+
+    try {
+      const user = auth.currentUser;
+      if (!user) throw new Error('Non connecte');
+
+      const isGoogle = user.providerData.some(p => p.providerId === 'google.com');
+
+      if (isGoogle) {
+        const provider = new GoogleAuthProvider();
+        await reauthenticateWithPopup(user, provider);
+      } else {
+        if (!currentPassword) {
+          setEditError('Mot de passe actuel requis');
+          setIsSaving(false);
+          return;
+        }
+        if (!user.email) throw new Error('Email manquant');
+        const credential = EmailAuthProvider.credential(user.email, currentPassword);
+        await reauthenticateWithCredential(user, credential);
+      }
+
+      // Supprimer les enfants d'abord
+      const childrenRef = collection(db, 'accounts', user.uid, 'children');
+      const childrenSnap = await getDocs(childrenRef);
+      const deletePromises = childrenSnap.docs.map(childDoc => deleteDoc(childDoc.ref));
+      await Promise.all(deletePromises);
+
+      // Supprimer le document account parent
+      const accountRef = doc(db, 'accounts', user.uid);
+      await deleteDoc(accountRef);
+
+      // Supprimer l'utilisateur Auth Firebase
+      await deleteUser(user);
+
+      navigate('/welcome');
+    } catch (err: any) {
+      console.error('Erreur suppression compte:', err);
+      if (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
+        setEditError('Mot de passe actuel incorrect');
+      } else if (err.code === 'auth/requires-recent-login') {
+        setEditError('Veuillez vous reconnecter pour supprimer votre compte');
+      } else if (err.code === 'auth/popup-closed-by-user') {
+        setEditError('La validation par Google a ete annulee');
+      } else {
+        setEditError('Erreur lors de la suppression du compte');
       }
     } finally {
       setIsSaving(false);
@@ -417,6 +475,17 @@ export const EspaceSettings = () => {
                        <span className="font-extrabold">Me deconnecter</span>
                     </div>
                     <ChevronRight size={20} className="text-gray-300 group-hover:translate-x-1 transition-transform" />
+                </button>
+
+                {/* Supprimer compte */}
+                <button
+                   onClick={() => openEditModal('delete')}
+                   className="w-full px-6 py-5 flex items-center justify-center group border-t border-red-100 bg-red-50/20 hover:bg-red-50 transition-colors"
+                >
+                    <span className="text-[11px] font-bold text-red-400 group-hover:text-red-600 uppercase tracking-widest transition-colors flex items-center gap-2">
+                       <AlertTriangle size={14} />
+                       Supprimer mon compte
+                    </span>
                 </button>
               </div>
             </section>
@@ -723,6 +792,7 @@ export const EspaceSettings = () => {
                   {editModal === 'pseudo' && 'Modifier le pseudo'}
                   {editModal === 'email' && 'Modifier l\'email'}
                   {editModal === 'password' && 'Modifier le mot de passe'}
+                  {editModal === 'delete' && 'Supprimer le compte'}
                 </h3>
                 <button onClick={() => setEditModal(null)} className="p-2 bg-gray-100 rounded-xl text-gray-500">
                   <X size={20} />
@@ -878,6 +948,54 @@ export const EspaceSettings = () => {
                       className="w-full h-14 bg-orange-500 text-white rounded-2xl font-bold shadow-premium flex items-center justify-center"
                     >
                       {isSaving ? <Loader2 className="animate-spin" /> : 'Enregistrer'}
+                    </button>
+                  </>
+                )}
+
+                {editModal === 'delete' && (
+                  <>
+                    <div className="p-4 bg-red-50 border border-red-100 rounded-2xl flex flex-col items-center text-center gap-2 mb-6">
+                      <AlertTriangle size={32} className="text-red-500 mb-2" />
+                      <h4 className="text-sm font-extrabold text-red-600">Action irrevocable</h4>
+                      <p className="text-[11px] font-bold text-red-400/80 leading-relaxed uppercase tracking-widest">
+                        La suppression effacera vos donnees, l'historique et les dossiers de vos enfants.
+                      </p>
+                    </div>
+
+                    {auth.currentUser?.providerData.some(p => p.providerId === 'google.com') ? (
+                      <p className="text-xs text-gray-500 font-medium text-center px-4 mb-6">
+                        Veuillez vous re-authentifier avec Google pour confirmer votre identite.
+                      </p>
+                    ) : (
+                      <div className="space-y-1.5 mb-6">
+                        <label className="text-[10px] font-bold text-red-500 uppercase tracking-widest ml-1">
+                          Mot de passe actuel
+                        </label>
+                        <div className="relative">
+                          <input
+                            type={showCurrentPassword ? 'text' : 'password'}
+                            value={currentPassword}
+                            onChange={(e) => setCurrentPassword(e.target.value)}
+                            placeholder="Entrez votre mot de passe pour confirmer"
+                            className="w-full h-14 bg-red-50/50 rounded-2xl border-2 border-red-100 px-5 pr-12 focus:outline-none focus:border-red-500 font-bold text-red-600 placeholder:text-red-300"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                            className="absolute right-4 top-1/2 -translate-y-1/2 text-red-400 hover:text-red-600 transition-colors"
+                          >
+                            {showCurrentPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    <button
+                      onClick={handleDeleteAccount}
+                      disabled={isSaving}
+                      className="w-full h-14 bg-red-500 hover:bg-red-600 text-white rounded-2xl font-bold shadow-premium flex items-center justify-center gap-2 transition-all active:scale-95"
+                    >
+                      {isSaving ? <Loader2 className="animate-spin" /> : 'Supprimer definitivement'}
                     </button>
                   </>
                 )}

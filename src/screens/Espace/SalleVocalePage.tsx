@@ -504,11 +504,12 @@ const CircleParticipant: React.FC<{
             <motion.div
               initial={{ scale: 0, y: 5 }}
               animate={{ scale: 1, y: 0 }}
-              className={`absolute -top-2 -left-2 w-7 h-7 bg-amber-400 rounded-full flex items-center justify-center shadow-lg border-2 transition-colors duration-300 ${
-                lightMode ? 'border-amber-100' : 'border-[#1a1f3a]'
+              className={`absolute -top-2 -left-2 w-8 h-8 rounded-full flex items-center justify-center shadow-[0_0_15px_rgba(251,191,36,0.6)] border-2 transition-colors duration-300 ${
+                lightMode ? 'bg-white border-amber-300' : 'bg-[#1e2245] border-amber-400'
               }`}
             >
-              <span className="text-sm">✋</span>
+              <span className="text-base pt-0.5 animate-[bounce_2s_infinite]">✋</span>
+              <div className="absolute inset-0 rounded-full ring-2 ring-amber-400 animate-ping opacity-30 pointer-events-none" />
             </motion.div>
           )}
 

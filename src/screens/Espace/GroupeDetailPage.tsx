@@ -419,7 +419,7 @@ export const GroupeDetailPage = () => {
               {groupe.titre}
             </h1>
             <p className="text-[10px] text-gray-400 font-medium">
-              {groupe.participants.length} participant{groupe.participants.length > 1 ? 's' : ''} · Encore {jours} jour{jours > 1 ? 's' : ''}
+              {groupe.participants.length} participant{groupe.participants.length > 1 ? 's' : ''} · Encore {jours} jour{jours > 1 ? 's' : ''} pour le chat
             </p>
           </div>
           <div className={`${colors.bg} px-2.5 py-1 rounded-full`}>
@@ -515,7 +515,7 @@ export const GroupeDetailPage = () => {
                   <Clock size={14} className="text-orange-400" />
                 </div>
                 <span className="text-xs font-semibold text-orange-500">
-                  Encore {jours} jour{jours > 1 ? 's' : ''}
+                  Encore {jours} jour{jours > 1 ? 's' : ''} pour le chat
                 </span>
               </div>
 
@@ -621,7 +621,7 @@ export const GroupeDetailPage = () => {
                 onClick={() => setShowDetails(!showDetails)}
                 className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50/30 transition-colors"
               >
-                <span className="text-xs font-bold text-gray-500">Plus de détails</span>
+                <span className="text-xs font-bold text-gray-500">{showDetails ? 'Moins de détails' : 'Plus de détails'}</span>
                 <motion.div
                   animate={{ rotate: showDetails ? 180 : 0 }}
                   transition={{ duration: 0.2 }}

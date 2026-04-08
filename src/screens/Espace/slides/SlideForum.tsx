@@ -240,7 +240,7 @@ const GroupeCard: React.FC<{
           <div className="px-4 py-3 border-t border-gray-100/60 flex items-center gap-2 mt-auto">
             <Clock size={12} className="text-orange-400" />
             <span className="text-[11px] font-semibold text-orange-500">
-              Encore {jours} jour{jours > 1 ? 's' : ''}
+              Encore {jours} jour{jours > 1 ? 's' : ''} pour le chat
             </span>
             <div className="ml-auto flex items-center gap-3">
               <GroupeRatingBadge groupeId={groupe.id} />
