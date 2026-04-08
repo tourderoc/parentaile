@@ -19,7 +19,7 @@ import {
   Mic, MicOff, Crown, Loader2, AlertCircle, Volume2, MessageCircle,
   Hand, LogOut, KeyRound, Send, X, CheckCircle2, Users, Clock,
   AlertTriangle, ShieldAlert, Lightbulb, Heart, ChevronDown, Lock,
-  SkipForward, Plus, Square, Sun
+  SkipForward, Plus, Square, Sun, HelpCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getLiveKitToken } from '../../lib/liveKitService';
@@ -42,6 +42,7 @@ import { useVocalMachine } from '../../vocal/hooks/useVocalMachine';
 import { SuspensionOverlay } from '../../components/vocal/SuspensionOverlay';
 import { AnimateurWaitOverlay } from '../../components/vocal/AnimateurWaitOverlay';
 import { CancellationScreen } from '../../components/vocal/CancellationScreen';
+import { VocalTutorialOverlay } from '../../components/vocal/VocalTutorialOverlay';
 
 // ========== Timer Component ==========
 const VocalTimer: React.FC<{ dateVocal: Date; durationMin: number; extendedMinutes?: number }> = ({
@@ -2331,6 +2332,25 @@ const WaitingRoom: React.FC<{
   const currentUser = auth.currentUser;
   const [countdown, setCountdown] = useState('');
   const [sessionStarted, setSessionStarted] = useState(false);
+  const [showTutorial, setShowTutorial] = useState(false);
+
+  useEffect(() => {
+    if (!currentUser) return;
+    const roleKey = isAnimateur ? 'anim' : 'part';
+    const tutoKey = `has_seen_vocal_tuto_${currentUser.uid}_${roleKey}`;
+    if (!localStorage.getItem(tutoKey)) {
+      setShowTutorial(true);
+    }
+  }, [isAnimateur, currentUser]);
+
+  const handleCloseTutorial = () => {
+    if (currentUser) {
+      const roleKey = isAnimateur ? 'anim' : 'part';
+      const tutoKey = `has_seen_vocal_tuto_${currentUser.uid}_${roleKey}`;
+      localStorage.setItem(tutoKey, 'true');
+    }
+    setShowTutorial(false);
+  };
   // Build the FINAL display list: current user (guaranteed) + registered participants
   const displayPresences = useMemo(() => {
     const me = currentUser ? {
@@ -2603,6 +2623,26 @@ const WaitingRoom: React.FC<{
       >
         Retour
       </button>
+
+      {/* Trigger manuel */}
+      <button
+        onClick={() => setShowTutorial(true)}
+        className={`mt-4 flex items-center gap-2 text-xs font-bold transition-colors duration-700 ${lightMode ? 'text-gray-500 hover:text-orange-500' : 'text-white/40 hover:text-white'}`}
+      >
+        <HelpCircle size={14} />
+        Comment ça marche ?
+      </button>
+
+      {/* Tutoriel */}
+      <AnimatePresence>
+        {showTutorial && (
+          <VocalTutorialOverlay
+            isAnimateur={isAnimateur}
+            lightMode={lightMode}
+            onClose={handleCloseTutorial}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 };

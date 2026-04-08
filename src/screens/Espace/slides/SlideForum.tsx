@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Users, Mic, Clock, Plus, MessageCircle, Filter, Loader2, Heart, Settings, SlidersHorizontal, X, Calendar, Search, Tag } from 'lucide-react';
+import { Users, Mic, Clock, Plus, MessageCircle, Filter, Loader2, Heart, Settings, SlidersHorizontal, X, Calendar, Search, Tag, HelpCircle } from 'lucide-react';
 import { Swiper, SwiperSlide } from 'swiper/react';
 import 'swiper/css';
 import { auth } from '../../../lib/firebase';
@@ -12,6 +12,7 @@ import type { GroupeParole, ThemeGroupe } from '../../../types/groupeParole';
 import { THEME_LABELS, THEME_COLORS, THEME_SHORT_LABELS } from '../../../types/groupeParole';
 import { CreateGroupeParole } from './CreateGroupeParole';
 import { AuthWall } from '../../../components/ui/AuthWall';
+import { GroupesTutorialOverlay } from '../../../components/forum/GroupesTutorialOverlay';
 
 
 // --- Helpers ---
@@ -268,6 +269,24 @@ export const SlideForum = () => {
   const [filterCreator, setFilterCreator] = useState('');
   const [filterSort, setFilterSort] = useState<'recents' | 'actifs'>('recents');
   const { allGroupes: groupes, groupesLoading: loading } = useUpcomingGroup();
+  const [showTutorial, setShowTutorial] = useState(false);
+
+  useEffect(() => {
+    const user = auth.currentUser;
+    if (!user) return;
+    const tutoKey = `has_seen_forum_tuto_${user.uid}`;
+    if (!localStorage.getItem(tutoKey)) {
+      setShowTutorial(true);
+    }
+  }, []);
+
+  const handleCloseTutorial = () => {
+    const user = auth.currentUser;
+    if (user) {
+      localStorage.setItem(`has_seen_forum_tuto_${user.uid}`, 'true');
+    }
+    setShowTutorial(false);
+  };
 
   // Ouvrir la création avec prefill si on arrive via navigate state (reprogrammer)
   useEffect(() => {
@@ -590,7 +609,32 @@ export const SlideForum = () => {
             Chaque groupe reste actif pendant 7 jours.
           </p>
         </motion.div>
+
+        {/* Tutoriel Manuel */}
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.45 }}
+          className="flex justify-center pt-2 pb-6"
+        >
+          <button
+            onClick={() => setShowTutorial(true)}
+            className="flex items-center gap-2 px-4 py-2 text-[11px] font-bold text-gray-400 hover:text-orange-500 transition-colors uppercase tracking-widest"
+          >
+            <HelpCircle size={14} />
+            Comment fonctionne cet espace ?
+          </button>
+        </motion.div>
       </main>
+
+      {createPortal(
+        <AnimatePresence>
+          {showTutorial && (
+            <GroupesTutorialOverlay onClose={handleCloseTutorial} />
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
 
       {/* Modal Auth */}
       {showAuthModal && createPortal(
