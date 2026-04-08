@@ -273,12 +273,14 @@ export const SlideForum: React.FC<{ isActive?: boolean }> = ({ isActive = false 
 
   useEffect(() => {
     if (!isActive) return;
-    const user = auth.currentUser;
-    if (!user) return;
-    const tutoKey = `has_seen_forum_tuto_${user.uid}`;
-    if (!localStorage.getItem(tutoKey)) {
-      setShowTutorial(true);
-    }
+    const unsubscribe = auth.onAuthStateChanged((user) => {
+      if (!user) return;
+      const tutoKey = `has_seen_forum_tuto_${user.uid}`;
+      if (!localStorage.getItem(tutoKey)) {
+        setShowTutorial(true);
+      }
+    });
+    return () => unsubscribe();
   }, [isActive]);
 
   const handleCloseTutorial = () => {
