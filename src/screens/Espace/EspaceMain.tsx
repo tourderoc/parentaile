@@ -112,9 +112,11 @@ export const EspaceMain = () => {
             </div>
           </SwiperSlide>
           <SwiperSlide>
-            <div className="h-full overflow-y-auto">
-              <SlideForum />
-            </div>
+            {({ isActive }) => (
+              <div className="h-full overflow-y-auto">
+                <SlideForum isActive={isActive} />
+              </div>
+            )}
           </SwiperSlide>
           <SwiperSlide>
             <div className="h-full overflow-y-auto">

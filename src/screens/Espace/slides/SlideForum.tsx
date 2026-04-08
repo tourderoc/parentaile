@@ -256,7 +256,7 @@ const GroupeCard: React.FC<{
 };
 
 // --- Page principale ---
-export const SlideForum = () => {
+export const SlideForum: React.FC<{ isActive?: boolean }> = ({ isActive = false }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const [showCreate, setShowCreate] = useState(false);
@@ -272,13 +272,14 @@ export const SlideForum = () => {
   const [showTutorial, setShowTutorial] = useState(false);
 
   useEffect(() => {
+    if (!isActive) return;
     const user = auth.currentUser;
     if (!user) return;
     const tutoKey = `has_seen_forum_tuto_${user.uid}`;
     if (!localStorage.getItem(tutoKey)) {
       setShowTutorial(true);
     }
-  }, []);
+  }, [isActive]);
 
   const handleCloseTutorial = () => {
     const user = auth.currentUser;
@@ -619,9 +620,9 @@ export const SlideForum = () => {
         >
           <button
             onClick={() => setShowTutorial(true)}
-            className="flex items-center gap-2 px-4 py-2 text-[11px] font-bold text-gray-400 hover:text-orange-500 transition-colors uppercase tracking-widest"
+            className="flex items-center gap-2 px-5 py-3 rounded-full bg-white border-2 border-gray-100 shadow-sm text-[11px] font-extrabold text-gray-500 hover:text-orange-500 hover:border-orange-200 transition-all active:scale-95 uppercase tracking-widest"
           >
-            <HelpCircle size={14} />
+            <HelpCircle size={16} className="text-orange-400" />
             Comment fonctionne cet espace ?
           </button>
         </motion.div>
