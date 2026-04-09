@@ -1,7 +1,7 @@
 import { db } from './firebase';
 import { doc, updateDoc, getDoc, serverTimestamp, increment } from 'firebase/firestore';
 
-const VPS_URL = 'http://145.223.117.145:8000';
+const VPS_URL = 'https://avatar.parentaile.fr';
 const DAILY_LIMIT = 2;
 
 export interface QuotaStatus {
