@@ -28,6 +28,9 @@ export interface UserContextType {
   badge: BadgeLevel;
   /** Historique de participation (temps réel) */
   participationHistory: any[];
+  /** Quota d'avatar IA */
+  avatarGenCount: number;
+  lastAvatarGenDate: string;
   /** Enfants liés (tokenIds) — chargé une seule fois */
   children: ChildToken[];
   /** IDs des tokens uniquement */
@@ -49,6 +52,8 @@ const UserContext = createContext<UserContextType>({
   points: 0,
   badge: 'none',
   participationHistory: [],
+  avatarGenCount: 0,
+  lastAvatarGenDate: '',
   children: [],
   tokenIds: [],
   loading: true,
@@ -68,6 +73,8 @@ export const UserProvider = ({ children: reactChildren }: { children: React.Reac
   const [points, setPoints] = useState(0);
   const [badge, setBadge] = useState<BadgeLevel>('none');
   const [participationHistory, setParticipationHistory] = useState<any[]>([]);
+  const [avatarGenCount, setAvatarGenCount] = useState(0);
+  const [lastAvatarGenDate, setLastAvatarGenDate] = useState('');
   const [childTokens, setChildTokens] = useState<ChildToken[]>([]);
   const [loading, setLoading] = useState(true);
   const accountUnsubRef = useRef<(() => void) | null>(null);
@@ -102,6 +109,8 @@ export const UserProvider = ({ children: reactChildren }: { children: React.Reac
         setPoints(0);
         setBadge('none');
         setParticipationHistory([]);
+        setAvatarGenCount(0);
+        setLastAvatarGenDate('');
         setChildTokens([]);
         setLoading(false);
         return;
@@ -117,6 +126,8 @@ export const UserProvider = ({ children: reactChildren }: { children: React.Reac
           setPoints(p);
           setBadge((data.badge as BadgeLevel) || getBadgeForPoints(p));
           setParticipationHistory(data.participationHistory || []);
+          setAvatarGenCount(data.avatarGenCount || 0);
+          setLastAvatarGenDate(data.lastAvatarGenDate || '');
         }
         setLoading(false);
       });
@@ -145,6 +156,8 @@ export const UserProvider = ({ children: reactChildren }: { children: React.Reac
       points,
       badge,
       participationHistory,
+      avatarGenCount,
+      lastAvatarGenDate,
       children: childTokens,
       tokenIds,
       loading,

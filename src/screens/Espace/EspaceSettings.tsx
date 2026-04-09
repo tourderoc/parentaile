@@ -45,11 +45,14 @@ import {
 } from '../../lib/avatarTypes';
 import { RefreshCw, Sparkles, Star } from 'lucide-react';
 import { AuthWall } from '../../components/ui/AuthWall';
+import { AvatarAISelector } from '../../components/ui/AvatarAISelector';
+import { useUser } from '../../lib/userContext';
 
 export const EspaceSettings = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const tabParam = new URLSearchParams(location.search).get('tab');
+  const { avatarConfig: contextAvatar } = useUser();
   const initialTab = tabParam === 'avatar' ? 1 : tabParam === 'notifs' ? 2 : 0;
   const [activeTab, setActiveTab] = useState(initialTab);
 
@@ -80,6 +83,7 @@ export const EspaceSettings = () => {
   const [avatarStep, setAvatarStep] = useState(0);
   const [recentConfigs, setRecentConfigs] = useState<AvatarConfig[]>([]);
   const AVATAR_STEPS = ['Style', 'Inspiration', 'Fond'];
+  const [avatarMode, setAvatarMode] = useState<'static' | 'ai'>('static');
 
   useEffect(() => {
     loadData();
@@ -91,6 +95,13 @@ export const EspaceSettings = () => {
       window.history.replaceState({}, '', '/espace/parametres');
     }
   }, [navigate]);
+
+  // Sync avatar config if it changes in context (e.g. after AI generation)
+  useEffect(() => {
+    if (contextAvatar) {
+      setAvatarConfig(contextAvatar);
+    }
+  }, [contextAvatar]);
 
   const loadData = async () => {
     const user = auth.currentUser;
@@ -495,6 +506,27 @@ export const EspaceSettings = () => {
         {/* Tab 2: Avatar */}
         {activeTab === 1 && (
           <div className="max-w-md mx-auto px-6 pt-4 flex flex-col">
+            {/* Mode Switcher */}
+            <div className="flex p-1 bg-gray-100 rounded-xl mb-6">
+              <button
+                onClick={() => setAvatarMode('static')}
+                className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${
+                  avatarMode === 'static' ? 'bg-white shadow-sm text-orange-600' : 'text-gray-500'
+                }`}
+              >
+                Avatar Dessiné
+              </button>
+              <button
+                onClick={() => setAvatarMode('ai')}
+                className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 ${
+                  avatarMode === 'ai' ? 'bg-white shadow-sm text-orange-600' : 'text-gray-500'
+                }`}
+              >
+                <Sparkles size={12} />
+                Avatar Portrait (IA)
+              </button>
+            </div>
+
             {/* Preview - always visible */}
             <div className="flex flex-col items-center">
               <UserAvatar config={avatarConfig} size={100} className="shadow-premium" />
@@ -524,182 +556,198 @@ export const EspaceSettings = () => {
             </div>
 
             {/* Step content */}
-            <div className="flex-1 flex flex-col min-h-0">
-              <AnimatePresence mode="wait">
-                  <motion.div
-                    key={avatarStep}
-                    initial={{ opacity: 0, x: 30 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -30 }}
-                    transition={{ duration: 0.2 }}
-                    className="bg-white/40 backdrop-blur-xl rounded-3xl border border-white/60 shadow-[0_8px_32px_rgba(31,38,135,0.07)] p-4 space-y-3 mb-3"
-                  >
-                  <p className="text-[10px] font-bold text-orange-400 uppercase tracking-widest text-center">
-                    {AVATAR_STEPS[avatarStep]}
-                  </p>                  {/* Step 0: Artistic Style */}
-                  {avatarStep === 0 && (
-                    <div className="grid grid-cols-3 gap-2">
-                      {DICEBEAR_STYLES.map((s) => (
-                        <button
-                          key={s.id}
-                          onClick={() => {
-                            setAvatarConfig(prev => ({
-                              ...prev,
-                              version: 'v2',
-                              dicebearStyle: s.id as any,
-                            }));
-                          }}
-                          className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-all active:scale-[0.97] border-2 ${
-                            avatarConfig.dicebearStyle === s.id
-                              ? 'bg-orange-50 border-orange-500 shadow-sm'
-                              : 'bg-gray-50 border-transparent hover:bg-gray-100'
-                          }`}
-                        >
-                          <div className="w-11 h-11 rounded-lg overflow-hidden shadow-inner bg-white">
-                             <img src={s.preview} alt={s.label} className="w-full h-full object-cover" />
-                          </div>
-                          <span className={`text-[9px] font-bold uppercase tracking-wider ${
-                            avatarConfig.dicebearStyle === s.id ? 'text-orange-600' : 'text-gray-500'
-                          }`}>
-                            {s.label}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Step 1: Inspiration (Random Seed) */}
-                  {avatarStep === 1 && (
-                    <div className="flex flex-col items-center justify-center py-6 space-y-6">
-                      <div className="text-center space-y-2">
-                        <Sparkles className="w-8 h-8 text-orange-400 mx-auto" />
-                        <h4 className="text-sm font-extrabold text-gray-800">Trouvez votre style</h4>
-                        <p className="text-xs text-gray-500">Cliquez pour générer une nouvelle combinaison unique.</p>
-                      </div>
-                      
-                      <div className="flex items-center gap-6">
-                        <div className="relative group">
+            {avatarMode === 'static' ? (
+              <div className="flex-1 flex flex-col min-h-0">
+                <div className="flex justify-center gap-2 mt-3 mb-3">
+                  {AVATAR_STEPS.map((label, i) => (
+                    <button
+                      key={label}
+                      onClick={() => setAvatarStep(i)}
+                      className={`h-2 rounded-full transition-all ${
+                        avatarStep === i ? 'w-6 bg-orange-500' : 'w-2 bg-gray-300'
+                      }`}
+                    />
+                  ))}
+                </div>
+                
+                <AnimatePresence mode="wait">
+                    <motion.div
+                      key={avatarStep}
+                      initial={{ opacity: 0, x: 30 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -30 }}
+                      transition={{ duration: 0.2 }}
+                      className="bg-white/40 backdrop-blur-xl rounded-3xl border border-white/60 shadow-[0_8px_32px_rgba(31,38,135,0.07)] p-4 space-y-3 mb-3"
+                    >
+                    <p className="text-[10px] font-bold text-orange-400 uppercase tracking-widest text-center">
+                      {AVATAR_STEPS[avatarStep]}
+                    </p>
+                    {avatarStep === 0 && (
+                      <div className="grid grid-cols-3 gap-2">
+                        {DICEBEAR_STYLES.map((s) => (
                           <button
+                            key={s.id}
                             onClick={() => {
                               setAvatarConfig(prev => ({
                                 ...prev,
+                                avatarType: 'static',
                                 version: 'v2',
-                                seed: Math.random().toString(36).substring(7),
+                                dicebearStyle: s.id as any,
                               }));
                             }}
-                            className="w-20 h-20 bg-orange-500 text-white rounded-3xl shadow-lg flex items-center justify-center active:rotate-180 transition-transform duration-500 hover:scale-105 z-10"
-                            title="Nouvelle inspiration"
+                            className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-all active:scale-[0.97] border-2 ${
+                              avatarConfig.dicebearStyle === s.id
+                                ? 'bg-orange-50 border-orange-500 shadow-sm'
+                                : 'bg-gray-50 border-transparent hover:bg-gray-100'
+                            }`}
                           >
-                            <RefreshCw size={32} />
+                            <div className="w-11 h-11 rounded-lg overflow-hidden shadow-inner bg-white">
+                               <img src={s.preview} alt={s.label} className="w-full h-full object-cover" />
+                            </div>
+                            <span className={`text-[9px] font-bold uppercase tracking-wider ${
+                              avatarConfig.dicebearStyle === s.id ? 'text-orange-600' : 'text-gray-500'
+                            }`}>
+                              {s.label}
+                            </span>
                           </button>
-                          
-                          <button
-                            onClick={() => {
-                              // Save current as favorite (if not already there)
-                              const exists = recentConfigs.some(c => c.seed === avatarConfig.seed && c.dicebearStyle === avatarConfig.dicebearStyle);
-                              if (!exists) {
-                                setRecentConfigs(prev => [avatarConfig, ...prev].slice(0, 3));
-                              }
-                            }}
-                            className="absolute -top-2 -right-2 w-10 h-10 bg-yellow-400 text-white rounded-2xl shadow-md flex items-center justify-center hover:scale-110 active:scale-95 transition-all border-4 border-white z-20"
-                            title="Ajouter aux favoris"
-                          >
-                            <Star size={20} fill="white" />
-                          </button>
-                        </div>
+                        ))}
+                      </div>
+                    )}
 
-                        {/* Favorites */}
-                        <div className="flex flex-col gap-2">
-                          <p className="text-[8px] font-black text-gray-400 uppercase tracking-tighter text-center">
-                            {recentConfigs.length > 0 ? 'Tes Favoris' : 'Sélection'}
-                          </p>
-                          <div className="flex gap-2 min-w-[120px]">
-                            {[0, 1, 2].map((idx) => {
-                              const config = recentConfigs[idx];
-                              return (
-                                <button
-                                  key={idx}
-                                  onClick={() => config && setAvatarConfig(config)}
-                                  className={`w-12 h-12 rounded-xl border-2 transition-all overflow-hidden bg-white/40 backdrop-blur-sm shadow-sm ${
-                                    config ? 'border-yellow-200 active:scale-90 opacity-100' : 'border-gray-100 border-dashed opacity-40 grayscale pointer-events-none'
-                                  }`}
-                                >
-                                  {config ? (
-                                    <UserAvatar config={config} size={48} className="w-full h-full" />
-                                  ) : (
-                                    <div className="w-full h-full flex items-center justify-center text-gray-300">
-                                      <Star size={12} />
-                                    </div>
-                                  )}
-                                </button>
-                              );
-                            })}
+                    {avatarStep === 1 && (
+                      <div className="flex flex-col items-center justify-center py-6 space-y-6">
+                        <div className="text-center space-y-2">
+                          <Sparkles className="w-8 h-8 text-orange-400 mx-auto" />
+                          <h4 className="text-sm font-extrabold text-gray-800">Trouvez votre style</h4>
+                          <p className="text-xs text-gray-500">Cliquez pour générer une nouvelle combinaison unique.</p>
+                        </div>
+                        
+                        <div className="flex items-center gap-6">
+                          <div className="relative group">
+                            <button
+                              onClick={() => {
+                                setAvatarConfig(prev => ({
+                                  ...prev,
+                                  avatarType: 'static',
+                                  version: 'v2',
+                                  seed: Math.random().toString(36).substring(7),
+                                }));
+                              }}
+                              className="w-20 h-20 bg-orange-500 text-white rounded-3xl shadow-lg flex items-center justify-center active:rotate-180 transition-transform duration-500 hover:scale-105 z-10"
+                              title="Nouvelle inspiration"
+                            >
+                              <RefreshCw size={32} />
+                            </button>
+                            
+                            <button
+                              onClick={() => {
+                                const exists = recentConfigs.some(c => c.seed === avatarConfig.seed && c.dicebearStyle === avatarConfig.dicebearStyle);
+                                if (!exists) {
+                                  setRecentConfigs(prev => [avatarConfig, ...prev].slice(0, 3));
+                                }
+                              }}
+                              className="absolute -top-2 -right-2 w-10 h-10 bg-yellow-400 text-white rounded-2xl shadow-md flex items-center justify-center hover:scale-110 active:scale-95 transition-all border-4 border-white z-20"
+                              title="Ajouter aux favoris"
+                            >
+                              <Star size={20} fill="white" />
+                            </button>
+                          </div>
+
+                          <div className="flex flex-col gap-2">
+                            <p className="text-[8px] font-black text-gray-400 uppercase tracking-tighter text-center">
+                              {recentConfigs.length > 0 ? 'Tes Favoris' : 'Sélection'}
+                            </p>
+                            <div className="flex gap-2 min-w-[120px]">
+                              {[0, 1, 2].map((idx) => {
+                                const config = recentConfigs[idx];
+                                return (
+                                  <button
+                                    key={idx}
+                                    onClick={() => config && setAvatarConfig(config)}
+                                    className={`w-12 h-12 rounded-xl border-2 transition-all overflow-hidden bg-white/40 backdrop-blur-sm shadow-sm ${
+                                      config ? 'border-yellow-200 active:scale-90 opacity-100' : 'border-gray-100 border-dashed opacity-40 grayscale pointer-events-none'
+                                    }`}
+                                  >
+                                    {config ? (
+                                      <UserAvatar config={config} size={48} className="w-full h-full" />
+                                    ) : (
+                                      <div className="w-full h-full flex items-center justify-center text-gray-300">
+                                        <Star size={12} />
+                                      </div>
+                                    )}
+                                  </button>
+                                );
+                              })}
+                            </div>
                           </div>
                         </div>
+
+                        <div className="flex gap-2">
+                           <span className="px-3 py-1 bg-gray-100 rounded-full text-[10px] font-bold text-gray-500">
+                             Identifiant: {avatarConfig.seed || 'aucun'}
+                           </span>
+                        </div>
                       </div>
-
-                      <div className="flex gap-2">
-                         <span className="px-3 py-1 bg-gray-100 rounded-full text-[10px] font-bold text-gray-500">
-                           Identifiant: {avatarConfig.seed || 'aucun'}
-                         </span>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Step 2: Background Color */}
-                  {avatarStep === 2 && (
-                    <div className="flex flex-wrap gap-4 justify-center py-4">
-                      {BG_COLORS.map((color) => (
-                        <button
-                          key={color}
-                          onClick={() => setAvatarConfig(prev => ({ ...prev, bgColor: color }))}
-                          className={`w-12 h-12 rounded-full border-[3px] transition-all active:scale-90 ${
-                            avatarConfig.bgColor === color ? 'border-orange-500 scale-110 shadow-md' : 'border-transparent'
-                          }`}
-                          style={{ backgroundColor: color }}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </motion.div>
-              </AnimatePresence>
-
-              {/* Navigation + Save (Pinned) */}
-              <div className="flex gap-3 mt-auto shrink-0 pb-4">
-                {avatarStep > 0 && (
-                  <button
-                    onClick={() => setAvatarStep(prev => prev - 1)}
-                    className="w-14 h-12 bg-gray-100 rounded-2xl flex items-center justify-center text-gray-500 active:scale-95 transition-all"
-                  >
-                    <ArrowLeft size={20} />
-                  </button>
-                )}
-                {avatarStep < AVATAR_STEPS.length - 1 ? (
-                  <button
-                    onClick={() => setAvatarStep(prev => prev + 1)}
-                    className="flex-1 h-12 bg-orange-500 text-white rounded-2xl font-bold flex items-center justify-center gap-2 active:scale-[0.97] transition-all shadow-premium"
-                  >
-                    Suivant
-                    <ChevronRight size={18} />
-                  </button>
-                ) : (
-                  <button
-                    onClick={handleSaveAvatar}
-                    disabled={avatarSaving}
-                    className="flex-1 h-12 bg-orange-500 hover:bg-orange-600 text-white rounded-2xl font-bold flex items-center justify-center gap-2 active:scale-[0.97] transition-all shadow-premium"
-                  >
-                    {avatarSaving ? (
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                    ) : (
-                      <>
-                        <Check size={18} />
-                        Enregistrer
-                      </>
                     )}
-                  </button>
-                )}
+
+                    {avatarStep === 2 && (
+                      <div className="flex flex-wrap gap-4 justify-center py-4">
+                        {BG_COLORS.map((color) => (
+                          <button
+                            key={color}
+                            onClick={() => setAvatarConfig(prev => ({ ...prev, avatarType: 'static', bgColor: color }))}
+                            className={`w-12 h-12 rounded-full border-[3px] transition-all active:scale-90 ${
+                              avatarConfig.bgColor === color ? 'border-orange-500 scale-110 shadow-md' : 'border-transparent'
+                            }`}
+                            style={{ backgroundColor: color }}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </motion.div>
+                </AnimatePresence>
+
+                {/* Navigation + Save (Pinned) */}
+                <div className="flex gap-3 mt-auto shrink-0 pb-4">
+                  {avatarStep > 0 && (
+                    <button
+                      onClick={() => setAvatarStep(prev => prev - 1)}
+                      className="w-14 h-12 bg-gray-100 rounded-2xl flex items-center justify-center text-gray-500 active:scale-95 transition-all"
+                    >
+                      <ArrowLeft size={20} />
+                    </button>
+                  )}
+                  {avatarStep < AVATAR_STEPS.length - 1 ? (
+                    <button
+                      onClick={() => setAvatarStep(prev => prev + 1)}
+                      className="flex-1 h-12 bg-orange-500 text-white rounded-2xl font-bold flex items-center justify-center gap-2 active:scale-[0.97] transition-all shadow-premium"
+                    >
+                      Suivant
+                      <ChevronRight size={18} />
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handleSaveAvatar}
+                      disabled={avatarSaving}
+                      className="flex-1 h-12 bg-orange-500 hover:bg-orange-600 text-white rounded-2xl font-bold flex items-center justify-center gap-2 active:scale-[0.97] transition-all shadow-premium"
+                    >
+                      {avatarSaving ? (
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                      ) : (
+                        <>
+                          <Check size={18} />
+                          Enregistrer
+                        </>
+                      )}
+                    </button>
+                  )}
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="flex-1 overflow-y-auto pb-4">
+                <AvatarAISelector />
+              </div>
+            )}
           </div>
         )}
 

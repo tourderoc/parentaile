@@ -1,5 +1,7 @@
 export interface AvatarConfig {
   version?: 'v1' | 'v2';
+  avatarType?: 'static' | 'ai';
+  aiUrl?: string;
   // V1 fields (kept for compatibility)
   style: 'masculine' | 'feminine' | 'neutral';
   skinColor: string;

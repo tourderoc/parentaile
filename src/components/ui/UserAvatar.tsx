@@ -48,6 +48,30 @@ export const UserAvatar: React.FC<UserAvatarProps> = ({ config, size = 48, class
     );
   }
 
+  // Handle AI Avatar from VPS
+  if (config.aiUrl) {
+    return (
+      <div 
+        className={`overflow-hidden shadow-inner bg-gray-100 ${className}`}
+        style={{ 
+          width: size, 
+          height: size, 
+          borderRadius: size * 0.3,
+        }}
+      >
+        <img 
+          src={config.aiUrl} 
+          alt="Avatar IA" 
+          className="w-full h-full object-cover"
+          onError={(e) => {
+            // Fallback to initials or default if VPS image fails
+            (e.target as HTMLImageElement).src = `https://api.dicebear.com/7.x/initials/svg?seed=User`;
+          }}
+        />
+      </div>
+    );
+  }
+
   // Handle DiceBear (Version 2)
   if (config.version === 'v2' || config.dicebearStyle) {
     const style = config.dicebearStyle || 'lorelei';
