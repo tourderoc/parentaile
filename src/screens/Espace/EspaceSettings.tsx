@@ -750,7 +750,7 @@ export const EspaceSettings = () => {
               </div>
             ) : (
               <div className="flex-1 overflow-y-auto pb-4">
-                <AvatarAISelector />
+                <AvatarAISelector onPreviewGenerated={(url) => setAvatarConfig(prev => ({ ...prev, avatarType: 'ai', aiUrl: url }))} />
               </div>
             )}
           </div>

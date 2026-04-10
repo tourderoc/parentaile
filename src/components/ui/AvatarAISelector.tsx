@@ -4,7 +4,11 @@ import { useUser } from '../../lib/userContext';
 import { AvatarAIService, QuotaStatus } from '../../lib/avatarAIService';
 import { motion } from 'framer-motion';
 
-export const AvatarAISelector = () => {
+interface AvatarAISelectorProps {
+  onPreviewGenerated?: (url: string) => void;
+}
+
+export const AvatarAISelector = ({ onPreviewGenerated }: AvatarAISelectorProps) => {
   const { currentUser, avatarGenCount, lastAvatarGenDate, avatarConfig } = useUser();
   const [quota, setQuota] = useState<QuotaStatus>({ canGenerate: true, remaining: 2 });
   const [isGenerating, setIsGenerating] = useState(false);
@@ -54,6 +58,7 @@ export const AvatarAISelector = () => {
     try {
       const url = await AvatarAIService.generatePreview(currentUser.uid, selectedFile);
       setGeneratedUrl(url);
+      onPreviewGenerated?.(url);
     } catch (err: any) {
       console.error(err);
       setError(err.message || 'La génération a échoué. Réessayez plus tard.');
