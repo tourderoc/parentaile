@@ -111,7 +111,8 @@ export const AvatarAIService = {
       avatarGenCount: lastGenDate === today ? increment(1) : 1,
     });
 
-    return result.url;
+    // Ajoute un timestamp pour invalider le cache navigateur à chaque nouvelle génération
+    return `${result.url}?t=${Date.now()}`;
   },
 
   async saveAvatar(userId: string, aiUrl: string): Promise<void> {

@@ -15,6 +15,7 @@ export const AvatarAISelector = ({ onPreviewGenerated, onSaved, onReset }: Avata
   const [quota, setQuota] = useState<QuotaStatus>({ canGenerate: true, remaining: 2 });
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isSaved, setIsSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -76,10 +77,14 @@ export const AvatarAISelector = ({ onPreviewGenerated, onSaved, onReset }: Avata
     setIsSaving(true);
     try {
       await AvatarAIService.saveAvatar(currentUser.uid, generatedUrl);
-      setSelectedFile(null);
-      setPreviewUrl(null);
-      setGeneratedUrl(null);
-      onSaved?.();
+      setIsSaved(true);
+      setTimeout(() => {
+        setSelectedFile(null);
+        setPreviewUrl(null);
+        setGeneratedUrl(null);
+        setIsSaved(false);
+        onSaved?.();
+      }, 1500);
     } catch (err: any) {
       setError(err.message || 'Erreur lors de la sauvegarde');
     } finally {
@@ -107,7 +112,7 @@ export const AvatarAISelector = ({ onPreviewGenerated, onSaved, onReset }: Avata
           <Sparkles size={20} />
         </div>
         <div className="flex-1">
-          <p className="text-sm font-extrabold">Style Portrait IA</p>
+          <p className="text-sm font-extrabold">Portrait Illustré</p>
           <p className="text-[11px] font-bold opacity-80">
             {quota.canGenerate
               ? `Il vous reste ${quota.remaining} tentative${quota.remaining > 1 ? 's' : ''} aujourd'hui.`
@@ -144,11 +149,20 @@ export const AvatarAISelector = ({ onPreviewGenerated, onSaved, onReset }: Avata
             </button>
             <button
               onClick={handleSave}
-              disabled={isSaving}
-              className="flex-1 h-12 bg-orange-500 text-white rounded-2xl font-bold flex items-center justify-center gap-2 active:scale-95 transition-all shadow-premium"
+              disabled={isSaving || isSaved}
+              className={`flex-1 h-12 rounded-2xl font-bold flex items-center justify-center gap-2 transition-all duration-300 ${
+                isSaved
+                  ? 'bg-green-500 text-white scale-95'
+                  : 'bg-orange-500 text-white active:scale-95 shadow-premium'
+              }`}
             >
               {isSaving ? (
                 <Loader2 className="animate-spin" size={18} />
+              ) : isSaved ? (
+                <>
+                  <Check size={18} />
+                  Portrait enregistré !
+                </>
               ) : (
                 <>
                   <Check size={18} />
@@ -166,7 +180,7 @@ export const AvatarAISelector = ({ onPreviewGenerated, onSaved, onReset }: Avata
               <div className="w-24 h-24 rounded-[1.8rem] overflow-hidden shadow-md border-2 border-orange-100">
                 <img src={currentAiUrl} alt="Avatar actuel" className="w-full h-full object-cover" />
               </div>
-              <p className="text-[10px] text-gray-400 font-bold">Avatar IA actuel</p>
+              <p className="text-[10px] text-gray-400 font-bold">Portrait actuel</p>
             </div>
           )}
 
@@ -178,7 +192,7 @@ export const AvatarAISelector = ({ onPreviewGenerated, onSaved, onReset }: Avata
               ) : (
                 <div className="flex flex-col items-center text-gray-400">
                   <Camera size={40} strokeWidth={1.5} />
-                  <p className="text-[10px] font-bold mt-2 uppercase tracking-widest">Selfie Proche</p>
+                  <p className="text-[10px] font-bold mt-2 uppercase tracking-widest">Votre photo</p>
                 </div>
               )}
             </div>
@@ -194,10 +208,10 @@ export const AvatarAISelector = ({ onPreviewGenerated, onSaved, onReset }: Avata
           </div>
 
           <div className="text-center px-4">
-            <h4 className="text-sm font-bold text-gray-800">Transformez-vous !</h4>
+            <h4 className="text-sm font-bold text-gray-800">Créez votre portrait</h4>
             <p className="text-[11px] text-gray-500 mt-1">
-              Prenez un selfie bien éclairé de face. <br />
-              L'IA créera un portrait unique inspiré de vous.
+              Prenez une photo bien éclairée de face. <br />
+              Votre photo sera transformée en illustration personnalisée.
             </p>
           </div>
 
@@ -220,12 +234,12 @@ export const AvatarAISelector = ({ onPreviewGenerated, onSaved, onReset }: Avata
             {isGenerating ? (
               <>
                 <Loader2 className="animate-spin" size={20} />
-                Transformation en cours...
+                Création en cours...
               </>
             ) : (
               <>
                 <Sparkles size={20} />
-                Lancer la magie
+                Créer mon portrait
               </>
             )}
           </button>

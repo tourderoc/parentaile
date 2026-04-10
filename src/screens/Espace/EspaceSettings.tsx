@@ -166,7 +166,10 @@ export const EspaceSettings = () => {
 
       setAvatarConfig(cleanConfig);
       setAvatarSuccess('Avatar enregistre !');
-      setTimeout(() => setAvatarSuccess(null), 3000);
+      setTimeout(() => {
+        setAvatarSuccess(null);
+        setAvatarStep(0);
+      }, 1500);
     } catch (err) {
       console.error('Erreur sauvegarde avatar:', err);
     } finally {
@@ -534,7 +537,7 @@ export const EspaceSettings = () => {
                 }`}
               >
                 <Sparkles size={12} />
-                Avatar Portrait (IA)
+                Mon Portrait
               </button>
             </div>
 
@@ -726,11 +729,20 @@ export const EspaceSettings = () => {
                   ) : (
                     <button
                       onClick={handleSaveAvatar}
-                      disabled={avatarSaving}
-                      className="flex-1 h-12 bg-orange-500 hover:bg-orange-600 text-white rounded-2xl font-bold flex items-center justify-center gap-2 active:scale-[0.97] transition-all shadow-premium"
+                      disabled={avatarSaving || !!avatarSuccess}
+                      className={`flex-1 h-12 text-white rounded-2xl font-bold flex items-center justify-center gap-2 transition-all duration-300 ${
+                        avatarSuccess
+                          ? 'bg-green-500 scale-95'
+                          : 'bg-orange-500 hover:bg-orange-600 active:scale-[0.97] shadow-premium'
+                      }`}
                     >
                       {avatarSaving ? (
                         <Loader2 className="w-5 h-5 animate-spin" />
+                      ) : avatarSuccess ? (
+                        <>
+                          <Check size={18} />
+                          Avatar enregistré !
+                        </>
                       ) : (
                         <>
                           <Check size={18} />
