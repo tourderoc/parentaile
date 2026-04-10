@@ -6,9 +6,11 @@ import { motion } from 'framer-motion';
 
 interface AvatarAISelectorProps {
   onPreviewGenerated?: (url: string) => void;
+  onSaved?: () => void;
+  onReset?: () => void;
 }
 
-export const AvatarAISelector = ({ onPreviewGenerated }: AvatarAISelectorProps) => {
+export const AvatarAISelector = ({ onPreviewGenerated, onSaved, onReset }: AvatarAISelectorProps) => {
   const { currentUser, avatarGenCount, lastAvatarGenDate, avatarConfig } = useUser();
   const [quota, setQuota] = useState<QuotaStatus>({ canGenerate: true, remaining: 2 });
   const [isGenerating, setIsGenerating] = useState(false);
@@ -76,6 +78,7 @@ export const AvatarAISelector = ({ onPreviewGenerated }: AvatarAISelectorProps) 
       setSelectedFile(null);
       setPreviewUrl(null);
       setGeneratedUrl(null);
+      onSaved?.();
     } catch (err: any) {
       setError(err.message || 'Erreur lors de la sauvegarde');
     } finally {
@@ -88,6 +91,7 @@ export const AvatarAISelector = ({ onPreviewGenerated }: AvatarAISelectorProps) 
     setPreviewUrl(null);
     setGeneratedUrl(null);
     setError(null);
+    onReset?.();
   };
 
   return (

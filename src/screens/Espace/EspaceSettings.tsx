@@ -86,6 +86,7 @@ export const EspaceSettings = () => {
   const [avatarMode, setAvatarMode] = useState<'static' | 'ai'>(
     contextAvatar?.avatarType === 'ai' ? 'ai' : 'static'
   );
+  const [hasLocalPreview, setHasLocalPreview] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -98,12 +99,12 @@ export const EspaceSettings = () => {
     }
   }, [navigate]);
 
-  // Sync avatar config from context (only update the config, not the mode tab)
+  // Sync avatar config from context (skip if user has a local preview pending)
   useEffect(() => {
-    if (contextAvatar) {
+    if (contextAvatar && !hasLocalPreview) {
       setAvatarConfig(contextAvatar);
     }
-  }, [contextAvatar]);
+  }, [contextAvatar, hasLocalPreview]);
 
   const loadData = async () => {
     const user = auth.currentUser;
@@ -750,7 +751,17 @@ export const EspaceSettings = () => {
               </div>
             ) : (
               <div className="flex-1 overflow-y-auto pb-4">
-                <AvatarAISelector onPreviewGenerated={(url) => setAvatarConfig(prev => ({ ...prev, avatarType: 'ai', aiUrl: url }))} />
+                <AvatarAISelector
+                  onPreviewGenerated={(url) => {
+                    setHasLocalPreview(true);
+                    setAvatarConfig(prev => ({ ...prev, avatarType: 'ai', aiUrl: url }));
+                  }}
+                  onSaved={() => setHasLocalPreview(false)}
+                  onReset={() => {
+                    setHasLocalPreview(false);
+                    if (contextAvatar) setAvatarConfig(contextAvatar);
+                  }}
+                />
               </div>
             )}
           </div>
