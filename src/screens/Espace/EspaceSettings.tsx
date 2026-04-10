@@ -47,6 +47,7 @@ import { RefreshCw, Sparkles, Star } from 'lucide-react';
 import { AuthWall } from '../../components/ui/AuthWall';
 import { AvatarAISelector } from '../../components/ui/AvatarAISelector';
 import { useUser } from '../../lib/userContext';
+import { AvatarAIService } from '../../lib/avatarAIService';
 
 export const EspaceSettings = () => {
   const navigate = useNavigate();
@@ -155,10 +156,14 @@ export const EspaceSettings = () => {
     try {
       const user = auth.currentUser;
       if (!user) throw new Error('Non connecte');
-      const accountRef = doc(db, 'accounts', user.uid);
-      // Clean config: remove AI fields when saving a static avatar
       const cleanConfig = { ...avatarConfig, avatarType: 'static', aiUrl: '' };
-      await updateDoc(accountRef, { avatar: cleanConfig });
+
+      // Sauvegarde VPS (source de vérité) + Firebase (compat userContext)
+      await Promise.all([
+        AvatarAIService.saveCustomConfig(user.uid, cleanConfig),
+        updateDoc(doc(db, 'accounts', user.uid), { avatar: cleanConfig }),
+      ]);
+
       setAvatarConfig(cleanConfig);
       setAvatarSuccess('Avatar enregistre !');
       setTimeout(() => setAvatarSuccess(null), 3000);

@@ -24,7 +24,8 @@ export type ParentNotifType =
   | 'session_ended'     // La session vocale est terminée
   | 'group_created'     // Votre groupe a été créé
   | 'group_cancelled'   // Votre groupe a été annulé
-  | 'group_banned';     // Vous avez été banni d'un groupe
+  | 'group_banned'      // Vous avez été banni d'un groupe
+  | 'vocal_reminder';   // Rappel avant le début d'une session vocale
 
 export interface ParentNotification {
   id: string;
@@ -49,6 +50,7 @@ export const NOTIF_CONFIG: Record<ParentNotifType, { icon: string; color: string
   group_created:       { icon: '✅', color: 'text-emerald-600', bg: 'bg-emerald-50' },
   group_cancelled:     { icon: '❌', color: 'text-red-600',     bg: 'bg-red-50' },
   group_banned:        { icon: '🚫', color: 'text-red-700',     bg: 'bg-red-100' },
+  vocal_reminder:      { icon: '🔔', color: 'text-blue-600',    bg: 'bg-blue-50' },
 };
 
 // ========== ÉCRITURE ==========

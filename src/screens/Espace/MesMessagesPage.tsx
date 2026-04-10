@@ -128,7 +128,7 @@ export const MesMessagesPage = () => {
             <div className="space-y-2">
               <AnimatePresence>
                 {parentNotifs.map((notif, i) => {
-                  const config = NOTIF_CONFIG[notif.type];
+                  const config = NOTIF_CONFIG[notif.type] ?? { icon: '🔔', color: 'text-gray-600', bg: 'bg-gray-50' };
                   return (
                     <motion.div
                       key={notif.id}
