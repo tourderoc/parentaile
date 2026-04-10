@@ -13,7 +13,8 @@ interface UsageRecord {
 
 const ADMIN_EMAILS = [
   'tourderoc@gmail.com',
-  'admin@parentaile.fr'
+  'admin@parentaile.fr',
+  'nairmedcin@gmail.com'
 ];
 
 /**
