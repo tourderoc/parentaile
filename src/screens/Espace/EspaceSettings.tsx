@@ -548,19 +548,6 @@ export const EspaceSettings = () => {
               )}
             </div>
 
-            {/* Step dots */}
-            <div className="flex justify-center gap-2 mt-3 mb-3">
-              {AVATAR_STEPS.map((label, i) => (
-                <button
-                  key={label}
-                  onClick={() => setAvatarStep(i)}
-                  className={`h-2 rounded-full transition-all ${
-                    avatarStep === i ? 'w-6 bg-orange-500' : 'w-2 bg-gray-300'
-                  }`}
-                />
-              ))}
-            </div>
-
             {/* Step content */}
             {avatarMode === 'static' ? (
               <div className="flex-1 flex flex-col min-h-0">
