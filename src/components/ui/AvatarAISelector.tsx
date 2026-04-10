@@ -1,17 +1,21 @@
 import React, { useState, useEffect } from 'react';
-import { Camera, Sparkles, Loader2, AlertCircle, CheckCircle2, Info } from 'lucide-react';
+import { Camera, Sparkles, Loader2, AlertCircle, Check, Info, RefreshCw } from 'lucide-react';
 import { useUser } from '../../lib/userContext';
 import { AvatarAIService, QuotaStatus } from '../../lib/avatarAIService';
 import { motion } from 'framer-motion';
 
 export const AvatarAISelector = () => {
-  const { currentUser, avatarGenCount, lastAvatarGenDate } = useUser();
+  const { currentUser, avatarGenCount, lastAvatarGenDate, avatarConfig } = useUser();
   const [quota, setQuota] = useState<QuotaStatus>({ canGenerate: true, remaining: 2 });
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [generatedUrl, setGeneratedUrl] = useState<string | null>(null);
+
+  // Show current AI avatar if exists
+  const currentAiUrl = avatarConfig?.avatarType === 'ai' ? avatarConfig?.aiUrl : null;
 
   useEffect(() => {
     if (currentUser) {
@@ -30,6 +34,7 @@ export const AvatarAISelector = () => {
     if (file) {
       setSelectedFile(file);
       setPreviewUrl(URL.createObjectURL(file));
+      setGeneratedUrl(null);
       setError(null);
     }
   };
@@ -37,7 +42,6 @@ export const AvatarAISelector = () => {
   const handleGenerate = async () => {
     if (!currentUser || !selectedFile) return;
 
-    // Double check quota
     const q = await AvatarAIService.checkQuota(currentUser.uid);
     if (!q.canGenerate) {
       setError(q.reason || 'Quota atteint');
@@ -46,20 +50,39 @@ export const AvatarAISelector = () => {
 
     setIsGenerating(true);
     setError(null);
-    setSuccess(false);
 
     try {
-      await AvatarAIService.generateAvatar(currentUser.uid, selectedFile);
-      setSuccess(true);
-      setSelectedFile(null);
-      setPreviewUrl(null);
-      // Quota will be updated via UserContext real-time listener
+      const url = await AvatarAIService.generatePreview(currentUser.uid, selectedFile);
+      setGeneratedUrl(url);
     } catch (err: any) {
       console.error(err);
       setError(err.message || 'La génération a échoué. Réessayez plus tard.');
     } finally {
       setIsGenerating(false);
     }
+  };
+
+  const handleSave = async () => {
+    if (!currentUser || !generatedUrl) return;
+
+    setIsSaving(true);
+    try {
+      await AvatarAIService.saveAvatar(currentUser.uid, generatedUrl);
+      setSelectedFile(null);
+      setPreviewUrl(null);
+      setGeneratedUrl(null);
+    } catch (err: any) {
+      setError(err.message || 'Erreur lors de la sauvegarde');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleReset = () => {
+    setSelectedFile(null);
+    setPreviewUrl(null);
+    setGeneratedUrl(null);
+    setError(null);
   };
 
   return (
@@ -76,16 +99,68 @@ export const AvatarAISelector = () => {
         <div className="flex-1">
           <p className="text-sm font-extrabold">Style Portrait IA</p>
           <p className="text-[11px] font-bold opacity-80">
-            {quota.canGenerate 
+            {quota.canGenerate
               ? `Il vous reste ${quota.remaining} tentative${quota.remaining > 1 ? 's' : ''} aujourd'hui.`
               : "Revenez demain pour de nouveaux essais !"}
           </p>
         </div>
       </div>
 
-      {!success ? (
+      {/* Generated preview → confirm or retry */}
+      {generatedUrl ? (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="space-y-4"
+        >
+          <div className="relative aspect-square w-full max-w-[220px] mx-auto">
+            <div className="w-full h-full rounded-[2.5rem] overflow-hidden shadow-lg border-4 border-orange-200">
+              <img src={generatedUrl} alt="Avatar généré" className="w-full h-full object-cover" />
+            </div>
+          </div>
+
+          <div className="text-center">
+            <h4 className="text-sm font-black text-gray-800">Votre nouveau portrait</h4>
+            <p className="text-[11px] text-gray-500 mt-1">Ça vous plaît ? Enregistrez-le ou réessayez.</p>
+          </div>
+
+          <div className="flex gap-3">
+            <button
+              onClick={handleReset}
+              className="flex-1 h-12 bg-gray-100 text-gray-600 rounded-2xl font-bold flex items-center justify-center gap-2 active:scale-95 transition-all"
+            >
+              <RefreshCw size={16} />
+              Réessayer
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={isSaving}
+              className="flex-1 h-12 bg-orange-500 text-white rounded-2xl font-bold flex items-center justify-center gap-2 active:scale-95 transition-all shadow-premium"
+            >
+              {isSaving ? (
+                <Loader2 className="animate-spin" size={18} />
+              ) : (
+                <>
+                  <Check size={18} />
+                  Enregistrer
+                </>
+              )}
+            </button>
+          </div>
+        </motion.div>
+      ) : (
         <div className="space-y-4">
-          {/* Preview or Upload Area */}
+          {/* Current AI avatar display */}
+          {currentAiUrl && !selectedFile && (
+            <div className="flex flex-col items-center gap-2">
+              <div className="w-24 h-24 rounded-[1.8rem] overflow-hidden shadow-md border-2 border-orange-100">
+                <img src={currentAiUrl} alt="Avatar actuel" className="w-full h-full object-cover" />
+              </div>
+              <p className="text-[10px] text-gray-400 font-bold">Avatar IA actuel</p>
+            </div>
+          )}
+
+          {/* Upload Area */}
           <div className="relative aspect-square w-full max-w-[200px] mx-auto group">
             <div className="absolute inset-0 bg-gray-100 rounded-[2.5rem] border-4 border-dashed border-gray-200 flex flex-col items-center justify-center overflow-hidden transition-all group-hover:border-orange-300">
               {previewUrl ? (
@@ -97,10 +172,10 @@ export const AvatarAISelector = () => {
                 </div>
               )}
             </div>
-            
-            <input 
-              type="file" 
-              accept="image/*" 
+
+            <input
+              type="file"
+              accept="image/*"
               capture="user"
               className="absolute inset-0 opacity-0 cursor-pointer"
               onChange={handleFileChange}
@@ -145,28 +220,6 @@ export const AvatarAISelector = () => {
             )}
           </button>
         </div>
-      ) : (
-        <motion.div 
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="py-12 flex flex-col items-center text-center space-y-4"
-        >
-          <div className="w-20 h-20 bg-green-100 text-green-500 rounded-3xl flex items-center justify-center">
-            <CheckCircle2 size={40} />
-          </div>
-          <div>
-            <h3 className="text-lg font-black text-gray-800 tracking-tight">Portrait Généré !</h3>
-            <p className="text-xs text-gray-500 font-bold mt-1 px-8">
-              Votre nouvel avatar IA a été appliqué à votre profil avec succès.
-            </p>
-          </div>
-          <button 
-            onClick={() => setSuccess(false)}
-            className="text-orange-500 font-extrabold text-xs uppercase tracking-widest mt-4"
-          >
-            Refaire un essai
-          </button>
-        </motion.div>
       )}
 
       {/* Conseils */}

@@ -98,13 +98,12 @@ export const AvatarAIService = {
   },
 
   /**
-   * Envoie l'image au VPS et met à jour Firestore
+   * Envoie l'image au VPS pour génération (sans sauvegarder dans Firestore).
+   * Met à jour uniquement le quota. Retourne l'URL de preview.
    */
-  async generateAvatar(userId: string, imageFile: File): Promise<string> {
-    // 1. Redimensionnement
+  async generatePreview(userId: string, imageFile: File): Promise<string> {
     const blob = await this.resizeImage(imageFile);
-    
-    // 2. Envoi au VPS
+
     const formData = new FormData();
     formData.append('file', blob, 'portrait.jpg');
 
@@ -119,22 +118,29 @@ export const AvatarAIService = {
       throw new Error(result.message || 'Erreur lors de la génération');
     }
 
-    // 3. Mise à jour Firestore
+    // Mettre à jour uniquement le quota
     const userRef = doc(db, 'accounts', userId);
     const today = new Date().toISOString().split('T')[0];
-    
-    // Obtenir l'état actuel pour savoir si on reset le compteur
     const snap = await getDoc(userRef);
     const lastGenDate = snap.data()?.lastAvatarGenDate || '';
 
     await updateDoc(userRef, {
-      'avatar.aiUrl': result.url,
-      'avatar.avatarType': 'ai',
       lastAvatarGenDate: today,
       avatarGenCount: lastGenDate === today ? increment(1) : 1,
-      updatedAt: serverTimestamp()
     });
 
     return result.url;
+  },
+
+  /**
+   * Sauvegarde l'avatar IA choisi dans Firestore (après validation utilisateur)
+   */
+  async saveAvatar(userId: string, aiUrl: string): Promise<void> {
+    const userRef = doc(db, 'accounts', userId);
+    await updateDoc(userRef, {
+      'avatar.aiUrl': aiUrl,
+      'avatar.avatarType': 'ai',
+      updatedAt: serverTimestamp()
+    });
   }
 };
