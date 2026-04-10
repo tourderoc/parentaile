@@ -114,7 +114,7 @@ export const AvatarAIService = {
     return result.url;
   },
 
-  async saveAiAvatar(userId: string, aiUrl: string): Promise<void> {
+  async saveAvatar(userId: string, aiUrl: string): Promise<void> {
     const userRef = doc(db, 'accounts', userId);
     await updateDoc(userRef, {
       'avatar.aiUrl': aiUrl,
