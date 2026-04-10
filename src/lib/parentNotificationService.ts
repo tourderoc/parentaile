@@ -85,6 +85,19 @@ export async function sendParentNotification(
   }
 }
 
+// ========== PURGE ==========
+
+const MAX_NOTIFS = 10;
+
+async function purgeOldParentNotifs(docs: { id: string }[]): Promise<void> {
+  if (docs.length <= MAX_NOTIFS) return;
+  // Les docs sont triés par createdAt desc → les plus anciens sont en fin de tableau
+  const toDelete = docs.slice(MAX_NOTIFS);
+  await Promise.all(
+    toDelete.map(d => deleteDoc(doc(db, 'parentNotifications', d.id)))
+  );
+}
+
 // ========== LECTURE ==========
 
 export function onParentNotifications(
@@ -103,7 +116,13 @@ export function onParentNotifications(
       ...d.data(),
       createdAt: d.data().createdAt?.toDate?.() || new Date(),
     })) as ParentNotification[];
-    callback(notifs);
+
+    // Purge silencieuse : garde les 10 plus récentes, supprime les anciennes
+    if (snapshot.docs.length > MAX_NOTIFS) {
+      purgeOldParentNotifs(snapshot.docs.map(d => ({ id: d.id })));
+    }
+
+    callback(notifs.slice(0, MAX_NOTIFS));
   }, (err) => {
     console.error('Erreur écoute notifications parent:', err);
     callback([]);

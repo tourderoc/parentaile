@@ -18,12 +18,21 @@ import {
   orderBy,
   onSnapshot,
   updateDoc,
+  deleteDoc,
   doc,
   getDocs,
   Timestamp,
   Unsubscribe
 } from 'firebase/firestore';
 import { db } from './firebase';
+
+const MAX_NOTIFS = 10;
+
+async function purgeOldDoctorNotifs(ids: string[]): Promise<void> {
+  if (ids.length <= MAX_NOTIFS) return;
+  const toDelete = ids.slice(MAX_NOTIFS);
+  await Promise.all(toDelete.map(id => deleteDoc(doc(db, 'notifications', id))));
+}
 
 // ============================================
 // TYPES
@@ -86,7 +95,12 @@ export function subscribeToNotifications(
       };
     });
 
-    callback(notifications);
+    // Purge silencieuse : garde les 10 plus récentes, supprime les anciennes
+    if (snapshot.docs.length > MAX_NOTIFS) {
+      purgeOldDoctorNotifs(snapshot.docs.map(d => d.id));
+    }
+
+    callback(notifications.slice(0, MAX_NOTIFS));
   }, (error) => {
     console.error('[DoctorNotifications] Erreur écoute:', error);
     callback([]);
