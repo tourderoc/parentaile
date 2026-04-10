@@ -1,8 +1,10 @@
-import { db } from './firebase';
+import { db, auth } from './firebase';
 import { doc, updateDoc, getDoc, serverTimestamp, increment } from 'firebase/firestore';
+import { isAdminUser } from './rateLimiting';
 
 const VPS_URL = 'https://avatar.parentaile.fr';
 const DAILY_LIMIT = 2;
+const ADMIN_DAILY_LIMIT = 999;
 
 export interface QuotaStatus {
   canGenerate: boolean;
@@ -16,24 +18,27 @@ export const AvatarAIService = {
    */
   async checkQuota(userId: string): Promise<QuotaStatus> {
     try {
+      const email = auth.currentUser?.email;
+      const isAdmin = isAdminUser(email);
+      const limit = isAdmin ? ADMIN_DAILY_LIMIT : DAILY_LIMIT;
+
       const userRef = doc(db, 'accounts', userId);
       const snap = await getDoc(userRef);
-      
+
       if (!snap.exists()) return { canGenerate: false, remaining: 0, reason: 'Utilisateur non trouvé' };
-      
+
       const data = snap.data();
       const today = new Date().toISOString().split('T')[0];
       const lastGenDate = data.lastAvatarGenDate || '';
       const count = data.avatarGenCount || 0;
 
       if (lastGenDate !== today) {
-        // Nouvelle journée
-        return { canGenerate: true, remaining: DAILY_LIMIT };
+        return { canGenerate: true, remaining: limit };
       }
 
-      const remaining = Math.max(0, DAILY_LIMIT - count);
-      return { 
-        canGenerate: remaining > 0, 
+      const remaining = Math.max(0, limit - count);
+      return {
+        canGenerate: remaining > 0,
         remaining,
         reason: remaining > 0 ? undefined : 'Quota quotidien atteint (2/jour)'
       };
