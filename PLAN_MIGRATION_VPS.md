@@ -10,6 +10,39 @@ Firebase fonctionne mais présente deux problèmes structurels :
 
 ---
 
+## Principe de transition : dual-write temporaire puis coupure nette
+
+Le dual-write (écriture simultanée VPS + Firebase) est un **filet de sécurité temporaire**, pas une architecture cible. Une brique validée = Firebase coupée pour cette brique. Sans date de fin, on paie deux systèmes pour rien.
+
+### Processus de validation pour chaque brique
+
+```
+Etape 1 — Implémenter le service VPS
+Etape 2 — Dual-write actif (VPS + Firebase en parallèle)
+           Durée : minimum 7 jours en production
+Etape 3 — Vérifier l'intégrité des données
+           Comparer VPS vs Firebase : même contenu, rien de manquant
+Etape 4 — Couper l'écriture Firebase (VPS-only)
+           Garder la LECTURE Firebase en fallback
+           Durée : 3-5 jours supplémentaires
+Etape 5 — Couper Firebase complètement pour cette collection
+Etape 6 — Supprimer le code dual-write (ne pas laisser de code mort)
+```
+
+### Critère de validation avant coupure Firebase
+
+Pour couper Firebase sur un service, les trois conditions suivantes doivent être remplies :
+
+1. **Données intègres** — comparaison VPS vs Firebase sans écart constaté
+2. **7 jours sans incident** — pas de crash, pas de perte de données, logs propres
+3. **Rollback possible en 5 minutes** — un changement de variable d'environnement suffit à rebascuer sur Firebase, sans redéploiement
+
+### Rollback d'urgence
+
+Chaque service expose une variable `STORAGE_BACKEND=vps|firebase`. Si un problème survient après coupure, passer `STORAGE_BACKEND=firebase` rebranche l'ancienne source immédiatement.
+
+---
+
 ## Ce qu'on garde dans Firebase à vie
 
 | Service | Raison |
@@ -84,6 +117,10 @@ Ces 3 collections (`tokens`, `messages`, `notifications`) forment un **pont bidi
 POST /livekit/token   → génère un token signé pour {uid, groupeId, isAnimateur}
 ```
 
+**Validation et coupure Firebase :**
+- Pas de collection Firestore impliquée — coupure immédiate après 7 jours sans incident
+- Supprimer la Cloud Function `getLiveKitToken` une fois validé
+
 ---
 
 ### 2B. Service Notifications VPS (Parent'aile interne)
@@ -102,6 +139,11 @@ DELETE /notifications/{uid}/{id}         → supprime
 
 **Déclenchement :** cron systemd sur VPS (remplace Cloud Scheduler)
 
+**Validation et coupure Firebase :**
+- Dual-write 7 jours sur `parentNotifications`
+- Vérifier que toutes les notifications apparaissent bien côté utilisateur
+- Couper `parentNotifications` Firebase → supprimer Cloud Function `sendVocalReminders` et Cloud Scheduler
+
 ---
 
 ### 2C. Service Badges VPS
@@ -114,6 +156,10 @@ DELETE /notifications/{uid}/{id}         → supprime
 POST /badges/{uid}/evaluate   → recalcule le badge selon les points actuels
 GET  /badges/{uid}            → retourne le badge actuel
 ```
+
+**Validation et coupure Firebase :**
+- Pas de collection dédiée — logique pure, coupure immédiate après 7 jours sans incident
+- Retirer la logique de badges des Cloud Functions
 
 ---
 
@@ -145,11 +191,13 @@ parent_notifications (id, recipient_uid, type, title, body, read, groupe_id, cre
 participation_history (uid, groupe_id, role, duration_minutes, points_earned, participated_at)
 ```
 
-### Migration des données
+### Migration des données et coupure Firebase
 
-- Chaque collection Firestore exportée et importée via script one-shot
-- Dual-read pendant la transition (VPS + Firebase en parallèle)
-- Retrait Firebase collection par collection une fois validé
+- Script one-shot d'export Firestore → PostgreSQL pour chaque collection
+- Dual-write 7 jours minimum par collection
+- Vérification intégrité : script de comparaison VPS vs Firebase avant coupure
+- Coupure collection par collection — ne jamais tout couper d'un coup
+- Ordre recommandé : `parent_notifications` → `participation_history` → `groupes` → `accounts`
 
 ### Remplacement des listeners temps réel
 
@@ -275,6 +323,7 @@ VPS Hostinger (145.223.117.145)
 2. **Toujours des logs** — chaque service écrit dans `logs/service.log`
 3. **Toujours des backups** — toute écriture crée une copie datée
 4. **Clé API obligatoire** — aucun endpoint public sans authentification
-5. **Dual-write pendant la transition** — écrire VPS + Firebase en parallèle, retirer Firebase une fois validé
-6. **Tuple return pattern** — `(success, result, error)` pour cohérence avec MedCompanion (C#)
-7. **Ne jamais bloquer les deux apps** — chaque étape doit être déployable sans coordination simultanée, sauf la Phase 4 (Bridge)
+5. **Dual-write = temporaire** — filet de sécurité de 7 jours maximum, jamais permanent. Une brique validée = code dual-write supprimé, Firebase coupé pour cette collection.
+6. **Variable de bascule** — chaque service expose `STORAGE_BACKEND=vps|firebase` pour rollback d'urgence en 5 minutes sans redéploiement
+7. **Tuple return pattern** — `(success, result, error)` pour cohérence avec MedCompanion (C#)
+8. **Ne jamais bloquer les deux apps** — chaque étape déployable sans coordination simultanée, sauf Phase 4 (Bridge)
