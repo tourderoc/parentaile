@@ -50,21 +50,21 @@ export const UserAvatar: React.FC<UserAvatarProps> = ({ config, size = 48, class
 
   // Handle AI Avatar from VPS (only if avatarType is 'ai')
   if (config.avatarType === 'ai' && config.aiUrl) {
+    const bustUrl = config.aiUrl;
     return (
-      <div 
+      <div
         className={`overflow-hidden shadow-inner bg-gray-100 ${className}`}
-        style={{ 
-          width: size, 
-          height: size, 
+        style={{
+          width: size,
+          height: size,
           borderRadius: size * 0.3,
         }}
       >
-        <img 
-          src={config.aiUrl} 
-          alt="Avatar IA" 
+        <img
+          src={bustUrl}
+          alt="Avatar IA"
           className="w-full h-full object-cover"
           onError={(e) => {
-            // Fallback to initials or default if VPS image fails
             (e.target as HTMLImageElement).src = `https://api.dicebear.com/7.x/initials/svg?seed=User`;
           }}
         />

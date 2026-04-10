@@ -59,8 +59,9 @@ export const AvatarAISelector = ({ onPreviewGenerated, onSaved, onReset }: Avata
 
     try {
       const url = await AvatarAIService.generatePreview(currentUser.uid, selectedFile);
-      setGeneratedUrl(url);
-      onPreviewGenerated?.(url);
+      const freshUrl = `${url}?t=${Date.now()}`;
+      setGeneratedUrl(freshUrl);
+      onPreviewGenerated?.(freshUrl);
     } catch (err: any) {
       console.error(err);
       setError(err.message || 'La génération a échoué. Réessayez plus tard.');
