@@ -83,7 +83,9 @@ export const EspaceSettings = () => {
   const [avatarStep, setAvatarStep] = useState(0);
   const [recentConfigs, setRecentConfigs] = useState<AvatarConfig[]>([]);
   const AVATAR_STEPS = ['Style', 'Inspiration', 'Fond'];
-  const [avatarMode, setAvatarMode] = useState<'static' | 'ai'>('static');
+  const [avatarMode, setAvatarMode] = useState<'static' | 'ai'>(
+    contextAvatar?.avatarType === 'ai' ? 'ai' : 'static'
+  );
 
   useEffect(() => {
     loadData();
@@ -100,6 +102,7 @@ export const EspaceSettings = () => {
   useEffect(() => {
     if (contextAvatar) {
       setAvatarConfig(contextAvatar);
+      setAvatarMode(contextAvatar.avatarType === 'ai' ? 'ai' : 'static');
     }
   }, [contextAvatar]);
 
@@ -153,7 +156,10 @@ export const EspaceSettings = () => {
       const user = auth.currentUser;
       if (!user) throw new Error('Non connecte');
       const accountRef = doc(db, 'accounts', user.uid);
-      await updateDoc(accountRef, { avatar: avatarConfig });
+      // Clean config: remove AI fields when saving a static avatar
+      const cleanConfig = { ...avatarConfig, avatarType: 'static', aiUrl: '' };
+      await updateDoc(accountRef, { avatar: cleanConfig });
+      setAvatarConfig(cleanConfig);
       setAvatarSuccess('Avatar enregistre !');
       setTimeout(() => setAvatarSuccess(null), 3000);
     } catch (err) {

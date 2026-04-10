@@ -48,8 +48,8 @@ export const UserAvatar: React.FC<UserAvatarProps> = ({ config, size = 48, class
     );
   }
 
-  // Handle AI Avatar from VPS
-  if (config.aiUrl) {
+  // Handle AI Avatar from VPS (only if avatarType is 'ai')
+  if (config.avatarType === 'ai' && config.aiUrl) {
     return (
       <div 
         className={`overflow-hidden shadow-inner bg-gray-100 ${className}`}
