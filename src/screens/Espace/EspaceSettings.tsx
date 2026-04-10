@@ -98,11 +98,10 @@ export const EspaceSettings = () => {
     }
   }, [navigate]);
 
-  // Sync avatar config if it changes in context (e.g. after AI generation)
+  // Sync avatar config from context (only update the config, not the mode tab)
   useEffect(() => {
     if (contextAvatar) {
       setAvatarConfig(contextAvatar);
-      setAvatarMode(contextAvatar.avatarType === 'ai' ? 'ai' : 'static');
     }
   }, [contextAvatar]);
 
