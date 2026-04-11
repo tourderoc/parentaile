@@ -19,7 +19,11 @@ export const AvatarAIService = {
    */
   async checkQuota(userId: string): Promise<QuotaStatus> {
     try {
-      const response = await fetch(`${VPS_URL}/avatar/${userId}/quota`, {
+      const email = auth.currentUser?.email || '';
+      const url = new URL(`${VPS_URL}/avatar/${userId}/quota`);
+      if (email) url.searchParams.append('email', email);
+
+      const response = await fetch(url.toString(), {
         headers: vpsHeaders(),
       });
 
@@ -28,6 +32,7 @@ export const AvatarAIService = {
       }
 
       const quota = await response.json();
+      console.log('[Avatar] Quota check - userId:', userId, 'email:', email, 'result:', quota);
       return {
         canGenerate: quota.canGenerate,
         remaining: quota.remaining,
@@ -85,24 +90,35 @@ export const AvatarAIService = {
    * N'écrit plus sur Firebase - le VPS incrémente automatiquement
    */
   async generatePreview(userId: string, imageFile: File): Promise<string> {
+    const email = auth.currentUser?.email || '';
+    console.log('[Avatar] generatePreview START - userId:', userId, 'email:', email);
+
     const blob = await this.resizeImage(imageFile);
     const formData = new FormData();
     formData.append('file', blob, 'portrait.jpg');
 
-    const response = await fetch(`${VPS_URL}/avatar/${userId}/generate`, {
+    const url = new URL(`${VPS_URL}/avatar/${userId}/generate`);
+    if (email) url.searchParams.append('email', email);
+    console.log('[Avatar] POST URL:', url.toString());
+
+    const response = await fetch(url.toString(), {
       method: 'POST',
       headers: vpsHeaders(),
       body: formData,
     });
 
     const result = await response.json();
+    console.log('[Avatar] VPS Response:', result);
+
     if (result.status !== 'success') throw new Error(result.message || 'Erreur lors de la génération');
+
+    const finalUrl = `${result.url}?t=${Date.now()}`;
+    console.log('[Avatar] Final URL (with timestamp):', finalUrl);
 
     // Quota est maintenant géré au VPS - pas de mise à jour Firebase
     // Le VPS incrémente automatiquement via SQLite
 
-    // Ajoute un timestamp pour invalider le cache navigateur
-    return `${result.url}?t=${Date.now()}`;
+    return finalUrl;
   },
 
   async saveAvatar(userId: string, aiUrl: string): Promise<void> {
