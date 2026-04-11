@@ -3129,8 +3129,52 @@ const TooEarlyScreen: React.FC<{
   </div>
 );
 
+const TooLateScreen: React.FC<{
+  groupeTitre: string;
+  onBack: () => void;
+}> = ({ groupeTitre, onBack }) => (
+  <div className="h-screen bg-[#FFFBF0] flex flex-col items-center justify-center px-6 text-center">
+    <motion.div
+      initial={{ scale: 0.8, opacity: 0 }}
+      animate={{ scale: 1, opacity: 1 }}
+      transition={{ type: 'spring', damping: 20 }}
+      className="flex flex-col items-center w-full"
+    >
+      <div className="w-20 h-20 bg-orange-50 rounded-full flex items-center justify-center mb-6">
+        <Clock size={36} className="text-orange-400" />
+      </div>
+
+      <h2 className="text-xl font-extrabold text-gray-800">Session déjà commencée</h2>
+      <p className="text-sm text-gray-500 font-medium mt-3 max-w-xs leading-relaxed">
+        La session "{groupeTitre}" a commencé il y a plus de 15 minutes.
+        Il n'est plus possible de rejoindre le groupe en cours de route.
+      </p>
+
+      <div className="bg-white rounded-2xl p-5 shadow-sm border border-orange-100 w-full max-w-xs mt-8">
+        <div className="flex items-start gap-3 text-left">
+          <div className="w-10 h-10 bg-orange-500/10 rounded-full flex items-center justify-center shrink-0 mt-0.5">
+            <AlertTriangle size={18} className="text-orange-500" />
+          </div>
+          <p className="text-[13px] font-medium text-gray-600 leading-relaxed">
+            Pour proteger la dynamique du groupe et le bien-être de tous les participants, les arrivées tardives ne sont pas autorisées après 15 minutes.
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-10 w-full max-w-xs">
+        <button
+          onClick={onBack}
+          className="w-full py-4 bg-gray-200 text-gray-600 rounded-2xl font-extrabold text-base active:scale-[0.98] transition-all"
+        >
+          Retour a mon espace
+        </button>
+      </div>
+    </motion.div>
+  </div>
+);
+
 // ========== Flow steps ==========
-type FlowStep = 'loading' | 'too_early' | 'password' | 'charte' | 'prenom' | 'waiting' | 'room' | 'reconnecting' | 'end' | 'evaluation';
+type FlowStep = 'loading' | 'too_early' | 'too_late' | 'password' | 'charte' | 'prenom' | 'waiting' | 'room' | 'reconnecting' | 'end' | 'evaluation';
 
 // ========== Heart Rating ==========
 const HeartRating: React.FC<{
@@ -3546,6 +3590,21 @@ export const SalleVocalePage = () => {
           return;
         }
 
+        // Late join check: session active since > 15 min → blocked (except animateur)
+        const rawSessionState = data.sessionState;
+        if (rawSessionState?.sessionActive === true && rawSessionState?.sessionStartedAt) {
+          const startTime = typeof rawSessionState.sessionStartedAt.toDate === 'function'
+            ? rawSessionState.sessionStartedAt.toDate()
+            : new Date(rawSessionState.sessionStartedAt);
+          const minutesSinceStart = (Date.now() - startTime.getTime()) / 60000;
+          const currentUid = auth.currentUser?.uid;
+          const isAnim = currentUid === (rawSessionState.currentAnimateurUid || data.createurUid);
+          if (minutesSinceStart > 15 && !isAnim) {
+            setStep('too_late');
+            return;
+          }
+        }
+
         const currentUser = auth.currentUser;
         const isBannedInArray = (data.participants || []).some((p: any) => p.uid === currentUser?.uid && p.banni);
         const isBannedInExits = currentUser ? await isParticipantBanned(groupeId, currentUser.uid) : false;
@@ -3761,6 +3820,15 @@ export const SalleVocalePage = () => {
         groupeTitre={groupeTitre}
         participantsCount={groupeParticipants.length}
         dateVocal={dateVocal}
+        onBack={handleNavigateAway}
+      />
+    );
+  }
+
+  if (step === 'too_late') {
+    return (
+      <TooLateScreen
+        groupeTitre={groupeTitre}
         onBack={handleNavigateAway}
       />
     );
