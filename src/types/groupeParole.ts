@@ -28,11 +28,11 @@ export interface StructureEtape {
 }
 
 export const STRUCTURE_DEFAUT: StructureEtape[] = [
-  { label: 'Présentations', dureeMinutes: 5 },
-  { label: 'Partage du vécu', dureeMinutes: 10 },
-  { label: 'Tour de parole', dureeMinutes: 15 },
-  { label: 'Discussion libre', dureeMinutes: 10 },
-  { label: 'Clôture', dureeMinutes: 5 },
+  { label: 'Présentations', dureeMinutes: 5, micMode: 'free' },
+  { label: 'Partage du vécu', dureeMinutes: 10, micMode: 'muted' },
+  { label: 'Tour de parole', dureeMinutes: 15, micMode: 'muted' },
+  { label: 'Discussion libre', dureeMinutes: 10, micMode: 'free' },
+  { label: 'Clôture', dureeMinutes: 5, micMode: 'muted' },
 ];
 
 export type GroupeStatus = 'scheduled' | 'cancelled' | 'in_progress' | 'completed' | 'reprogrammed';
