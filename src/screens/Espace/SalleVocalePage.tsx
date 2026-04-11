@@ -1495,6 +1495,15 @@ const RoomContent: React.FC<{
           return;
         }
 
+        // give_word: lower hand for target on ALL screens (not just target)
+        if (msg.action === 'give_word' && msg.target) {
+          setRaisedHands((prev) => {
+            const next = new Set(prev);
+            next.delete(msg.target);
+            return next;
+          });
+        }
+
         if (msg.target === localParticipant.identity) {
           if (msg.action === 'mute') {
             localParticipant.setMicrophoneEnabled(false);
