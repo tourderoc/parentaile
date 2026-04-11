@@ -1146,12 +1146,12 @@ const RoomContent: React.FC<{
   const [micLocked, setMicLocked] = useState(false);
   // firestoreSession is now provided by props from parent
 
-  // Warn when exactly 3 participants (1 local + 2 remote) — next departure = cancellation
+  // Warn when exactly 4 participants (1 local + 3 remote) — next departure = exactly at minimum (3)
   const prevParticipantCountRef = useRef(participants.length);
   useEffect(() => {
     const totalCount = 1 + participants.length; // local + remote
     const prevTotal = 1 + prevParticipantCountRef.current;
-    if (totalCount === 3 && prevTotal > 3 && firestoreSession?.sessionActive) {
+    if (totalCount === 4 && prevTotal > 4 && firestoreSession?.sessionActive) {
       setWarnToast('Attention : si un participant quitte, le groupe sera annulé (minimum 3)');
       setTimeout(() => setWarnToast(null), 6000);
     }
