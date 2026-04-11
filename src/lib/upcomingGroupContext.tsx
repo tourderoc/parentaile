@@ -118,18 +118,14 @@ export const UpcomingGroupProvider = ({ children }: { children: React.ReactNode 
     return unsub;
   }, []);
 
-  // Groupes listener
+  // Groupes listener — toujours actif, même sans connexion
   useEffect(() => {
-    if (!uid) {
-      setGroupes([]);
-      return;
-    }
     const unsub = onGroupesParole((g) => {
       setGroupes(g);
       setGroupesLoading(false);
     });
     return unsub;
-  }, [uid]);
+  }, []);
 
   // Recalcul toutes les 30s
   useEffect(() => {
