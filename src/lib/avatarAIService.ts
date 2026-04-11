@@ -1,12 +1,9 @@
 import { db, auth } from './firebase';
-import { doc, updateDoc, getDoc, serverTimestamp, increment } from 'firebase/firestore';
-import { isAdminUser } from './rateLimiting';
+import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import type { AvatarConfig } from './avatarTypes';
 
 const VPS_URL = 'https://avatar.parentaile.fr';
 const API_KEY = import.meta.env.VITE_AVATAR_API_KEY as string;
-const DAILY_LIMIT = 2;
-const ADMIN_DAILY_LIMIT = 999;
 
 export interface QuotaStatus {
   canGenerate: boolean;
@@ -17,28 +14,24 @@ export interface QuotaStatus {
 const vpsHeaders = () => ({ 'X-Api-Key': API_KEY });
 
 export const AvatarAIService = {
+  /**
+   * Vérifie le quota auprès du VPS (Étape 1 migration - quota sur SQLite VPS)
+   */
   async checkQuota(userId: string): Promise<QuotaStatus> {
     try {
-      const email = auth.currentUser?.email;
-      const isAdmin = isAdminUser(email);
-      const limit = isAdmin ? ADMIN_DAILY_LIMIT : DAILY_LIMIT;
+      const response = await fetch(`${VPS_URL}/avatar/${userId}/quota`, {
+        headers: vpsHeaders(),
+      });
 
-      const userRef = doc(db, 'accounts', userId);
-      const snap = await getDoc(userRef);
-      if (!snap.exists()) return { canGenerate: false, remaining: 0, reason: 'Utilisateur non trouvé' };
+      if (!response.ok) {
+        return { canGenerate: false, remaining: 0, reason: 'Erreur serveur quota' };
+      }
 
-      const data = snap.data();
-      const today = new Date().toISOString().split('T')[0];
-      const lastGenDate = data.lastAvatarGenDate || '';
-      const count = data.avatarGenCount || 0;
-
-      if (lastGenDate !== today) return { canGenerate: true, remaining: limit };
-
-      const remaining = Math.max(0, limit - count);
+      const quota = await response.json();
       return {
-        canGenerate: remaining > 0,
-        remaining,
-        reason: remaining > 0 ? undefined : 'Quota quotidien atteint (2/jour)',
+        canGenerate: quota.canGenerate,
+        remaining: quota.remaining,
+        reason: quota.reason,
       };
     } catch (error) {
       console.error('Error checking quota:', error);
@@ -87,6 +80,10 @@ export const AvatarAIService = {
     });
   },
 
+  /**
+   * Génère un avatar. Le quota est géré au VPS (Étape 1 migration)
+   * N'écrit plus sur Firebase - le VPS incrémente automatiquement
+   */
   async generatePreview(userId: string, imageFile: File): Promise<string> {
     const blob = await this.resizeImage(imageFile);
     const formData = new FormData();
@@ -101,17 +98,10 @@ export const AvatarAIService = {
     const result = await response.json();
     if (result.status !== 'success') throw new Error(result.message || 'Erreur lors de la génération');
 
-    // Mise à jour quota Firebase uniquement
-    const userRef = doc(db, 'accounts', userId);
-    const today = new Date().toISOString().split('T')[0];
-    const snap = await getDoc(userRef);
-    const lastGenDate = snap.data()?.lastAvatarGenDate || '';
-    await updateDoc(userRef, {
-      lastAvatarGenDate: today,
-      avatarGenCount: lastGenDate === today ? increment(1) : 1,
-    });
+    // Quota est maintenant géré au VPS - pas de mise à jour Firebase
+    // Le VPS incrémente automatiquement via SQLite
 
-    // Ajoute un timestamp pour invalider le cache navigateur à chaque nouvelle génération
+    // Ajoute un timestamp pour invalider le cache navigateur
     return `${result.url}?t=${Date.now()}`;
   },
 
