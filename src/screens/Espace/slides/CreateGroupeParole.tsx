@@ -25,6 +25,7 @@ import {
   Star,
   ChevronUp,
   ChevronDown,
+  Share2,
 } from 'lucide-react';
 import { auth, db } from '../../../lib/firebase';
 import { doc, getDoc } from 'firebase/firestore';
@@ -96,6 +97,8 @@ export const CreateGroupeParole: React.FC<CreateGroupeParoleProps> = ({ onBack, 
   // Submit
   const [isPublishing, setIsPublishing] = useState(false);
   const [isPublished, setIsPublished] = useState(false);
+  const [createdGroupeId, setCreatedGroupeId] = useState<string | null>(null);
+  const [copyToast, setCopyToast] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -393,7 +396,7 @@ export const CreateGroupeParole: React.FC<CreateGroupeParoleProps> = ({ onBack, 
 
       const dateTime = new Date(`${dateVocal}T${heureVocal}:00`);
 
-      await createGroupeParole({
+      const groupeId = await createGroupeParole({
         titre: titre.trim(),
         description: description.trim(),
         theme: selectedTheme!,
@@ -404,8 +407,8 @@ export const CreateGroupeParole: React.FC<CreateGroupeParoleProps> = ({ onBack, 
         ...(structureType === 'structuree' ? { structure } : {}),
       });
 
+      setCreatedGroupeId(groupeId);
       setIsPublished(true);
-      setTimeout(() => onBack(), 2500);
     } catch (err) {
       console.error('Erreur création groupe:', err);
       setError('Impossible de créer le groupe. Réessayez.');
@@ -415,21 +418,63 @@ export const CreateGroupeParole: React.FC<CreateGroupeParoleProps> = ({ onBack, 
 
   // --- Success screen ---
   if (isPublished) {
+    const shareUrl = `https://parentaile.fr/espace/groupes/${createdGroupeId}`;
+
+    const handleShare = async () => {
+      if (navigator.share) {
+        try {
+          await navigator.share({
+            title: titre.trim(),
+            text: `Rejoins mon groupe de parole "${titre.trim()}" sur Parent'aile`,
+            url: shareUrl,
+          });
+        } catch { /* annulé */ }
+      } else {
+        await navigator.clipboard.writeText(shareUrl);
+        setCopyToast(true);
+        setTimeout(() => setCopyToast(false), 2500);
+      }
+    };
+
     return createPortal(
       <div className="fixed inset-0 bg-[#FFFBF0] flex items-center justify-center p-6 z-[100]">
         <motion.div
           initial={{ scale: 0.8, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
-          className="text-center space-y-6"
+          className="flex flex-col items-center w-full max-w-sm space-y-6"
         >
           <div className="w-24 h-24 bg-green-100 rounded-[2rem] flex items-center justify-center mx-auto shadow-premium transform rotate-6">
             <Check className="w-12 h-12 text-green-500" />
           </div>
-          <div>
+
+          <div className="text-center">
             <h2 className="text-3xl font-extrabold text-gray-800 tracking-tight">Groupe créé !</h2>
-            <p className="text-gray-500 mt-2 font-medium">Votre groupe de parole est maintenant visible.</p>
+            <p className="text-gray-500 mt-2 font-medium leading-relaxed">
+              Votre groupe de parole est maintenant visible.<br />
+              Invitez d'autres parents à rejoindre.
+            </p>
           </div>
-          <p className="text-xs font-bold text-gray-400 uppercase tracking-widest pt-4">Retour aux groupes...</p>
+
+          <div className="w-full space-y-3 pt-2">
+            <button
+              onClick={handleShare}
+              className="w-full py-4 bg-gradient-to-r from-orange-500 to-amber-500 text-white rounded-2xl font-extrabold text-base shadow-xl shadow-orange-500/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+            >
+              <Share2 size={18} />
+              Partager le groupe
+            </button>
+
+            {copyToast && (
+              <p className="text-center text-xs font-bold text-green-600">Lien copié dans le presse-papier !</p>
+            )}
+
+            <button
+              onClick={onBack}
+              className="w-full py-3 text-sm font-bold text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              Passer
+            </button>
+          </div>
         </motion.div>
       </div>,
       document.body

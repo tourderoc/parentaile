@@ -437,7 +437,7 @@ export const GroupeDetailPage = () => {
               {groupe.participants.length} participant{groupe.participants.length > 1 ? 's' : ''} · Encore {jours} jour{jours > 1 ? 's' : ''} pour le chat
             </p>
           </div>
-          <button
+          {isGroupeCreateur && <button
             onClick={handleShare}
             className="w-9 h-9 bg-orange-50 rounded-xl flex items-center justify-center hover:bg-orange-100 transition-colors relative"
           >
@@ -447,7 +447,7 @@ export const GroupeDetailPage = () => {
                 Lien copié !
               </span>
             )}
-          </button>
+          </button>}
           <div className={`${colors.bg} px-2.5 py-1 rounded-full`}>
             <span className="text-[9px] font-bold text-white uppercase tracking-wider">
               {THEME_SHORT_LABELS[groupe.theme]}
