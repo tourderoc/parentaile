@@ -2325,12 +2325,13 @@ const WaitingRoom: React.FC<{
   sessionActive: boolean;
   onEnter: () => void;
   onBack: () => void;
+  onGoHome?: () => void;
   onCancelled?: () => void;
   selectedMood?: string | null;
   onMoodChange?: (mood: string) => void;
   lightMode?: boolean;
   onToggleLight?: () => void;
-}> = ({ groupeId, groupeTitre, groupeTheme, dateVocal, participants, createurUid, structureType, structure, sessionPrenom, isAnimateur, sessionActive, onEnter, onBack, onCancelled, selectedMood, onMoodChange, lightMode, onToggleLight }) => {
+}> = ({ groupeId, groupeTitre, groupeTheme, dateVocal, participants, createurUid, structureType, structure, sessionPrenom, isAnimateur, sessionActive, onEnter, onBack, onGoHome, onCancelled, selectedMood, onMoodChange, lightMode, onToggleLight }) => {
   const currentUser = auth.currentUser;
   const [countdown, setCountdown] = useState('');
   const [sessionStarted, setSessionStarted] = useState(false);
@@ -2681,6 +2682,15 @@ const WaitingRoom: React.FC<{
         Retour
       </button>
 
+      {onGoHome && (
+        <button
+          onClick={onGoHome}
+          className={`mt-2 text-xs font-bold transition-colors duration-700 ${lightMode ? 'text-orange-400 hover:text-orange-600' : 'text-orange-300/70 hover:text-orange-300'}`}
+        >
+          Revenir à l'accueil (la bannière vous rappellera)
+        </button>
+      )}
+
       {/* Trigger manuel */}
       <button
         onClick={() => setShowTutorial(true)}
@@ -2709,7 +2719,7 @@ const CharteScreen: React.FC<{
   onContinue: () => void;
   onBack: () => void;
 }> = ({ onContinue, onBack }) => {
-  const [skipNext, setSkipNext] = useState(false);
+  const [skipNext, setSkipNext] = useState(true);
   const currentUser = auth.currentUser;
 
   const handleContinue = async () => {
@@ -3947,6 +3957,7 @@ export const SalleVocalePage = () => {
         sessionActive={sessionState?.sessionActive === true}
         onEnter={handleEnterRoom}
         onBack={() => setStep('prenom')}
+        onGoHome={handleNavigateAway}
         onCancelled={() => {
           sessionCancelledRef.current = true;
           setStep('cancelled');
