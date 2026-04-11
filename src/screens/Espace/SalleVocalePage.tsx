@@ -2322,6 +2322,7 @@ const WaitingRoom: React.FC<{
   structure?: StructureEtape[];
   sessionPrenom: string;
   isAnimateur: boolean;
+  sessionActive: boolean;
   onEnter: () => void;
   onBack: () => void;
   onCancelled?: () => void;
@@ -2329,7 +2330,7 @@ const WaitingRoom: React.FC<{
   onMoodChange?: (mood: string) => void;
   lightMode?: boolean;
   onToggleLight?: () => void;
-}> = ({ groupeId, groupeTitre, groupeTheme, dateVocal, participants, createurUid, structureType, structure, sessionPrenom, isAnimateur, onEnter, onBack, onCancelled, selectedMood, onMoodChange, lightMode, onToggleLight }) => {
+}> = ({ groupeId, groupeTitre, groupeTheme, dateVocal, participants, createurUid, structureType, structure, sessionPrenom, isAnimateur, sessionActive, onEnter, onBack, onCancelled, selectedMood, onMoodChange, lightMode, onToggleLight }) => {
   const currentUser = auth.currentUser;
   const [countdown, setCountdown] = useState('');
   const [sessionStarted, setSessionStarted] = useState(false);
@@ -2399,18 +2400,58 @@ const WaitingRoom: React.FC<{
   const animateurPresent = participants.some((p) => p.uid === createurUid);
   const hasEnoughParticipants = participants.length >= 3;
 
-  // Auto-cancel when session time arrives but not enough participants
+  // Auto-cancel when session time arrives but not enough participants (annulation immédiate)
   const cancelledRef = useRef(false);
   useEffect(() => {
     if (sessionStarted && !hasEnoughParticipants && !cancelledRef.current) {
       cancelledRef.current = true;
       cancelGroup(groupeId, 'Nombre de participants insuffisant (minimum 3)').catch(() => {});
-      // Small delay to let Firestore write complete before showing cancellation screen
-      setTimeout(() => {
-        if (onCancelled) onCancelled();
-      }, 1000);
+      setTimeout(() => { if (onCancelled) onCancelled(); }, 1000);
     }
   }, [sessionStarted, hasEnoughParticipants, groupeId, onCancelled]);
+
+  // Délai de grâce 15 min : inscrits suffisants mais personne ne rejoint la salle
+  const graceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [graceCountdown, setGraceCountdown] = useState<number | null>(null);
+  const GRACE_DELAY_MS = 15 * 60 * 1000; // 15 minutes
+
+  useEffect(() => {
+    // Déclencher seulement si : session démarrée + inscrits suffisants + salle toujours inactive
+    if (sessionStarted && hasEnoughParticipants && !sessionActive && !cancelledRef.current) {
+      if (graceTimerRef.current) return; // Timer déjà en cours
+
+      // Compte à rebours affiché
+      let remaining = GRACE_DELAY_MS / 1000;
+      setGraceCountdown(remaining);
+      const countInterval = setInterval(() => {
+        remaining -= 1;
+        setGraceCountdown(remaining);
+        if (remaining <= 0) clearInterval(countInterval);
+      }, 1000);
+
+      graceTimerRef.current = setTimeout(() => {
+        clearInterval(countInterval);
+        if (!cancelledRef.current && !sessionActive) {
+          cancelledRef.current = true;
+          cancelGroup(groupeId, 'Aucun participant n\'a rejoint la salle dans le délai imparti (15 min)').catch(() => {});
+          setTimeout(() => { if (onCancelled) onCancelled(); }, 1000);
+        }
+      }, GRACE_DELAY_MS);
+    }
+
+    // Si quelqu'un rejoint, annuler le timer de grâce
+    if (sessionActive && graceTimerRef.current) {
+      clearTimeout(graceTimerRef.current);
+      graceTimerRef.current = null;
+      setGraceCountdown(null);
+    }
+
+    return () => {
+      if (graceTimerRef.current) {
+        clearTimeout(graceTimerRef.current);
+      }
+    };
+  }, [sessionStarted, hasEnoughParticipants, sessionActive, groupeId, onCancelled]);
 
   return (
     <div
@@ -2448,12 +2489,27 @@ const WaitingRoom: React.FC<{
       {/* Countdown or Enter button */}
       {sessionStarted ? (
         hasEnoughParticipants ? (
-          <button
-            onClick={onEnter}
-            className="mb-5 px-10 py-4 rounded-2xl font-extrabold text-base shadow-xl active:scale-95 transition-all bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-orange-500/30 animate-pulse"
-          >
-            {isAnimateur ? '🎙️ Lancer la session' : '🎙️ Entrer dans la salle'}
-          </button>
+          <>
+            <button
+              onClick={onEnter}
+              className="mb-5 px-10 py-4 rounded-2xl font-extrabold text-base shadow-xl active:scale-95 transition-all bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-orange-500/30 animate-pulse"
+            >
+              {isAnimateur ? '🎙️ Lancer la session' : '🎙️ Entrer dans la salle'}
+            </button>
+            {/* Délai de grâce : personne n'a rejoint */}
+            {graceCountdown !== null && !sessionActive && (
+              <div className="mb-4 px-6 py-3 rounded-2xl bg-amber-500/15 border border-amber-400/30 text-center">
+                <p className="text-sm font-bold text-amber-300">⏳ En attente de participants</p>
+                <p className="text-xs text-amber-300/70 mt-1">
+                  Annulation automatique dans{' '}
+                  <span className="font-mono font-black">
+                    {String(Math.floor(graceCountdown / 60)).padStart(2, '0')}:{String(graceCountdown % 60).padStart(2, '0')}
+                  </span>
+                  {' '}si personne ne rejoint
+                </p>
+              </div>
+            )}
+          </>
         ) : (
           <div className="mb-5 px-8 py-4 rounded-2xl bg-red-500/15 border border-red-400/30 text-center">
             <p className="text-sm font-bold text-red-300">Participants insuffisants</p>
@@ -3820,6 +3876,7 @@ export const SalleVocalePage = () => {
         structureType={structureType}
         structure={structure}
         sessionPrenom={sessionPrenom}
+        sessionActive={sessionState?.sessionActive === true}
         onEnter={handleEnterRoom}
         onBack={() => setStep('prenom')}
         onCancelled={() => {
