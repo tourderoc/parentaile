@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Users, Mic, Clock, Crown, Calendar, Inbox, Radio, Lock, Heart } from 'lucide-react';
+import { ArrowLeft, Users, Mic, Clock, Crown, Calendar, Inbox, Radio, Lock, Heart, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { auth } from '../../lib/firebase';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
-import { onGroupeRating } from '../../lib/groupeParoleService';
+import { onGroupeRating, cancelGroup } from '../../lib/groupeParoleService';
 import { useUpcomingGroup } from '../../lib/upcomingGroupContext';
 import type { GroupeParole } from '../../types/groupeParole';
 import { THEME_COLORS, THEME_SHORT_LABELS } from '../../types/groupeParole';
@@ -69,7 +69,7 @@ const VocalCartouche: React.FC<{
         initial={{ opacity: 0, y: 5 }}
         animate={{ opacity: 1, y: 0 }}
         className="mt-2 bg-gradient-to-r from-emerald-500 to-emerald-600 rounded-2xl p-3.5 flex items-center gap-3 shadow-lg shadow-emerald-500/20"
-        onClick={(e) => e.stopPropagation()}
+        onClick={(e: React.MouseEvent) => e.stopPropagation()}
       >
         <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center flex-shrink-0">
           <Radio size={20} className="text-white animate-pulse" />
@@ -152,10 +152,21 @@ const MiniGroupeCard: React.FC<{
   isParticipant: boolean;
   onClick: () => void;
   onRejoindreVocal: () => void;
-}> = ({ groupe, isCreateur, isParticipant, onClick, onRejoindreVocal }) => {
+  onCancel?: () => void;
+}> = ({ groupe, isCreateur, isParticipant, onClick, onRejoindreVocal, onCancel }) => {
   const colors = THEME_COLORS[groupe.theme];
   const vocalPassé = groupe.dateVocal.getTime() < Date.now();
   const jours = joursRestants(groupe.dateExpiration);
+
+  // Annulation possible : créateur, session pas encore commencée, < 4 inscrits
+  const canCancel = isCreateur
+    && !vocalPassé
+    && groupe.status !== 'cancelled'
+    && groupe.status !== 'completed'
+    && groupe.status !== 'in_progress'
+    && groupe.participants.filter(p => !p.banni).length < 4;
+
+  const [showConfirm, setShowConfirm] = useState(false);
 
   return (
     <motion.div
@@ -238,6 +249,42 @@ const MiniGroupeCard: React.FC<{
 
       {/* Vocal cartouche — separate from the clickable card */}
       <VocalCartouche groupe={groupe} isParticipant={isParticipant} onRejoindre={onRejoindreVocal} />
+
+      {/* Bouton annulation créateur */}
+      {canCancel && !showConfirm && (
+        <button
+          onClick={() => setShowConfirm(true)}
+          className="mt-2 w-full flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-bold text-red-400 bg-red-50 border border-red-100 hover:bg-red-100 transition-colors active:scale-[0.98]"
+        >
+          <Trash2 size={13} />
+          Annuler ce groupe
+        </button>
+      )}
+
+      {canCancel && showConfirm && (
+        <div className="mt-2 bg-red-50 border border-red-200 rounded-xl p-3 space-y-2">
+          <p className="text-xs font-bold text-red-700 text-center">
+            Confirmer l'annulation ?
+          </p>
+          <p className="text-[11px] text-red-500 text-center font-medium">
+            Le groupe sera définitivement annulé et les inscrits seront notifiés.
+          </p>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setShowConfirm(false)}
+              className="flex-1 py-2 rounded-xl text-xs font-bold text-gray-500 bg-white border border-gray-200 hover:bg-gray-50 transition-colors"
+            >
+              Annuler
+            </button>
+            <button
+              onClick={() => { setShowConfirm(false); onCancel?.(); }}
+              className="flex-1 py-2 rounded-xl text-xs font-bold text-white bg-red-500 hover:bg-red-600 transition-colors active:scale-[0.98]"
+            >
+              Confirmer
+            </button>
+          </div>
+        </div>
+      )}
     </motion.div>
   );
 };
@@ -364,6 +411,7 @@ export const MesGroupesPage = () => {
                         isParticipant={true}
                         onClick={() => navigate(`/espace/groupes/${g.id}`)}
                         onRejoindreVocal={() => navigate(`/espace/groupes/${g.id}/vocal`)}
+                        onCancel={() => cancelGroup(g.id, 'Annulé par le créateur').catch(() => {})}
                       />
                     ))}
                   </div>
