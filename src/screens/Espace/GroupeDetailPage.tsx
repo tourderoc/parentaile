@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft, Users, Mic, MicOff, Clock, ChevronDown, Send, Trash2,
-  MessageCircle, Shield, Lock, Loader2, LogOut, AlertTriangle,
+  MessageCircle, Shield, Lock, Loader2, LogOut, AlertTriangle, Share2,
 } from 'lucide-react';
 import { auth, db } from '../../lib/firebase';
 import { doc, getDoc } from 'firebase/firestore';
@@ -164,6 +164,21 @@ export const GroupeDetailPage = () => {
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const [userPseudo, setUserPseudo] = useState('Parent');
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [copyToast, setCopyToast] = useState(false);
+
+  const handleShare = async () => {
+    const url = `https://parentaile.fr/espace/groupes/${groupeId}`;
+    const text = `Rejoins mon groupe de parole "${groupe?.titre}" sur Parent'aile`;
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: groupe?.titre, text, url });
+      } catch { /* annulé par l'utilisateur */ }
+    } else {
+      await navigator.clipboard.writeText(url);
+      setCopyToast(true);
+      setTimeout(() => setCopyToast(false), 2500);
+    }
+  };
   const [isRecording, setIsRecording] = useState(false);
   const [voiceSupported, setVoiceSupported] = useState(false);
   const [isInputFocused, setIsInputFocused] = useState(false);
@@ -422,6 +437,17 @@ export const GroupeDetailPage = () => {
               {groupe.participants.length} participant{groupe.participants.length > 1 ? 's' : ''} · Encore {jours} jour{jours > 1 ? 's' : ''} pour le chat
             </p>
           </div>
+          <button
+            onClick={handleShare}
+            className="w-9 h-9 bg-orange-50 rounded-xl flex items-center justify-center hover:bg-orange-100 transition-colors relative"
+          >
+            <Share2 size={16} className="text-orange-500" />
+            {copyToast && (
+              <span className="absolute -bottom-7 left-1/2 -translate-x-1/2 bg-gray-800 text-white text-[10px] font-bold px-2 py-1 rounded-lg whitespace-nowrap">
+                Lien copié !
+              </span>
+            )}
+          </button>
           <div className={`${colors.bg} px-2.5 py-1 rounded-full`}>
             <span className="text-[9px] font-bold text-white uppercase tracking-wider">
               {THEME_SHORT_LABELS[groupe.theme]}
