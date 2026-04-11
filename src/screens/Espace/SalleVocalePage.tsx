@@ -1336,8 +1336,14 @@ const RoomContent: React.FC<{
     const newIndex = firestoreSession.currentPhaseIndex + 1;
     if (newIndex < structure.length) {
       await advancePhase(groupeId, newIndex);
+      // If the new phase requires muted mics → broadcast mute-all
+      if (structure[newIndex]?.micMode === 'muted' && localParticipant) {
+        const encoder = new TextEncoder();
+        const data = encoder.encode(JSON.stringify({ action: 'mute_all' }));
+        await localParticipant.publishData(data, { reliable: true });
+      }
     }
-  }, [firestoreSession, structure.length, groupeId]);
+  }, [firestoreSession, structure, groupeId, localParticipant]);
 
   const handleExtendTime = useCallback(async () => {
     if (!firestoreSession || firestoreSession.extendedMinutes > 0) return;
@@ -1464,6 +1470,15 @@ const RoomContent: React.FC<{
       try {
         const decoder = new TextDecoder();
         const msg = JSON.parse(decoder.decode(payload));
+
+        // Handle mute_all (animateur enters a phase with micMode='muted')
+        if (msg.action === 'mute_all') {
+          localParticipant.setMicrophoneEnabled(false);
+          setLocalMuted(true);
+          setWarnToast('Les micros sont coupés pour cette étape');
+          setTimeout(() => setWarnToast(null), 4000);
+          return;
+        }
 
         // Handle raise hand from other participants
         if (msg.action === 'raise_hand') {

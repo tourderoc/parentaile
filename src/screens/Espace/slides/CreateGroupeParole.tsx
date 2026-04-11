@@ -301,10 +301,10 @@ export const CreateGroupeParole: React.FC<CreateGroupeParoleProps> = ({ onBack, 
 
   const PHASES_SUGGEREES = [
     'Présentations', 'Partage du vécu', 'Tour de parole', 'Discussion libre',
-    'Clôture', 'Questions / Réponses', 'Activité guidée', 'Méditation / Respiration',
+    'Clôture', 'Questions / Réponses', 'Expérience similaire', 'Ce qui m\'aide',
   ];
 
-  const updateStructureEtape = (index: number, field: keyof StructureEtape, value: string | number) => {
+  const updateStructureEtape = (index: number, field: keyof StructureEtape, value: string | number | 'muted' | 'free') => {
     if (field === 'dureeMinutes') {
       const numValue = value as number;
       if (numValue < MIN_PHASE_MINUTES) return;
@@ -882,6 +882,18 @@ export const CreateGroupeParole: React.FC<CreateGroupeParoleProps> = ({ onBack, 
                                 <Plus size={14} />
                               </button>
                             </div>
+                            {/* Mic mode toggle */}
+                            <button
+                              onClick={() => updateStructureEtape(index, 'micMode', etape.micMode === 'muted' ? 'free' : 'muted')}
+                              title={etape.micMode === 'muted' ? 'Micros coupés à l\'entrée de cette étape' : 'Micros libres'}
+                              className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${
+                                etape.micMode === 'muted'
+                                  ? 'bg-red-50 text-red-400 hover:bg-red-100'
+                                  : 'bg-gray-50 text-gray-300 hover:bg-gray-100'
+                              }`}
+                            >
+                              {etape.micMode === 'muted' ? <MicOff size={13} /> : <Mic size={13} />}
+                            </button>
                             {structure.length > 1 && (
                               <button
                                 onClick={() => removePhase(index)}

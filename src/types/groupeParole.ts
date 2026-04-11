@@ -24,6 +24,7 @@ export interface MessageGroupe {
 export interface StructureEtape {
   label: string;
   dureeMinutes: number;
+  micMode?: 'muted' | 'free';
 }
 
 export const STRUCTURE_DEFAUT: StructureEtape[] = [
