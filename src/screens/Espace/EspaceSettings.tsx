@@ -43,7 +43,7 @@ import {
   BG_COLORS,
   DICEBEAR_STYLES
 } from '../../lib/avatarTypes';
-import { RefreshCw, Sparkles, Star } from 'lucide-react';
+import { RefreshCw, Sparkles, Star, Camera } from 'lucide-react';
 import { AuthWall } from '../../components/ui/AuthWall';
 import { AvatarAISelector } from '../../components/ui/AvatarAISelector';
 import { useUser } from '../../lib/userContext';
@@ -156,7 +156,7 @@ export const EspaceSettings = () => {
     try {
       const user = auth.currentUser;
       if (!user) throw new Error('Non connecte');
-      const cleanConfig = { ...avatarConfig, avatarType: 'static', aiUrl: '' };
+      const cleanConfig: AvatarConfig = { ...avatarConfig, avatarType: 'static', aiUrl: '' };
 
       // Sauvegarde VPS (source de vérité) + Firebase (compat userContext)
       await Promise.all([
@@ -536,8 +536,8 @@ export const EspaceSettings = () => {
                   avatarMode === 'ai' ? 'bg-white shadow-sm text-orange-600' : 'text-gray-500'
                 }`}
               >
-                <Sparkles size={12} />
-                Mon Portrait
+                <Camera size={12} />
+                Ma Photo
               </button>
             </div>
 

@@ -1,49 +1,18 @@
-import { db, auth } from './firebase';
+import { db } from './firebase';
 import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import type { AvatarConfig } from './avatarTypes';
 
 const VPS_URL = 'https://avatar.parentaile.fr';
 const API_KEY = import.meta.env.VITE_AVATAR_API_KEY as string;
 
-export interface QuotaStatus {
-  canGenerate: boolean;
-  remaining: number;
-  reason?: string;
-}
-
 const vpsHeaders = () => ({ 'X-Api-Key': API_KEY });
 
 export const AvatarAIService = {
   /**
-   * Vérifie le quota auprès du VPS (Étape 1 migration - quota sur SQLite VPS)
+   * Pre-compression cote client avant upload.
+   * Redimensionne en carre 512x512 (crop centre) et encode en JPEG q0.9.
+   * Economise la bande passante mobile — le VPS recompresse ensuite a q80.
    */
-  async checkQuota(userId: string): Promise<QuotaStatus> {
-    try {
-      const email = auth.currentUser?.email || '';
-      const url = new URL(`${VPS_URL}/avatar/${userId}/quota`);
-      if (email) url.searchParams.append('email', email);
-
-      const response = await fetch(url.toString(), {
-        headers: vpsHeaders(),
-      });
-
-      if (!response.ok) {
-        return { canGenerate: false, remaining: 0, reason: 'Erreur serveur quota' };
-      }
-
-      const quota = await response.json();
-      console.log('[Avatar] Quota check - userId:', userId, 'email:', email, 'result:', quota);
-      return {
-        canGenerate: quota.canGenerate,
-        remaining: quota.remaining,
-        reason: quota.reason,
-      };
-    } catch (error) {
-      console.error('Error checking quota:', error);
-      return { canGenerate: false, remaining: 0, reason: 'Erreur technique' };
-    }
-  },
-
   async resizeImage(file: File, size = 512): Promise<Blob> {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -86,45 +55,66 @@ export const AvatarAIService = {
   },
 
   /**
-   * Génère un avatar. Le quota est géré au VPS (Étape 1 migration)
-   * N'écrit plus sur Firebase - le VPS incrémente automatiquement
+   * Upload une photo (selfie OU fichier parcouru).
+   * Pre-compresse cote client puis POST multipart vers le VPS.
+   * Retourne l'URL publique (avec timestamp anti-cache).
    */
-  async generatePreview(userId: string, imageFile: File): Promise<string> {
-    const email = auth.currentUser?.email || '';
-    console.log('[Avatar] generatePreview START - userId:', userId, 'email:', email);
-
+  async uploadPhoto(userId: string, imageFile: File): Promise<string> {
     const blob = await this.resizeImage(imageFile);
     const formData = new FormData();
-    formData.append('file', blob, 'portrait.jpg');
+    formData.append('file', blob, 'photo.jpg');
 
-    const url = new URL(`${VPS_URL}/avatar/${userId}/generate`);
-    if (email) url.searchParams.append('email', email);
-    console.log('[Avatar] POST URL:', url.toString());
-
-    const response = await fetch(url.toString(), {
+    const response = await fetch(`${VPS_URL}/avatar/${userId}/photo`, {
       method: 'POST',
       headers: vpsHeaders(),
       body: formData,
     });
 
+    if (!response.ok) {
+      const msg = await response.text().catch(() => response.statusText);
+      throw new Error(`Upload photo echoue (${response.status}): ${msg}`);
+    }
+
     const result = await response.json();
-    console.log('[Avatar] VPS Response:', result);
+    if (result.status !== 'success' || !result.url) {
+      throw new Error(result.message || 'Reponse upload invalide');
+    }
 
-    if (result.status !== 'success') throw new Error(result.message || 'Erreur lors de la génération');
-
-    const finalUrl = `${result.url}?t=${Date.now()}`;
-    console.log('[Avatar] Final URL (with timestamp):', finalUrl);
-
-    // Quota est maintenant géré au VPS - pas de mise à jour Firebase
-    // Le VPS incrémente automatiquement via SQLite
-
-    return finalUrl;
+    return `${result.url}?t=${Date.now()}`;
   },
 
-  async saveAvatar(userId: string, aiUrl: string): Promise<void> {
+  /**
+   * Supprime la photo de l'utilisateur cote VPS (tolere 404 si le fichier n'existe pas)
+   * puis remet le compte en avatar 'static' dans Firestore.
+   */
+  async deletePhoto(userId: string): Promise<void> {
+    // Tentative de suppression VPS — on ignore 404 (fichier déjà absent ou ancien avatar IA)
+    const response = await fetch(`${VPS_URL}/avatar/${userId}/photo`, {
+      method: 'DELETE',
+      headers: vpsHeaders(),
+    });
+    if (!response.ok && response.status !== 404) {
+      const msg = await response.text().catch(() => response.statusText);
+      throw new Error(`Suppression photo echouee (${response.status}): ${msg}`);
+    }
+
+    // Toujours nettoyer Firestore, que le fichier VPS ait existé ou non
     const userRef = doc(db, 'accounts', userId);
     await updateDoc(userRef, {
-      'avatar.aiUrl': aiUrl,
+      'avatar.aiUrl': '',
+      'avatar.avatarType': 'static',
+      updatedAt: serverTimestamp(),
+    });
+  },
+
+  /**
+   * Enregistre l'URL de la photo dans le compte (champ avatar).
+   * Le type reste 'ai' pour compatibilite avec le code existant (UserAvatar, contextes, etc.).
+   */
+  async saveAvatar(userId: string, photoUrl: string): Promise<void> {
+    const userRef = doc(db, 'accounts', userId);
+    await updateDoc(userRef, {
+      'avatar.aiUrl': photoUrl,
       'avatar.avatarType': 'ai',
       updatedAt: serverTimestamp(),
     });
@@ -137,12 +127,5 @@ export const AvatarAIService = {
       body: JSON.stringify(config),
     });
     if (!response.ok) throw new Error('Erreur sauvegarde config avatar VPS');
-  },
-
-  async getAvatarInfo(userId: string): Promise<{ type: string; url?: string; config?: AvatarConfig }> {
-    const response = await fetch(`${VPS_URL}/avatar/${userId}`, {
-      headers: vpsHeaders(),
-    });
-    return response.json();
   },
 };

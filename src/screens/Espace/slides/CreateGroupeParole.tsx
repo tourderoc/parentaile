@@ -100,6 +100,15 @@ export const CreateGroupeParole: React.FC<CreateGroupeParoleProps> = ({ onBack, 
   const [createdGroupeId, setCreatedGroupeId] = useState<string | null>(null);
   const [copyToast, setCopyToast] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Toast validation par étape
+  const [stepError, setStepError] = useState<string | null>(null);
+  const stepErrorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showStepError = (msg: string) => {
+    if (stepErrorTimerRef.current) clearTimeout(stepErrorTimerRef.current);
+    setStepError(msg);
+    stepErrorTimerRef.current = setTimeout(() => setStepError(null), 4000);
+  };
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -356,12 +365,17 @@ export const CreateGroupeParole: React.FC<CreateGroupeParoleProps> = ({ onBack, 
 
   const removePhase = (index: number) => {
     if (structure.length <= 1) return;
+    // Présentations (index 0) et Clôture (dernière) sont verrouillées
+    if (index === 0 || index === structure.length - 1) return;
     setStructure(prev => prev.filter((_, i) => i !== index));
   };
 
   const movePhase = (index: number, direction: 'up' | 'down') => {
     const target = direction === 'up' ? index - 1 : index + 1;
     if (target < 0 || target >= structure.length) return;
+    // Présentations (0) et Clôture (last) sont fixes
+    if (index === 0 || index === structure.length - 1) return;
+    if (target === 0 || target === structure.length - 1) return;
     setStructure(prev => {
       const next = [...prev];
       [next[index], next[target]] = [next[target], next[index]];
@@ -875,80 +889,110 @@ export const CreateGroupeParole: React.FC<CreateGroupeParoleProps> = ({ onBack, 
                       className="overflow-hidden"
                     >
                       <div className="glass rounded-2xl border-2 border-white shadow-glass p-4 space-y-3">
-                        {structure.map((etape, index) => (
-                          <div key={index} className="flex items-center gap-1.5">
-                            {/* Move up/down */}
-                            <div className="flex flex-col gap-0.5">
-                              <button
-                                onClick={() => movePhase(index, 'up')}
-                                disabled={index === 0}
-                                className={`w-5 h-5 rounded flex items-center justify-center transition-colors ${
-                                  index === 0 ? 'text-gray-200' : 'text-gray-400 hover:bg-gray-100 active:scale-90'
-                                }`}
-                              >
-                                <ChevronUp size={12} />
-                              </button>
-                              <button
-                                onClick={() => movePhase(index, 'down')}
-                                disabled={index === structure.length - 1}
-                                className={`w-5 h-5 rounded flex items-center justify-center transition-colors ${
-                                  index === structure.length - 1 ? 'text-gray-200' : 'text-gray-400 hover:bg-gray-100 active:scale-90'
-                                }`}
-                              >
-                                <ChevronDown size={12} />
-                              </button>
+                        {structure.map((etape, index) => {
+                          const isFirst = index === 0;
+                          const isLast = index === structure.length - 1;
+                          const isFixed = isFirst || isLast;
+
+                          return (
+                            <div key={index} className="flex items-start gap-1.5 py-1">
+                              {/* Move up/down — cachés pour Présentations et Clôture */}
+                              <div className="flex flex-col gap-0.5 flex-shrink-0 pt-2">
+                                {!isFixed ? (
+                                  <>
+                                    <button
+                                      onClick={() => movePhase(index, 'up')}
+                                      disabled={isFirst}
+                                      className={`w-5 h-5 rounded flex items-center justify-center transition-colors ${
+                                        isFirst ? 'text-gray-200' : 'text-gray-400 hover:bg-gray-100 active:scale-90'
+                                      }`}
+                                    >
+                                      <ChevronUp size={12} />
+                                    </button>
+                                    <button
+                                      onClick={() => movePhase(index, 'down')}
+                                      disabled={isLast}
+                                      className={`w-5 h-5 rounded flex items-center justify-center transition-colors ${
+                                        isLast ? 'text-gray-200' : 'text-gray-400 hover:bg-gray-100 active:scale-90'
+                                      }`}
+                                    >
+                                      <ChevronDown size={12} />
+                                    </button>
+                                  </>
+                                ) : (
+                                  /* Placeholder pour aligner les autres étapes */
+                                  <div className="w-5 h-10" />
+                                )}
+                              </div>
+
+                              {/* Contenu principal : nom de l'étape + contrôles */}
+                              <div className="flex-1 min-w-0 flex flex-wrap items-center gap-1.5">
+                                <input
+                                  type="text"
+                                  value={etape.label}
+                                  onChange={(e) => updateStructureEtape(index, 'label', e.target.value)}
+                                  className="flex-1 min-w-[100px] bg-white/60 rounded-xl px-3 py-2 text-sm font-semibold text-gray-700 focus:outline-none focus:ring-2 focus:ring-orange-200 border border-gray-100"
+                                  style={{ fontSize: '14px' }}
+                                  placeholder="Nom de l'étape"
+                                />
+
+                                {/* Contrôles durée + mic + poubelle — toujours visibles, peuvent passer à la ligne */}
+                                <div className="flex items-center gap-1 flex-shrink-0">
+                                  <button
+                                    onClick={() => updateStructureEtape(index, 'dureeMinutes', etape.dureeMinutes - 1)}
+                                    disabled={etape.dureeMinutes <= MIN_PHASE_MINUTES}
+                                    className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${
+                                      etape.dureeMinutes <= MIN_PHASE_MINUTES ? 'bg-gray-50 text-gray-300 cursor-not-allowed' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                                    }`}
+                                  >
+                                    <Minus size={14} />
+                                  </button>
+                                  <span className="text-xs font-bold text-gray-600 w-10 text-center">{etape.dureeMinutes}min</span>
+                                  <button
+                                    onClick={() => updateStructureEtape(index, 'dureeMinutes', etape.dureeMinutes + 1)}
+                                    disabled={remainingMinutes <= 0}
+                                    className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${
+                                      remainingMinutes <= 0 ? 'bg-gray-50 text-gray-300 cursor-not-allowed' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                                    }`}
+                                  >
+                                    <Plus size={14} />
+                                  </button>
+
+                                  {/* Mic mode toggle — toujours actif pour toutes les étapes */}
+                                  <button
+                                    onClick={() => updateStructureEtape(index, 'micMode', etape.micMode === 'muted' ? 'free' : 'muted')}
+                                    title={etape.micMode === 'muted' ? 'Micros coupés à l\'entrée de cette étape' : 'Micros libres'}
+                                    className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${
+                                      etape.micMode === 'muted'
+                                        ? 'bg-red-50 text-red-400 hover:bg-red-100'
+                                        : 'bg-gray-50 text-gray-300 hover:bg-gray-100'
+                                    }`}
+                                  >
+                                    {etape.micMode === 'muted' ? <MicOff size={13} /> : <Mic size={13} />}
+                                  </button>
+
+                                  {/* Poubelle — désactivée pour Présentations et Clôture */}
+                                  {isFixed ? (
+                                    <div
+                                      className="w-7 h-7 rounded-lg bg-gray-50 flex items-center justify-center text-gray-200 cursor-not-allowed"
+                                      title="Cette étape est obligatoire"
+                                    >
+                                      <Trash2 size={13} />
+                                    </div>
+                                  ) : structure.length > 1 ? (
+                                    <button
+                                      onClick={() => removePhase(index)}
+                                      className="w-7 h-7 rounded-lg bg-red-50 flex items-center justify-center text-red-400 hover:bg-red-100 transition-colors"
+                                    >
+                                      <Trash2 size={13} />
+                                    </button>
+                                  ) : null}
+                                </div>
+                              </div>
                             </div>
-                            <input
-                              type="text"
-                              value={etape.label}
-                              onChange={(e) => updateStructureEtape(index, 'label', e.target.value)}
-                              className="flex-1 bg-white/60 rounded-xl px-3 py-2 text-sm font-semibold text-gray-700 focus:outline-none focus:ring-2 focus:ring-orange-200 border border-gray-100"
-                              style={{ fontSize: '14px' }}
-                              placeholder="Nom de l'étape"
-                            />
-                            <div className="flex items-center gap-1">
-                              <button
-                                onClick={() => updateStructureEtape(index, 'dureeMinutes', etape.dureeMinutes - 1)}
-                                disabled={etape.dureeMinutes <= MIN_PHASE_MINUTES}
-                                className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${
-                                  etape.dureeMinutes <= MIN_PHASE_MINUTES ? 'bg-gray-50 text-gray-300 cursor-not-allowed' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                                }`}
-                              >
-                                <Minus size={14} />
-                              </button>
-                              <span className="text-xs font-bold text-gray-600 w-10 text-center">{etape.dureeMinutes}min</span>
-                              <button
-                                onClick={() => updateStructureEtape(index, 'dureeMinutes', etape.dureeMinutes + 1)}
-                                disabled={remainingMinutes <= 0}
-                                className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${
-                                  remainingMinutes <= 0 ? 'bg-gray-50 text-gray-300 cursor-not-allowed' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                                }`}
-                              >
-                                <Plus size={14} />
-                              </button>
-                            </div>
-                            {/* Mic mode toggle */}
-                            <button
-                              onClick={() => updateStructureEtape(index, 'micMode', etape.micMode === 'muted' ? 'free' : 'muted')}
-                              title={etape.micMode === 'muted' ? 'Micros coupés à l\'entrée de cette étape' : 'Micros libres'}
-                              className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${
-                                etape.micMode === 'muted'
-                                  ? 'bg-red-50 text-red-400 hover:bg-red-100'
-                                  : 'bg-gray-50 text-gray-300 hover:bg-gray-100'
-                              }`}
-                            >
-                              {etape.micMode === 'muted' ? <MicOff size={13} /> : <Mic size={13} />}
-                            </button>
-                            {structure.length > 1 && (
-                              <button
-                                onClick={() => removePhase(index)}
-                                className="w-7 h-7 rounded-lg bg-red-50 flex items-center justify-center text-red-400 hover:bg-red-100 transition-colors"
-                              >
-                                <Trash2 size={13} />
-                              </button>
-                            )}
-                          </div>
-                        ))}
+                          );
+                        })}
+
 
                         {/* Toast redistribution */}
                         <AnimatePresence>
@@ -1087,6 +1131,23 @@ export const CreateGroupeParole: React.FC<CreateGroupeParoleProps> = ({ onBack, 
           )}
         </AnimatePresence>
 
+        {/* Toast validation visible au-dessus de la nav bar */}
+        <AnimatePresence>
+          {stepError && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 20 }}
+              className="fixed bottom-[88px] inset-x-0 flex justify-center px-4 z-[70]"
+            >
+              <div className="w-full max-w-md bg-red-500 text-white rounded-2xl px-4 py-3 shadow-xl flex items-start gap-3">
+                <span className="flex-shrink-0 mt-0.5 text-lg">⚠️</span>
+                <p className="text-sm font-bold leading-snug">{stepError}</p>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* Barre de navigation bas */}
         <div className="fixed bottom-0 left-0 right-0 p-6 bg-white border-t border-orange-100 flex gap-4 z-[60] max-w-md mx-auto shadow-[0_-10px_30px_rgba(0,0,0,0.05)]">
           {currentStep > 1 && (
@@ -1102,21 +1163,30 @@ export const CreateGroupeParole: React.FC<CreateGroupeParoleProps> = ({ onBack, 
             <button
               onClick={() => {
                 if (currentStep === 1) {
-                  if (description.trim().length < 20) {
-                    setError("Décrivez davantage votre situation (min. 20 car.)");
+                  const missing: string[] = [];
+                  if (description.trim().length < 20) missing.push(`description (${description.trim().length}/20 car. min.)`);
+                  if (missing.length > 0) {
+                    showStepError(`Il manque : ${missing.join(', ')}`);
                     return;
                   }
                 } else if (currentStep === 2) {
-                  if (!selectedTheme || titre.trim().length < 5) {
-                    setError("Veuillez choisir un thème et un titre (min. 5 car.)");
+                  const missing: string[] = [];
+                  if (!selectedTheme) missing.push('un thème');
+                  if (titre.trim().length < 5) missing.push(`un titre (${titre.trim().length}/5 car. min.)`);
+                  if (missing.length > 0) {
+                    showStepError(`Il manque : ${missing.join(' et ')}`);
                     return;
                   }
                 } else if (currentStep === 3) {
-                  if (!dateVocal || !heureVocal) {
-                    setError("Veuillez choisir une date et une heure valides.");
+                  const missing: string[] = [];
+                  if (!dateVocal) missing.push('une date');
+                  if (!heureVocal) missing.push('une heure');
+                  if (missing.length > 0) {
+                    showStepError(`Il manque : ${missing.join(' et ')}`);
                     return;
                   }
                 }
+                setStepError(null);
                 setError(null);
                 setCurrentStep(prev => prev + 1);
               }}
