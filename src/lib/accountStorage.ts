@@ -189,6 +189,7 @@ const vpsStorage: AccountStorage = {
 
   async listChildren(uid) {
     const res = await vpsFetch(`/accounts/${encodeURIComponent(uid)}/children`);
+    if (res.status === 404) return [];
     if (!res.ok) throw new Error(`VPS listChildren failed: ${res.status} ${await res.text()}`);
     return res.json();
   },

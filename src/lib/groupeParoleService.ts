@@ -21,9 +21,14 @@ import {
   writeBatch,
   runTransaction,
 } from 'firebase/firestore';
-import type { GroupeParole, MessageGroupe, ThemeGroupe, StructureEtape, EvaluationGroupe, EvaluationPendante, BadgeLevel, ParticipationEntry, UserProgression } from '../types/groupeParole';
+import type { 
+  GroupeParole, MessageGroupe, ThemeGroupe, StructureEtape, 
+  EvaluationGroupe, EvaluationPendante, BadgeLevel, 
+  ParticipationEntry, UserProgression 
+} from '../types/groupeParole';
 import { getBadgeForPoints, BADGE_THRESHOLDS } from '../types/groupeParole';
 import { accountStorage } from './accountStorage';
+import { groupStorage } from './groupStorage';
 import { sendParentNotification } from './parentNotificationService';
 
 export interface CreateGroupeData {
@@ -45,40 +50,30 @@ export interface CreateGroupeData {
  */
 export async function createGroupeParole(data: CreateGroupeData): Promise<string> {
   const dateExpiration = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+  const id = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
 
   const groupeDoc = {
+    id: id,
     titre: data.titre,
     description: data.description,
     theme: data.theme,
     createurUid: data.createurUid,
     createurPseudo: data.createurPseudo,
-    dateCreation: serverTimestamp(),
-    dateVocal: Timestamp.fromDate(data.dateVocal),
-    dateExpiration: Timestamp.fromDate(dateExpiration),
+    dateVocal: data.dateVocal,
+    dateExpiration: dateExpiration,
     participantsMax: 5,
     structureType: data.structureType,
-    ...(data.structureType === 'structuree' && data.structure
-      ? { structure: data.structure }
-      : {}),
-    status: 'scheduled',
-    participants: [
-      {
-        uid: data.createurUid,
-        pseudo: data.createurPseudo,
-        inscritVocal: true,
-        dateInscription: Timestamp.now(),
-      },
-    ],
+    structure: data.structure || [],
   };
 
-  const docRef = await addDoc(collection(db, 'groupes'), groupeDoc);
+  const createdId = await groupStorage.createGroup(groupeDoc);
 
   // Si c'est une reprogrammation, mettre à jour l'ancien groupe
   if (data.reprogrammedFromId) {
     try {
-      await updateDoc(doc(db, 'groupes', data.reprogrammedFromId), {
+      await groupStorage.updateGroup(data.reprogrammedFromId, {
         status: 'reprogrammed',
-        reprogrammedToId: docRef.id,
+        reprogrammedToId: id,
       });
     } catch (err) {
       console.error('Erreur mise à jour groupe original:', err);
@@ -87,7 +82,7 @@ export async function createGroupeParole(data: CreateGroupeData): Promise<string
 
   // +30 points pour la création d'un groupe
   addPoints(data.createurUid, 30, {
-    groupeId: docRef.id,
+    groupeId: id,
     groupeTitre: data.titre,
     date: new Date(),
     type: 'creation',
@@ -99,10 +94,10 @@ export async function createGroupeParole(data: CreateGroupeData): Promise<string
     'group_created',
     'Groupe créé',
     `Votre groupe "${data.titre}" est prêt. Partagez-le pour inviter d'autres parents !`,
-    { groupeId: docRef.id, groupeTitre: data.titre }
+    { groupeId: id, groupeTitre: data.titre }
   );
 
-  return docRef.id;
+  return id;
 }
 
 /**
@@ -113,60 +108,77 @@ export async function createGroupeParole(data: CreateGroupeData): Promise<string
 export function onGroupesParole(
   callback: (groupes: GroupeParole[]) => void
 ): () => void {
-  const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - 3); // 3 jours en arrière (sessions en cours ou récentes)
+  const backend = groupStorage.backend;
 
-  const q = query(
-    collection(db, 'groupes'),
-    where('dateVocal', '>=', Timestamp.fromDate(cutoff)),
-    orderBy('dateVocal', 'asc'),
-    limit(100)
-  );
+  if (backend === 'firebase') {
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 3);
 
-  return onSnapshot(q, (snapshot) => {
-    const now = new Date();
-    const groupes: GroupeParole[] = snapshot.docs
-      .map((doc) => {
-        const d = doc.data();
-        return {
-          id: doc.id,
-          titre: d.titre || '',
-          description: d.description || '',
-          theme: d.theme || 'autre',
-          createurUid: d.createurUid || '',
-          createurPseudo: d.createurPseudo || '',
-          dateCreation: d.dateCreation?.toDate?.() || new Date(),
-          dateVocal: d.dateVocal?.toDate?.() || new Date(),
-          dateExpiration: d.dateExpiration?.toDate?.() || new Date(),
-          participantsMax: d.participantsMax || 5,
-          structureType: d.structureType || 'libre',
-          structure: d.structure,
-          participants: (d.participants || []).map((p: any) => ({
-            uid: p.uid,
-            pseudo: p.pseudo,
-            inscritVocal: p.inscritVocal ?? false,
-            dateInscription: p.dateInscription?.toDate?.() || new Date(),
-            banni: !!p.banni
-          })),
-          messages: [],
-          messageCount: d.messageCount || 0,
-          status: d.status || undefined,
-          sessionState: d.sessionState ? {
-            currentPhaseIndex: d.sessionState.currentPhaseIndex ?? 0,
-            extendedMinutes: d.sessionState.extendedMinutes ?? 0,
-            sessionActive: d.sessionState.sessionActive ?? true,
-            phaseStartedAt: d.sessionState.phaseStartedAt?.toDate?.() || new Date(),
-            sessionStartedAt: d.sessionState.sessionStartedAt?.toDate?.() || new Date(),
-          } : undefined,
-        } as GroupeParole;
-      })
-      .filter((g) => g.dateExpiration > now);
+    const q = query(
+      collection(db, 'groupes'),
+      where('dateVocal', '>=', Timestamp.fromDate(cutoff)),
+      orderBy('dateVocal', 'asc'),
+      limit(100)
+    );
 
-    callback(groupes);
-  }, (error) => {
-    console.error('Erreur chargement groupes:', error);
-    callback([]);
-  });
+    return onSnapshot(q, (snapshot) => {
+      const now = new Date();
+      const groupes: GroupeParole[] = snapshot.docs
+        .map((doc) => {
+          const d = doc.data();
+          return {
+            id: doc.id,
+            titre: d.titre || '',
+            description: d.description || '',
+            theme: d.theme || 'autre',
+            createurUid: d.createurUid || '',
+            createurPseudo: d.createurPseudo || '',
+            dateCreation: d.dateCreation?.toDate?.() || new Date(),
+            dateVocal: d.dateVocal?.toDate?.() || new Date(),
+            dateExpiration: d.dateExpiration?.toDate?.() || new Date(),
+            participantsMax: d.participantsMax || 5,
+            structureType: d.structureType || 'libre',
+            structure: d.structure,
+            participants: (d.participants || []).map((p: any) => ({
+              uid: p.uid,
+              pseudo: p.pseudo,
+              inscritVocal: p.inscritVocal ?? false,
+              dateInscription: p.dateInscription?.toDate?.() || new Date(),
+              banni: !!p.banni
+            })),
+            messages: [],
+            messageCount: d.messageCount || 0,
+            status: d.status || undefined,
+            sessionState: d.sessionState ? {
+              currentPhaseIndex: d.sessionState.currentPhaseIndex ?? 0,
+              extendedMinutes: d.sessionState.extendedMinutes ?? 0,
+              sessionActive: d.sessionState.sessionActive ?? true,
+              phaseStartedAt: d.sessionState.phaseStartedAt?.toDate?.() || new Date(),
+              sessionStartedAt: d.sessionState.sessionStartedAt?.toDate?.() || new Date(),
+            } : undefined,
+          } as GroupeParole;
+        })
+        .filter((g) => g.dateExpiration > now);
+
+      callback(groupes);
+    }, (error) => {
+      console.error('Erreur chargement groupes:', error);
+      callback([]);
+    });
+  } else {
+    // VPS Polling (toutes les 10 secondes pour les groupes)
+    const poll = async () => {
+      try {
+        const groups = await groupStorage.listGroups();
+        callback(groups);
+      } catch (err) {
+        console.error('Erreur Polling Groupes:', err);
+      }
+    };
+    poll();
+    const interval = setInterval(poll, 10000);
+    return () => clearInterval(interval);
+  }
 }
 
 /**
@@ -176,39 +188,56 @@ export function onGroupeParole(
   groupeId: string,
   callback: (groupe: GroupeParole | null) => void
 ): () => void {
-  return onSnapshot(doc(db, 'groupes', groupeId), (snapshot) => {
-    if (!snapshot.exists()) {
+  const backend = groupStorage.backend;
+
+  if (backend === 'firebase') {
+    return onSnapshot(doc(db, 'groupes', groupeId), (snapshot) => {
+      if (!snapshot.exists()) {
+        callback(null);
+        return;
+      }
+      const d = snapshot.data();
+      callback({
+        id: snapshot.id,
+        titre: d.titre || '',
+        description: d.description || '',
+        theme: d.theme || 'autre',
+        createurUid: d.createurUid || '',
+        createurPseudo: d.createurPseudo || '',
+        dateCreation: d.dateCreation?.toDate?.() || new Date(),
+        dateVocal: d.dateVocal?.toDate?.() || new Date(),
+        dateExpiration: d.dateExpiration?.toDate?.() || new Date(),
+        participantsMax: d.participantsMax || 5,
+        structureType: d.structureType || 'libre',
+        structure: d.structure,
+        participants: (d.participants || []).map((p: any) => ({
+          uid: p.uid,
+          pseudo: p.pseudo,
+          inscritVocal: p.inscritVocal ?? false,
+          dateInscription: p.dateInscription?.toDate?.() || new Date(),
+          banni: !!p.banni
+        })),
+        messages: [],
+        messageCount: d.messageCount || 0,
+      } as GroupeParole);
+    }, (error) => {
+      console.error('Erreur chargement groupe:', error);
       callback(null);
-      return;
-    }
-    const d = snapshot.data();
-    callback({
-      id: snapshot.id,
-      titre: d.titre || '',
-      description: d.description || '',
-      theme: d.theme || 'autre',
-      createurUid: d.createurUid || '',
-      createurPseudo: d.createurPseudo || '',
-      dateCreation: d.dateCreation?.toDate?.() || new Date(),
-      dateVocal: d.dateVocal?.toDate?.() || new Date(),
-      dateExpiration: d.dateExpiration?.toDate?.() || new Date(),
-      participantsMax: d.participantsMax || 5,
-      structureType: d.structureType || 'libre',
-      structure: d.structure,
-      participants: (d.participants || []).map((p: any) => ({
-        uid: p.uid,
-        pseudo: p.pseudo,
-        inscritVocal: p.inscritVocal ?? false,
-        dateInscription: p.dateInscription?.toDate?.() || new Date(),
-        banni: !!p.banni
-      })),
-      messages: [],
-      messageCount: d.messageCount || 0,
-    } as GroupeParole);
-  }, (error) => {
-    console.error('Erreur chargement groupe:', error);
-    callback(null);
-  });
+    });
+  } else {
+    // VPS Polling (toutes les 5 secondes pour les détails d'un groupe ouvert)
+    const poll = async () => {
+      try {
+        const group = await groupStorage.getGroup(groupeId);
+        callback(group);
+      } catch (err) {
+        console.error('Erreur Polling Groupe Unique:', err);
+      }
+    };
+    poll();
+    const interval = setInterval(poll, 5000);
+    return () => clearInterval(interval);
+  }
 }
 
 /**
@@ -218,24 +247,41 @@ export function onGroupeMessages(
   groupeId: string,
   callback: (messages: MessageGroupe[]) => void
 ): () => void {
-  const q = query(
-    collection(db, 'groupes', groupeId, 'messages'),
-    orderBy('dateEnvoi', 'asc')
-  );
+  const backend = groupStorage.backend;
 
-  return onSnapshot(q, (snapshot) => {
-    const messages: MessageGroupe[] = snapshot.docs.map((d) => ({
-      id: d.id,
-      auteurUid: d.data().auteurUid || '',
-      auteurPseudo: d.data().auteurPseudo || '',
-      contenu: d.data().contenu || '',
-      dateEnvoi: d.data().dateEnvoi?.toDate?.() || new Date(),
-    }));
-    callback(messages);
-  }, (error) => {
-    console.error('Erreur chargement messages:', error);
-    callback([]);
-  });
+  if (backend === 'firebase') {
+    const q = query(
+      collection(db, 'groupes', groupeId, 'messages'),
+      orderBy('dateEnvoi', 'asc')
+    );
+
+    return onSnapshot(q, (snapshot) => {
+      const messages: MessageGroupe[] = snapshot.docs.map((d) => ({
+        id: d.id,
+        auteurUid: d.data().auteurUid || '',
+        auteurPseudo: d.data().auteurPseudo || '',
+        contenu: d.data().contenu || '',
+        dateEnvoi: d.data().dateEnvoi?.toDate?.() || new Date(),
+      }));
+      callback(messages);
+    }, (error) => {
+      console.error('Erreur chargement messages:', error);
+      callback([]);
+    });
+  } else {
+    // VPS Polling (toutes les 3 secondes pour le chat)
+    const poll = async () => {
+      try {
+        const msgs = await groupStorage.listMessages(groupeId);
+        callback(msgs);
+      } catch (err) {
+        console.error('Erreur Polling Messages:', err);
+      }
+    };
+    poll();
+    const interval = setInterval(poll, 3000);
+    return () => clearInterval(interval);
+  }
 }
 
 /**
@@ -245,18 +291,7 @@ export async function sendGroupeMessage(
   groupeId: string,
   message: { auteurUid: string; auteurPseudo: string; contenu: string }
 ): Promise<string> {
-  const docRef = await addDoc(collection(db, 'groupes', groupeId, 'messages'), {
-    auteurUid: message.auteurUid,
-    auteurPseudo: message.auteurPseudo,
-    contenu: message.contenu,
-    dateEnvoi: serverTimestamp(),
-  });
-
-  await updateDoc(doc(db, 'groupes', groupeId), {
-    messageCount: increment(1),
-  });
-
-  return docRef.id;
+  return groupStorage.sendMessage(groupeId, message);
 }
 
 /**
@@ -266,10 +301,7 @@ export async function deleteGroupeMessage(
   groupeId: string,
   messageId: string
 ): Promise<void> {
-  await deleteDoc(doc(db, 'groupes', groupeId, 'messages', messageId));
-  await updateDoc(doc(db, 'groupes', groupeId), {
-    messageCount: increment(-1),
-  });
+  await groupStorage.deleteMessage(groupeId, messageId);
 }
 
 /**
@@ -279,63 +311,44 @@ export async function rejoindreGroupe(
   groupeId: string,
   participant: { uid: string; pseudo: string }
 ): Promise<void> {
-  // 1. Lire le groupe pour vérifier la date du vocal
-  const groupeDoc = await getDoc(doc(db, 'groupes', groupeId));
-  if (!groupeDoc.exists()) throw new Error('Groupe introuvable');
-  
-  const data = groupeDoc.data();
-  const dateVocalValue = data.dateVocal;
-  const dateVocal = dateVocalValue instanceof Timestamp ? dateVocalValue.toDate() : new Date(dateVocalValue);
-  
-  // 2. Interdire l'inscription à moins de 5 minutes du début (ou si déjà passé)
-  const limitTime = dateVocal.getTime() - 5 * 60000;
-  if (Date.now() > limitTime) {
-    throw new Error('Les inscriptions sont closes pour ce groupe (début imminent ou déjà passé).');
-  }
+  await groupStorage.joinGroup(groupeId, participant);
 
-  // 3. Procéder à l'inscription
-  await updateDoc(doc(db, 'groupes', groupeId), {
-    participants: arrayUnion({
-      uid: participant.uid,
-      pseudo: participant.pseudo,
-      inscritVocal: true,
-      dateInscription: Timestamp.now(),
-    }),
-  });
-
-  // Notifier le créateur du groupe aux jalons importants
-  try {
-    const groupeSnap = await getDoc(doc(db, 'groupes', groupeId));
-    if (groupeSnap.exists()) {
-      const data = groupeSnap.data();
-      const currentCount = (data.participants || []).length;
-      
-      if (data.createurUid && data.createurUid !== participant.uid) {
-        if (currentCount === 3) {
-          const notifId = `milestone_min_${groupeId}_${data.createurUid}`;
-          sendParentNotification(
-            data.createurUid,
-            'group_join',
-            'Minimum atteint !',
-            `Bonne nouvelle, 3 parents sont inscrits à "${data.titre}", le groupe aura bien lieu.`,
-            { groupeId, groupeTitre: data.titre },
-            notifId
-          );
-        } else if (currentCount === data.participantsMax) {
-          const notifId = `milestone_full_${groupeId}_${data.createurUid}`;
-          sendParentNotification(
-            data.createurUid,
-            'group_join',
-            'Groupe complet !',
-            `Le groupe "${data.titre}" est complet (${data.participantsMax} inscrits).`,
-            { groupeId, groupeTitre: data.titre },
-            notifId
-          );
+  // Notifier le créateur du groupe aux jalons importants (plus simple via le backend VPS plus tard, 
+  // mais on garde la logique client pour Firebase)
+  if (groupStorage.backend === 'firebase') {
+    try {
+      const groupeSnap = await getDoc(doc(db, 'groupes', groupeId));
+      if (groupeSnap.exists()) {
+        const data = groupeSnap.data();
+        const currentCount = (data.participants || []).length;
+        
+        if (data.createurUid && data.createurUid !== participant.uid) {
+          if (currentCount === 3) {
+            const notifId = `milestone_min_${groupeId}_${data.createurUid}`;
+            sendParentNotification(
+              data.createurUid,
+              'group_join',
+              'Minimum atteint !',
+              `Bonne nouvelle, 3 parents sont inscrits à "${data.titre}", le groupe aura bien lieu.`,
+              { groupeId, groupeTitre: data.titre },
+              notifId
+            );
+          } else if (currentCount === data.participantsMax) {
+            const notifId = `milestone_full_${groupeId}_${data.createurUid}`;
+            sendParentNotification(
+              data.createurUid,
+              'group_join',
+              'Groupe complet !',
+              `Le groupe "${data.titre}" est complet (${data.participantsMax} inscrits).`,
+              { groupeId, groupeTitre: data.titre },
+              notifId
+            );
+          }
         }
       }
+    } catch {
+      // Non-bloquant
     }
-  } catch {
-    // Non-bloquant
   }
 }
 
@@ -346,15 +359,7 @@ export async function quitterGroupe(
   groupeId: string,
   participantUid: string
 ): Promise<void> {
-  const snapshot = await getDoc(doc(db, 'groupes', groupeId));
-  if (!snapshot.exists()) return;
-  const data = snapshot.data();
-  const updatedParticipants = (data.participants || []).filter(
-    (p: any) => p.uid !== participantUid
-  );
-  await updateDoc(doc(db, 'groupes', groupeId), {
-    participants: updatedParticipants,
-  });
+  await groupStorage.leaveGroup(groupeId, participantUid);
 }
 
 
@@ -369,89 +374,58 @@ export async function submitEvaluation(
   evaluation: Omit<EvaluationGroupe, 'id' | 'dateEvaluation'>
 ): Promise<void> {
   const evalDoc: Record<string, unknown> = {
-    groupeId: evaluation.groupeId,
-    participantUid: evaluation.participantUid,
-    participantPseudo: evaluation.participantPseudo,
-    noteAmbiance: evaluation.noteAmbiance,
-    noteTheme: evaluation.noteTheme,
-    noteTechnique: evaluation.noteTechnique,
-    dateEvaluation: serverTimestamp(),
+    ...evaluation,
+    dateEvaluation: new Date().toISOString(),
   };
-  if (evaluation.ressenti) evalDoc.ressenti = evaluation.ressenti;
-  if (evaluation.signalement) evalDoc.signalement = evaluation.signalement;
-  await setDoc(
-    doc(db, 'groupes', evaluation.groupeId, 'evaluations', evaluation.participantUid),
-    evalDoc
-  );
+  
+  await groupStorage.submitEvaluation(evaluation.groupeId, evalDoc);
 
   // Notifier le créateur du groupe
   try {
-    const groupeSnap = await getDoc(doc(db, 'groupes', evaluation.groupeId));
-    if (groupeSnap.exists()) {
-      const data = groupeSnap.data();
-      if (data.createurUid && data.createurUid !== evaluation.participantUid) {
-        sendParentNotification(
-          data.createurUid,
-          'evaluation_received',
-          'Nouvel avis reçu',
-          `${evaluation.participantPseudo} a donné son avis sur "${data.titre}"`,
-          { groupeId: evaluation.groupeId, groupeTitre: data.titre }
-        );
-      }
+    const groupe = await groupStorage.getGroup(evaluation.groupeId);
+    if (groupe && groupe.createurUid && groupe.createurUid !== evaluation.participantUid) {
+      sendParentNotification(
+        groupe.createurUid,
+        'evaluation_received',
+        'Nouvel avis reçu',
+        `${evaluation.participantPseudo} a donné son avis sur "${groupe.titre}"`,
+        { groupeId: evaluation.groupeId, groupeTitre: groupe.titre }
+      );
     }
   } catch {
     // Non-bloquant
   }
 }
 
-/**
- * Marque qu'un participant veut évaluer plus tard.
- * Stocke un doc minimal dans groupes/{groupeId}/evaluations/{uid} avec status 'pending'.
- */
 export async function markEvaluationPending(
   groupeId: string,
   participantUid: string,
   participantPseudo: string
 ): Promise<void> {
-  await setDoc(
-    doc(db, 'groupes', groupeId, 'evaluations', participantUid),
-    {
-      groupeId,
-      participantUid,
-      participantPseudo,
-      status: 'pending',
-      dateCreation: serverTimestamp(),
-    }
-  );
+  await groupStorage.submitEvaluation(groupeId, {
+    groupeId,
+    participantUid,
+    participantPseudo,
+    status: 'pending',
+    dateCreation: new Date().toISOString(),
+  });
 }
 
-/**
- * Ignorer une évaluation pendante (le parent ne souhaite pas donner son avis).
- */
 export async function dismissEvaluation(
   groupeId: string,
   participantUid: string
 ): Promise<void> {
-  await updateDoc(
-    doc(db, 'groupes', groupeId, 'evaluations', participantUid),
-    { status: 'dismissed' }
-  );
+  await groupStorage.submitEvaluation(groupeId, {
+    participantUid,
+    status: 'dismissed'
+  });
 }
 
-/**
- * Vérifie si un participant a déjà évalué un groupe (ou a une évaluation pendante).
- */
 export async function getEvaluationStatus(
   groupeId: string,
   participantUid: string
 ): Promise<'none' | 'pending' | 'done'> {
-  try {
-    const snap = await getDoc(doc(db, 'groupes', groupeId, 'evaluations', participantUid));
-    if (!snap.exists()) return 'none';
-    return snap.data().status === 'pending' ? 'pending' : 'done';
-  } catch {
-    return 'none';
-  }
+  return groupStorage.getEvaluationStatus(groupeId, participantUid);
 }
 
 /**
@@ -683,64 +657,32 @@ export async function getUserBadge(uid: string): Promise<BadgeLevel> {
  * Annule un groupe de parole et notifie les inscrits.
  */
 export async function cancelGroup(groupeId: string, reason: string): Promise<void> {
-  const ref = doc(db, 'groupes', groupeId);
-  let shouldNotify = false;
-  let participantsToNotify: any[] = [];
-  let groupTitre = '';
+  const current = await groupStorage.getGroup(groupeId);
+  if (!current) return;
+  if (current.status === 'cancelled' || current.status === 'completed') return;
 
-  await runTransaction(db, async (transaction) => {
-    const snap = await transaction.get(ref);
-    if (!snap.exists()) return;
+  const sessionStatePatch = current.sessionState
+    ? { ...current.sessionState, sessionActive: false }
+    : { sessionActive: false, suspended: false, suspensionCount: 0, currentPhaseIndex: 0, replacementUsed: false };
 
-    const data = snap.data();
-    // Idempotency: skip if already terminal
-    if (data.status === 'cancelled' || data.status === 'completed') return;
-
-    // Execute update atomically
-    const updates: Record<string, any> = {
-      status: 'cancelled',
-      cancelReason: reason,
-    };
-
-    // Si sessionState n'existe pas encore (groupe jamais démarré), on l'initialise en terminal
-    if (!data.sessionState) {
-      updates.sessionState = {
-        sessionActive: false,
-        suspended: false,
-        suspensionCount: 0,
-        currentPhaseIndex: 0,
-        replacementUsed: false,
-      };
-    } else {
-      updates['sessionState.sessionActive'] = false;
-    }
-
-    transaction.update(ref, updates);
-
-    // Capture context for post-transaction notifications
-    shouldNotify = true;
-    participantsToNotify = data.participants || [];
-    groupTitre = data.titre || 'Groupe de parole';
+  await groupStorage.updateGroup(groupeId, {
+    status: 'cancelled',
+    cancel_reason: reason,
+    cancelReason: reason,
+    session_state: sessionStatePatch,
   });
 
-  // Send notifications only AFTER the transaction successfully commits
-  if (shouldNotify) {
-    for (const p of participantsToNotify) {
-      if (!p.uid) continue;
-
-      // Deterministic ID: ensures that even with simultaneous triggers, 
-      // only ONE notification document is created/updated per participant.
-      const notifId = `cancel_${groupeId}_${p.uid}`;
-
-      sendParentNotification(
-        p.uid,
-        'group_cancelled',
-        'Groupe annulé',
-        `Le groupe "${groupTitre}" n'aura malheureusement pas lieu (${reason}).`,
-        { groupeId, groupeTitre: groupTitre },
-        notifId
-      ).catch(() => {});
-    }
+  for (const p of current.participants || []) {
+    if (!p.uid) continue;
+    const notifId = `cancel_${groupeId}_${p.uid}`;
+    sendParentNotification(
+      p.uid,
+      'group_cancelled',
+      'Groupe annulé',
+      `Le groupe "${current.titre}" n'aura malheureusement pas lieu (${reason}).`,
+      { groupeId, groupeTitre: current.titre },
+      notifId
+    ).catch(() => {});
   }
 }
 
@@ -808,31 +750,29 @@ export async function initSessionStateV2(
   animateurUid: string,
   animateurPseudo: string
 ): Promise<void> {
-  const ref = doc(db, 'groupes', groupeId);
-  const snap = await getDoc(ref);
-  if (!snap.exists()) return;
+  const current = await groupStorage.getGroup(groupeId);
+  if (!current) return;
 
-  const data = snap.data();
   // Ne pas réinitialiser si le groupe est déjà en cours, terminé ou annulé
-  if (data.status === 'in_progress' || data.status === 'completed' || data.status === 'cancelled') {
-    console.warn(`[SERVICE] initSessionStateV2 ignored: group ${groupeId} is already ${data.status}`);
+  if (current.status === 'in_progress' || current.status === 'completed' || current.status === 'cancelled') {
+    console.warn(`[SERVICE] initSessionStateV2 ignored: group ${groupeId} is already ${current.status}`);
     return;
   }
 
-  // Ne pas réinitialiser si la session est déjà ACTIVE (ex: relay déjà pris)
-  if (data.sessionState?.sessionActive) {
-    console.warn(`[SERVICE] initSessionStateV2 ignored: session is already active for ${groupeId}`);
+  // Ne pas réinitialiser si la session est déjà ACTIVE
+  if (current.sessionState?.sessionActive) {
+    console.warn(`[SERVICE] initSessionStateV2 ignored: session is already active`);
     return;
   }
 
-  await updateDoc(ref, {
+  await groupStorage.updateGroup(groupeId, {
     status: 'in_progress',
-    sessionState: {
+    session_state: {
       currentPhaseIndex: 0,
       extendedMinutes: 0,
       sessionActive: true,
-      phaseStartedAt: serverTimestamp(),
-      sessionStartedAt: serverTimestamp(),
+      phaseStartedAt: new Date().toISOString(),
+      sessionStartedAt: new Date().toISOString(),
       suspended: false,
       suspensionCount: 0,
       replacementUsed: false,
@@ -850,56 +790,50 @@ export async function proposeAsAnimateur(
   uid: string,
   pseudo: string
 ): Promise<boolean> {
-  const ref = doc(db, 'groupes', groupeId);
-  
   try {
-    await runTransaction(db, async (transaction) => {
-      const docSnap = await transaction.get(ref);
-      if (!docSnap.exists()) throw new Error('Groupe inexistant');
+    const current = await groupStorage.getGroup(groupeId);
+    if (!current) throw new Error('Groupe inexistant');
 
-      const data = docSnap.data();
-      if (data.status === 'cancelled' || data.status === 'completed') throw new Error('Groupe terminé');
-      const state = data.sessionState;
+    if (current.status === 'cancelled' || current.status === 'completed') throw new Error('Groupe terminé');
+    const state = current.sessionState;
 
-      if (state?.replacementUsed) throw new Error('Remplacement déjà utilisé');
+    if (state?.replacementUsed) throw new Error('Remplacement déjà utilisé');
 
-      if (!state) {
-        // L'animateur original n'a jamais lance — on cree le sessionState
-        transaction.update(ref, {
-          sessionState: {
-            currentPhaseIndex: 0,
-            extendedMinutes: 0,
-            sessionActive: true,
-            phaseStartedAt: serverTimestamp(),
-            sessionStartedAt: serverTimestamp(),
-            suspended: false,
-            suspensionCount: 0,
-            replacementUsed: true,
+    if (!state) {
+      // Pas de session lancée
+      await groupStorage.updateGroup(groupeId, {
+        session_state: {
+          currentPhaseIndex: 0,
+          extendedMinutes: 0,
+          sessionActive: true,
+          phaseStartedAt: new Date().toISOString(),
+          sessionStartedAt: new Date().toISOString(),
+          suspended: false,
+          suspensionCount: 0,
+          replacementUsed: true,
+          currentAnimateurUid: uid,
+          currentAnimateurPseudo: pseudo,
+        },
+        status: 'in_progress',
+      });
+    } else {
+      // Session déjà en cours
+      await groupStorage.updateGroup(groupeId, {
+        session_state: {
+            ...state,
             currentAnimateurUid: uid,
             currentAnimateurPseudo: pseudo,
-          },
-          status: 'in_progress',
-        });
-      } else {
-        // Session existante — mise a jour atomique préservant la progression
-        transaction.update(ref, {
-          'sessionState.currentAnimateurUid': uid,
-          'sessionState.currentAnimateurPseudo': pseudo,
-          'sessionState.replacementUsed': true,
-          'sessionState.suspended': false,
-          'sessionState.suspendedAt': deleteField(),
-          'sessionState.suspensionReason': deleteField(),
-          'sessionState.sessionActive': true,
-          // IMPORTANT: we do NOT touch currentPhaseIndex or phaseStartedAt here
-          // unless phaseStartedAt needs to be refreshed to reset the local phase timer
-          'sessionState.phaseStartedAt': serverTimestamp(), 
-        });
-      }
-    });
-    return true; // Sucesss
+            replacementUsed: true,
+            suspended: false,
+            phaseStartedAt: new Date().toISOString(),
+            sessionActive: true
+        }
+      });
+    }
+    return true;
   } catch (err) {
     console.error("ProposeAnimateur echouée:", err);
-    return false; // Transaction ratée
+    return false;
   }
 }
 
@@ -930,6 +864,7 @@ export async function submitBanFeedback(
   participantPseudo: string,
   feedback: string
 ): Promise<void> {
+  // Optionnel: on peut garder Firebase pour les reports de ban car c'est de l'admin
   await addDoc(collection(db, 'banReports'), {
     groupeId,
     participantUid,
@@ -945,28 +880,36 @@ export async function submitBanFeedback(
 // initSessionState supprimée — remplacée par initSessionStateV2 (avec tracking animateur)
 
 export async function advancePhase(groupeId: string, newIndex: number): Promise<void> {
-  await updateDoc(doc(db, 'groupes', groupeId), {
-    'sessionState.currentPhaseIndex': newIndex,
-    'sessionState.phaseStartedAt': serverTimestamp(),
+  const current = await groupStorage.getGroup(groupeId);
+  if (!current?.sessionState) return;
+
+  await groupStorage.updateSessionState(groupeId, {
+    ...current.sessionState,
+    currentPhaseIndex: newIndex,
+    phaseStartedAt: new Date().toISOString(),
   });
 }
 
 export async function extendSession(groupeId: string, extraMinutes: number): Promise<void> {
-  await updateDoc(doc(db, 'groupes', groupeId), {
-    'sessionState.extendedMinutes': extraMinutes,
+  const current = await groupStorage.getGroup(groupeId);
+  if (!current?.sessionState) return;
+
+  await groupStorage.updateSessionState(groupeId, {
+    ...current.sessionState,
+    extendedMinutes: extraMinutes,
   });
 }
 
 export async function endSession(groupeId: string): Promise<void> {
-  const ref = doc(db, 'groupes', groupeId);
-  const snap = await getDoc(ref);
-  if (snap.exists()) {
-    const status = snap.data().status;
-    if (status === 'cancelled' || status === 'completed') return; // Garde terminale
-  }
-  await updateDoc(ref, {
-    'sessionState.sessionActive': false,
+  const current = await groupStorage.getGroup(groupeId);
+  if (current?.status === 'completed' || current?.status === 'cancelled') return;
+
+  await groupStorage.updateGroup(groupeId, {
     status: 'completed',
+    session_state: {
+        ...(current?.sessionState || {}),
+        sessionActive: false
+    }
   });
 }
 
@@ -1015,13 +958,7 @@ export async function isParticipantBanned(
   groupeId: string,
   uid: string
 ): Promise<boolean> {
-  try {
-    const snap = await getDoc(doc(db, 'groupes', groupeId, 'participantExits', uid));
-    if (!snap.exists()) return false;
-    return snap.data().banned === true;
-  } catch {
-    return false;
-  }
+  return groupStorage.isBanned(groupeId, uid);
 }
 
 /**
@@ -1032,27 +969,11 @@ export async function banParticipantExplicit(
   groupeId: string,
   uid: string
 ): Promise<void> {
-  // 1. Marquer comme banni dans participantExits
-  const exitRef = doc(db, 'groupes', groupeId, 'participantExits', uid);
-  await setDoc(exitRef, {
-    count: 3,
-    lastExitAt: serverTimestamp(),
-    banned: true,
-  }, { merge: true });
-
-  // 2. Mettre à jour l'array participants pour propager l'état banni immédiatement (UI + Banner)
-  const groupeRef = doc(db, 'groupes', groupeId);
-  const snap = await getDoc(groupeRef);
-  if (snap.exists()) {
-    const groupeData = snap.data();
-    const participants = groupeData.participants || [];
-    const updatedParticipants = participants.map((p: any) =>
-      p.uid === uid ? { ...p, banni: true } : p
-    );
-    await updateDoc(groupeRef, { participants: updatedParticipants });
-
-    // 3. Notifier le banni
-    const groupeTitre: string = groupeData.titre || 'ce groupe';
+  await groupStorage.banParticipant(groupeId, uid);
+  
+  const groupe = await groupStorage.getGroup(groupeId);
+  if (groupe) {
+    const groupeTitre: string = groupe.titre || 'ce groupe';
     await sendParentNotification(
       uid,
       'group_banned',
