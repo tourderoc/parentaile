@@ -310,41 +310,242 @@ DELETE /notifications/{uid}/{id}         → supprime
 
 **Responsabilité :** gérer les groupes de parole et l'état des sessions vocales.
 
-**Remplace :** collection `groupes` Firebase
+**Remplace :** collection `groupes` Firebase + 4 Cloud Functions Firebase
+
+**Hébergement :** dans `account-service` (même base Postgres, même port 8001) — pas de microservice prématuré.
+
+> **Contrainte importante découverte (2026-04-13) :** les 4 Cloud Functions Firebase dépendent toutes de `groupes`. Deux d'entre elles (`manageVocalTasks`, `cleanupCancelledGroup`) sont des **triggers Firestore** — elles cessent de fonctionner dès que `groupes` quitte Firestore. Elles doivent donc être remplacées côté VPS **en même temps** que la migration de la collection. Les deux autres (`getLiveKitToken`, `handleVocalReminder`) sont des fonctions HTTP qui peuvent temporairement rester sur Firebase en lisant depuis le VPS (Phase A), puis migrer proprement ensuite (Phase B).
+
+---
+
+#### Phase A — Migration atomique (le vrai chantier)
+
+> Tout doit être livré et validé sur `dev` avant le cut-over. La bascule se fait en une seule fenêtre de maintenance.
+
+##### 1. Schéma PostgreSQL (dans la DB `account_db` existante)
 
 ```sql
-groupes (
-  id               TEXT PRIMARY KEY,
-  titre            TEXT,
-  description      TEXT,
-  createur_uid     TEXT REFERENCES accounts(uid),
-  date_session     TIMESTAMPTZ,
-  statut           TEXT,            -- 'planifie' | 'en_cours' | 'termine'
-  max_participants INTEGER,
-  created_at       TIMESTAMPTZ DEFAULT NOW()
+-- Groupe de parole
+CREATE TABLE groupes (
+  id                    TEXT PRIMARY KEY,
+  titre                 TEXT NOT NULL,
+  description           TEXT,
+  theme                 TEXT,
+  createur_uid          TEXT REFERENCES accounts(uid) ON DELETE SET NULL,
+  createur_pseudo       TEXT,
+  date_vocal            TIMESTAMPTZ,
+  date_expiration       TIMESTAMPTZ,
+  status                TEXT NOT NULL DEFAULT 'scheduled',
+    -- 'scheduled' | 'in_progress' | 'completed' | 'cancelled' | 'reprogrammed'
+  cancel_reason         TEXT,
+  reprogrammed_from_id  TEXT REFERENCES groupes(id),
+  reprogrammed_to_id    TEXT REFERENCES groupes(id),
+  structure_type        TEXT DEFAULT 'libre',  -- 'libre' | 'structuree'
+  structure             JSONB DEFAULT '[]',    -- étapes structurées
+  participants          JSONB DEFAULT '[]',    -- [{uid, pseudo, inscritVocal, dateInscription, banni?}]
+  participants_max      INTEGER DEFAULT 5,
+  message_count         INTEGER DEFAULT 0,
+  session_state         JSONB DEFAULT NULL,    -- état temps réel de la session vocale
+  created_at            TIMESTAMPTZ DEFAULT NOW(),
+  updated_at            TIMESTAMPTZ DEFAULT NOW()
 );
 
-groupe_inscriptions (
-  groupe_id  TEXT REFERENCES groupes(id),
-  uid        TEXT REFERENCES accounts(uid),
-  inscrit_at TIMESTAMPTZ DEFAULT NOW(),
+-- Messages du forum de groupe
+CREATE TABLE groupe_messages (
+  id            TEXT PRIMARY KEY,
+  groupe_id     TEXT NOT NULL REFERENCES groupes(id) ON DELETE CASCADE,
+  auteur_uid    TEXT NOT NULL,
+  auteur_pseudo TEXT NOT NULL,
+  contenu       TEXT NOT NULL,
+  date_envoi    TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX idx_groupe_messages_groupe ON groupe_messages(groupe_id, date_envoi);
+
+-- Évaluations post-session
+CREATE TABLE groupe_evaluations (
+  groupe_id        TEXT NOT NULL REFERENCES groupes(id) ON DELETE CASCADE,
+  participant_uid  TEXT NOT NULL,
+  note_ambiance    INTEGER,
+  note_animateur   INTEGER,
+  signalement      BOOLEAN DEFAULT FALSE,
+  status           TEXT,
+  created_at       TIMESTAMPTZ DEFAULT NOW(),
+  PRIMARY KEY (groupe_id, participant_uid)
+);
+
+-- Sorties de participants (compteur de ban)
+CREATE TABLE participant_exits (
+  groupe_id    TEXT NOT NULL REFERENCES groupes(id) ON DELETE CASCADE,
+  uid          TEXT NOT NULL,
+  exit_count   INTEGER DEFAULT 0,
+  last_exit_at TIMESTAMPTZ,
+  banned       BOOLEAN DEFAULT FALSE,
   PRIMARY KEY (groupe_id, uid)
 );
 
-sessions (
-  groupe_id      TEXT PRIMARY KEY REFERENCES groupes(id),
-  phase_index    INTEGER,
-  session_active BOOLEAN,
-  started_at     TIMESTAMPTZ,
-  updated_at     TIMESTAMPTZ DEFAULT NOW()
+-- Déduplication des rappels envoyés
+CREATE TABLE groupe_reminders_sent (
+  groupe_id     TEXT NOT NULL REFERENCES groupes(id) ON DELETE CASCADE,
+  reminder_type TEXT NOT NULL,  -- '30min' | '15min' | '5min'
+  sent_at       TIMESTAMPTZ DEFAULT NOW(),
+  PRIMARY KEY (groupe_id, reminder_type)
 );
 ```
 
-**Hébergement :** peut vivre dans `account-service` (même base Postgres) OU être un service séparé. **Recommandation : même service** tant que la taille reste modérée — pas de microservice prématuré.
+##### 2. Endpoints VPS (dans account-service)
 
-**Remplacement des listeners temps réel :**
-- `onSnapshot` sur `groupes` → polling 10-30s côté React
-- `onSnapshot` sur `sessions` (état vocal critique) → **WebSocket** VPS pour réactivité
+```
+# Groupes
+POST   /groupes                              → créer un groupe
+GET    /groupes                              → lister (filtres: dateVocal, status, uid)
+GET    /groupes/{id}                         → lire un groupe
+PUT    /groupes/{id}                         → mettre à jour (patch partiel)
+DELETE /groupes/{id}                         → supprimer + cascade sous-tables
+
+# Participants
+POST   /groupes/{id}/join                    → rejoindre un groupe
+POST   /groupes/{id}/leave                   → quitter un groupe
+PUT    /groupes/{id}/participants/{uid}/ban  → bannir un participant
+
+# Session vocale (état temps réel)
+PUT    /groupes/{id}/session                 → mettre à jour sessionState (phase, animateur, suspension...)
+DELETE /groupes/{id}/session                 → terminer la session
+
+# Messages forum
+GET    /groupes/{id}/messages                → lister les messages
+POST   /groupes/{id}/messages                → poster un message
+DELETE /groupes/{id}/messages/{msgId}        → supprimer un message
+
+# Évaluations
+POST   /groupes/{id}/evaluations             → soumettre une évaluation
+GET    /groupes/{id}/evaluations             → lire les évaluations (animateur)
+
+# Sorties (gestion ban auto)
+POST   /groupes/{id}/exits/{uid}             → enregistrer une sortie (incrémente compteur, ban auto à 3)
+GET    /groupes/{id}/exits/{uid}             → vérifier si banni
+```
+
+##### 3. Remplacement des triggers Firebase → logique VPS
+
+**`manageVocalTasks` (trigger onWrite) → cron systemd VPS**
+
+Le trigger Firebase planifiait des Cloud Tasks (Google) 30/15/5 min avant le vocal. Sur VPS, un cron systemd tourne toutes les **5 minutes** et fait le même travail :
+
+```
+Cron toutes les 5 min :
+  SELECT groupes WHERE status = 'scheduled'
+    AND date_vocal BETWEEN NOW() + INTERVAL '5 min' AND NOW() + INTERVAL '35 min'
+  Pour chaque groupe trouvé :
+    Vérifier groupe_reminders_sent → quels types pas encore envoyés
+    Si date_vocal - NOW() ≤ 30min ET '30min' pas envoyé → envoyer rappel 30min
+    Si date_vocal - NOW() ≤ 15min ET '15min' pas envoyé → envoyer rappel 15min
+    Si date_vocal - NOW() ≤  5min ET '5min'  pas envoyé → envoyer rappel 5min
+    Insérer dans groupe_reminders_sent pour déduplication
+```
+
+**`cleanupCancelledGroup` (trigger onUpdate) → logique dans l'endpoint PUT /groupes/{id}**
+
+Quand un groupe passe en status `cancelled`, l'endpoint VPS déclenche directement le nettoyage synchrone :
+- Si moins de 3 participants ET aucun message → suppression complète (cascade)
+- Sinon → marqué `cancelled`, conservé pour archivage
+
+##### 4. Remplacement des listeners `onSnapshot` React
+
+| Usage actuel | Remplacement VPS |
+|---|---|
+| `onSnapshot` liste groupes (accueil) | Polling 30s → `GET /groupes?status=scheduled` |
+| `onSnapshot` détail groupe (inscription) | Polling 15s → `GET /groupes/{id}` |
+| `onSnapshot` messages forum | Polling 10s → `GET /groupes/{id}/messages` |
+| `onSnapshot` sessionState (pendant vocal) | **Polling 5s** → `GET /groupes/{id}` (champ session_state) |
+| `onSnapshot` évaluations | Polling 30s → `GET /groupes/{id}/evaluations` |
+
+> Note sur le temps réel vocal : le polling 5s est acceptable pour une V1 bêta à 150 utilisateurs. Un WebSocket peut être ajouté plus tard si la réactivité devient insuffisante.
+
+##### 5. Modifications Cloud Functions Firebase (temporaires — Phase A)
+
+Ces deux fonctions HTTP restent sur Firebase mais lisent depuis le VPS au lieu de Firestore :
+
+**`getLiveKitToken`** — remplacer les lectures Firestore par des appels HTTP VPS :
+- `GET /groupes/{id}` pour vérifier inscription, fenêtre horaire, statut animateur
+- `GET /groupes/{id}/exits/{uid}` pour vérifier le ban
+- La génération du token JWT reste inchangée
+
+**`handleVocalReminder`** — remplacer les lectures Firestore par des appels HTTP VPS :
+- `GET /groupes/{id}` pour lire participants et dateVocal
+- `PUT /groupes/{id}` pour passer en `cancelled` si < 3 participants
+- L'envoi FCM reste inchangé
+
+##### 6. Fichiers React à migrer (10 fichiers)
+
+| Fichier | Operations |
+|---------|------------|
+| `lib/groupeParoleService.ts` | CRUD complet + listeners → remplacer tout par appels VPS |
+| `screens/Espace/SalleVocalePage.tsx` | onSnapshot sessionState → polling 5s |
+| `screens/Espace/MesGroupesPage.tsx` | listener groupe + ratings → polling |
+| `screens/Espace/GroupeDetailPage.tsx` | via groupeParoleService |
+| `screens/Espace/MesMessagesPage.tsx` | via groupeParoleService |
+| `screens/Espace/slides/CreateGroupeParole.tsx` | création groupe → POST /groupes |
+| `lib/upcomingGroupContext.tsx` | listener liste groupes → polling |
+| `vocal/hooks/useParticipantTracker.ts` | participantExits + participants array → VPS |
+| `lib/pushNotifications.ts` | référence groupes → adapter |
+| `lib/liveKitService.ts` | inchangé en Phase A (appelle toujours Firebase Cloud Function) |
+
+##### 7. Script de migration des données
+
+```
+Migration one-shot Firestore → PostgreSQL :
+  1. Export collection groupes (+ sous-collections) → JSON
+  2. Transform : Timestamp Firebase → TIMESTAMPTZ, participants array → JSONB
+  3. INSERT INTO groupes ...
+  4. INSERT INTO groupe_messages ... (depuis sous-collection messages)
+  5. INSERT INTO groupe_evaluations ... (depuis sous-collection evaluations)
+  6. INSERT INTO participant_exits ... (depuis sous-collection participantExits)
+  7. Diff de contrôle : comparer counts Firestore vs Postgres
+```
+
+##### 8. Cut-over (fenêtre de maintenance)
+
+```
+1. Page maintenance affichée
+2. Script migration one-shot Firestore → Postgres
+3. Diff de contrôle
+4. Déployer cron systemd vocal-reminders sur VPS
+5. Bascule React : VITE_GROUPES_BACKEND=vps sur main → build → déploiement
+6. Mettre à jour getLiveKitToken et handleVocalReminder sur Firebase (lecture VPS)
+7. Retirer page maintenance
+8. Surveillance 48h
+```
+
+---
+
+#### Phase B — Migration Cloud Functions Firebase → VPS (après validation Phase A)
+
+> Prérequis : Phase A validée depuis au moins 7 jours sans incident.
+
+**`getLiveKitToken` → endpoint VPS dans account-service**
+
+```
+POST /livekit/token
+  Body : { groupeId, pseudo?, mood?, password? }
+  Header : Authorization: Bearer {Firebase ID token}
+  
+  Vérifications :
+    1. Valider le Firebase ID token → extraire uid
+    2. GET /groupes/{groupeId} → vérifier inscription, fenêtre horaire, ban
+    3. Générer JWT LiveKit (même logique qu'aujourd'hui)
+    4. Retourner { token, roomName, wsUrl, isAnimateur, pseudo }
+```
+
+**`handleVocalReminder` → absorbé par le cron systemd vocal-reminders**
+
+Le cron VPS gère déjà les rappels (30/15/5 min). Il intègre aussi la logique d'annulation automatique (< 3 participants) qui était dans `handleVocalReminder`. Cette fonction Firebase devient inutile.
+
+**`manageVocalTasks` et `cleanupCancelledGroup` → déjà supprimés en Phase A**
+
+**Résultat final Phase B :**
+- 0 Cloud Functions Firebase actives
+- 0 Firestore collections actives (sauf Auth et FCM conservés à vie)
+- Coût Firebase réduit au minimum fixe (Auth gratuit + FCM gratuit)
 
 ---
 
@@ -475,13 +676,15 @@ VPS Hostinger (145.223.117.145)
 |-------|---------|----------------|-------------|------------|--------|
 | 1 | Avatar service | Parent'aile | Faible | Faible | ✅ livré |
 | 2 | Account service + PostgreSQL (socle) | Parent'aile | Très élevé | Elevé | ✅ livré 2026-04-12 (non branché) |
-| 3A | LiveKit token service | Parent'aile | Moyen | Faible | ⏳ à faire |
-| 3B | Notifications + cron vocal | Parent'aile | Elevé | Moyen | ⏳ à faire |
-| 3C | Groupes + sessions vocales (dans account-service) | Parent'aile | Elevé | Moyen | ⏳ à faire |
-| 4 | Bridge Service | MedCompanion + Parent'aile | Elevé | Elevé | ⏳ à faire |
-| 5 | **Cut-over maintenance** (bascule `VITE_STORAGE_BACKEND=vps` + migration données) | Parent'aile | — | Moyen | ⏳ une fois 3 + 4 livrés |
+| 3C-A | **Groupes — Phase A** : collection Firestore → Postgres + remplacement triggers Firebase + React migré + Cloud Functions getLiveKitToken/handleVocalReminder branchées sur VPS temporairement | Parent'aile | Très élevé | Elevé | ⏳ à faire |
+| 3C-B | **Groupes — Phase B** : getLiveKitToken → VPS, handleVocalReminder absorbée par cron, suppression toutes Cloud Functions Firebase | Parent'aile | Elevé | Faible | ⏳ après 7j validation 3C-A |
+| 3B | Notifications VPS (parentNotifications + cron vocal) | Parent'aile | Elevé | Moyen | ⏳ après 3C |
+| 4 | Bridge Service (tokens + messages + notifications MedCompanion) | MedCompanion + Parent'aile | Elevé | Elevé | ⏳ à faire |
+| 5 | **Cut-over maintenance global** (bascule `VITE_STORAGE_BACKEND=vps` accounts + groupes + migration données one-shot) | Parent'aile | — | Moyen | ⏳ une fois 3 + 4 livrés |
 
-**Changement stratégique important :** contrairement à une approche « commencer par le plus simple » (LiveKit token), on commence par le **socle central** (account-service + Postgres). Raison : tous les services suivants s'y greffent naturellement — les faire en premier reviendrait à construire des silos isolés qu'il faudrait ensuite relier. Le surcoût initial (installer Postgres) est compensé par le fait qu'il est ensuite utilisable immédiatement par toutes les phases suivantes.
+> **Pourquoi 3C avant 3B :** les Cloud Functions Firebase (rappels vocaux) dépendent de `groupes`. Migrer `groupes` en premier (3C) permet ensuite de migrer les Cloud Functions de rappel proprement dans la Phase B, sans avoir à les toucher deux fois.
+
+> **3A (LiveKit token) absorbé dans 3C-B :** le service LiveKit token est la dernière Cloud Function Firebase à migrer. Il n'a plus de raison d'être un chantier séparé puisqu'il sera migré naturellement quand `groupes` est sur VPS.
 
 ---
 
