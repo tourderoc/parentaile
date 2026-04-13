@@ -25,8 +25,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { getLiveKitToken } from '../../lib/liveKitService';
 import { UserAvatar } from '../../components/ui/UserAvatar';
 import type { AvatarConfig } from '../../lib/avatarTypes';
-import { auth, db } from '../../lib/firebase';
-import { doc, getDoc, onSnapshot } from 'firebase/firestore';
+import { auth } from '../../lib/firebase';
+import { accountStorage } from '../../lib/accountStorage';
 import { 
   submitEvaluation, markEvaluationPending, getEvaluationStatus, addPoints, 
   advancePhase, 
@@ -1126,19 +1126,26 @@ const RoomContent: React.FC<{
     if (newIds.length === 0) return;
 
     const fetchStats = async () => {
-      const badges: Record<string, BadgeLevel> = {};
-      const points: Record<string, number> = {};
-      for (const id of newIds) {
-        fetchedUidsRef.current.add(id);
-        const snap = await getDoc(doc(db, 'accounts', id));
-        if (snap.exists()) {
-          const data = snap.data();
-          points[id] = data.points || 0;
-          badges[id] = data.badge || getBadgeForPoints(data.points || 0);
+      try {
+        const accounts = await accountStorage.batchGetAccounts(newIds);
+        const badges: Record<string, BadgeLevel> = {};
+        const points: Record<string, number> = {};
+        
+        for (const id of newIds) {
+          fetchedUidsRef.current.add(id);
         }
+        
+        for (const data of accounts) {
+          const id = data.uid;
+          points[id] = data.points || 0;
+          badges[id] = (data.badge as BadgeLevel) || getBadgeForPoints(data.points || 0);
+        }
+        
+        setParticipantPoints(prev => ({ ...prev, ...points }));
+        setParticipantBadges(prev => ({ ...prev, ...badges }));
+      } catch (err) {
+        console.error('Erreur chargement stats participants:', err);
       }
-      setParticipantPoints(prev => ({ ...prev, ...points }));
-      setParticipantBadges(prev => ({ ...prev, ...badges }));
     };
     fetchStats();
   }, [participants.length]);
@@ -3663,11 +3670,10 @@ export const SalleVocalePage = () => {
 
         if (currentUser) {
           try {
-            const accSnap = await getDoc(doc(db, 'accounts', currentUser.uid));
-            if (accSnap.exists()) {
-              const uData = accSnap.data();
+            const uData = await accountStorage.getAccount(currentUser.uid);
+            if (uData) {
               setSessionPrenom(uData.pseudo || currentUser.displayName || '');
-              if (uData.skipCharte) {
+              if ((uData as any).skipCharte) {
                 setStep('waiting');
                 return;
               }

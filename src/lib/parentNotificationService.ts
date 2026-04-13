@@ -90,12 +90,17 @@ export async function sendParentNotification(
 const MAX_NOTIFS = 10;
 
 async function purgeOldParentNotifs(docs: { id: string }[]): Promise<void> {
-  if (docs.length <= MAX_NOTIFS) return;
-  // Les docs sont triés par createdAt desc → les plus anciens sont en fin de tableau
-  const toDelete = docs.slice(MAX_NOTIFS);
-  await Promise.all(
-    toDelete.map(d => deleteDoc(doc(db, 'parentNotifications', d.id)))
-  );
+  try {
+    if (docs.length <= MAX_NOTIFS) return;
+    // Les docs sont triés par createdAt desc → les plus anciens sont en fin de tableau
+    const toDelete = docs.slice(MAX_NOTIFS);
+    await Promise.all(
+      toDelete.map(d => deleteDoc(doc(db, 'parentNotifications', d.id)))
+    );
+  } catch (err) {
+    // On ignore silencieusement car c'est une opération de maintenance non-critique
+    console.warn('[parentNotificationService] Échec de la purge automatique (permissions probablement restreintes)');
+  }
 }
 
 // ========== LECTURE ==========

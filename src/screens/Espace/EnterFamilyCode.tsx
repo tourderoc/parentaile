@@ -7,8 +7,8 @@
 
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { auth, db } from '../../lib/firebase';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { auth } from '../../lib/firebase';
+import { accountStorage } from '../../lib/accountStorage';
 import { validateToken, markTokenAsUsed } from '../../lib/tokenService';
 import { validateNickname } from '../../lib/pseudoFilter';
 import { Button } from '../../components/ui/button';
@@ -91,12 +91,8 @@ export const EnterFamilyCode: React.FC<EnterFamilyCodeProps> = ({ onBack }) => {
 
       const cleanToken = token.trim().toLowerCase();
 
-      // Ajouter l'enfant au compte
-      const childRef = doc(db, 'accounts', user.uid, 'children', cleanToken);
-      await setDoc(childRef, {
-        nickname: nickname.trim(),
-        addedAt: serverTimestamp()
-      });
+      // Ajouter l'enfant au compte via accountStorage (qui gère db ou vps selon config)
+      await accountStorage.addChild(user.uid, cleanToken, nickname.trim());
 
       // Token déjà marqué "used" dans validateToken (single-use)
 

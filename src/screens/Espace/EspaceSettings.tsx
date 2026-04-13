@@ -1,15 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { auth, db } from '../../lib/firebase';
+import { auth } from '../../lib/firebase';
 import { signOut, updateEmail, updatePassword, EmailAuthProvider, reauthenticateWithCredential, deleteUser, GoogleAuthProvider, reauthenticateWithPopup } from 'firebase/auth';
-import {
-  doc,
-  updateDoc,
-  getDoc,
-  deleteDoc,
-  collection,
-  getDocs
-} from 'firebase/firestore';
+import { accountStorage } from '../../lib/accountStorage';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft,
@@ -53,7 +46,7 @@ export const EspaceSettings = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const tabParam = new URLSearchParams(location.search).get('tab');
-  const { avatarConfig: contextAvatar } = useUser();
+  const { avatarConfig: contextAvatar, refreshAccount, setLocalData } = useUser();
   const initialTab = tabParam === 'avatar' ? 1 : tabParam === 'notifs' ? 2 : 0;
   const [activeTab, setActiveTab] = useState(initialTab);
 
@@ -115,12 +108,11 @@ export const EspaceSettings = () => {
     }
 
     try {
-      const accountRef = doc(db, 'accounts', user.uid);
-      const accountSnap = await getDoc(accountRef);
-      if (accountSnap.exists()) {
-        setPseudo(accountSnap.data().pseudo || '');
-        if (accountSnap.data().avatar) {
-          setAvatarConfig(accountSnap.data().avatar);
+      const account = await accountStorage.getAccount(user.uid);
+      if (account) {
+        setPseudo(account.pseudo || '');
+        if (account.avatar) {
+          setAvatarConfig(account.avatar);
         }
       }
     } catch (err) {
@@ -158,14 +150,15 @@ export const EspaceSettings = () => {
       if (!user) throw new Error('Non connecte');
       const cleanConfig: AvatarConfig = { ...avatarConfig, avatarType: 'static', aiUrl: '' };
 
-      // Sauvegarde VPS (source de vérité) + Firebase (compat userContext)
+      // Sauvegarde VPS avatar-service + accountStorage (auto-aiguillé par feature flag)
       await Promise.all([
         AvatarAIService.saveCustomConfig(user.uid, cleanConfig),
-        updateDoc(doc(db, 'accounts', user.uid), { avatar: cleanConfig }),
+        accountStorage.updateAccount(user.uid, { avatar: cleanConfig }),
       ]);
 
       setAvatarConfig(cleanConfig);
       setAvatarSuccess('Avatar enregistre !');
+      refreshAccount(); // MAJ immédiate du contexte
       setTimeout(() => {
         setAvatarSuccess(null);
         setAvatarStep(0);
@@ -205,11 +198,11 @@ export const EspaceSettings = () => {
       const user = auth.currentUser;
       if (!user) throw new Error('Non connecte');
 
-      const accountRef = doc(db, 'accounts', user.uid);
-      await updateDoc(accountRef, { pseudo: newPseudo.trim() });
+      await accountStorage.updateAccount(user.uid, { pseudo: newPseudo.trim() });
 
       setPseudo(newPseudo.trim());
       setEditSuccess('Pseudo mis a jour !');
+      refreshAccount(); // MAJ immédiate du contexte
       setTimeout(() => setEditModal(null), 1500);
     } catch (err: any) {
       console.error('Erreur:', err);
@@ -241,10 +234,10 @@ export const EspaceSettings = () => {
       await reauthenticateWithCredential(user, credential);
       await updateEmail(user, newEmail.trim());
 
-      const accountRef = doc(db, 'accounts', user.uid);
-      await updateDoc(accountRef, { email: newEmail.trim() });
+      await accountStorage.updateAccount(user.uid, { email: newEmail.trim() });
 
       setEditSuccess('Email mis a jour !');
+      refreshAccount();
       setTimeout(() => setEditModal(null), 1500);
     } catch (err: any) {
       console.error('Erreur:', err);
@@ -329,15 +322,8 @@ export const EspaceSettings = () => {
         await reauthenticateWithCredential(user, credential);
       }
 
-      // Supprimer les enfants d'abord
-      const childrenRef = collection(db, 'accounts', user.uid, 'children');
-      const childrenSnap = await getDocs(childrenRef);
-      const deletePromises = childrenSnap.docs.map(childDoc => deleteDoc(childDoc.ref));
-      await Promise.all(deletePromises);
-
-      // Supprimer le document account parent
-      const accountRef = doc(db, 'accounts', user.uid);
-      await deleteDoc(accountRef);
+      // Supprimer le compte (accountStorage cascade les enfants automatiquement côté VPS)
+      await accountStorage.deleteAccount(user.uid);
 
       // Supprimer l'utilisateur Auth Firebase
       await deleteUser(user);

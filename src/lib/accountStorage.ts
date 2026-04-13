@@ -2,12 +2,22 @@
  * Couche d'aiguillage Firebase <-> VPS pour les comptes utilisateurs.
  *
  * Choix du backend via VITE_STORAGE_BACKEND (`firebase` | `vps`).
- * Tant que les 13 fichiers consommateurs ne sont pas migres, cette couche
- * reste optionnelle : on peut l'utiliser en parallele du code Firebase
- * existant pour tester le tunnel VPS sans toucher a la prod.
+ * Tous les fichiers consommateurs de `accounts` passent par cette couche.
+ * La bascule `vps` active le tunnel HTTPS vers account.parentaile.fr.
  */
 
-import { doc, getDoc, updateDoc, collection, getDocs, query, orderBy } from 'firebase/firestore';
+import {
+  doc,
+  getDoc,
+  setDoc,
+  updateDoc,
+  deleteDoc,
+  collection,
+  getDocs,
+  query,
+  orderBy,
+  serverTimestamp,
+} from 'firebase/firestore';
 import { db } from './firebase';
 
 // ============================================
@@ -50,13 +60,35 @@ export interface AccountUpdate {
   fcm_token?: string | null;
   fcm_token_updated_at?: string | null;
   role?: string | null;
+  last_activity?: string;
+}
+
+export interface AccountCreate {
+  uid: string;
+  email?: string | null;
+  pseudo: string;
+  avatar?: any | null;
+  points?: number;
+  badge?: string | null;
+  participation_history?: any[];
+  avatar_gen_count?: number;
+  last_avatar_gen_date?: string | null;
+  fcm_token?: string | null;
+  fcm_token_updated_at?: string | null;
+  role?: string | null;
 }
 
 export interface AccountStorage {
   backend: 'firebase' | 'vps';
   getAccount(uid: string): Promise<AccountData | null>;
+  createAccount(data: AccountCreate): Promise<AccountData>;
   updateAccount(uid: string, patch: AccountUpdate): Promise<AccountData>;
+  deleteAccount(uid: string): Promise<void>;
   listChildren(uid: string): Promise<ChildData[]>;
+  addChild(uid: string, tokenId: string, nickname: string): Promise<ChildData>;
+  updateChild(uid: string, tokenId: string, nickname: string): Promise<ChildData>;
+  removeChild(uid: string, tokenId: string): Promise<void>;
+  batchGetAccounts(uids: string[]): Promise<AccountData[]>;
 }
 
 // ============================================
@@ -81,6 +113,43 @@ async function vpsFetch(path: string, init: RequestInit = {}): Promise<Response>
   return res;
 }
 
+/** Maps camelCase AccountUpdate keys to snake_case VPS field names. */
+function mapToVpsFields(patch: Record<string, any>): Record<string, any> {
+  const mapping: Record<string, string> = {
+    email: 'email',
+    pseudo: 'pseudo',
+    avatar: 'avatar',
+    avatar_gen_count: 'avatar_gen_count',
+    avatarGenCount: 'avatar_gen_count',
+    last_avatar_gen_date: 'last_avatar_gen_date',
+    lastAvatarGenDate: 'last_avatar_gen_date',
+    points: 'points',
+    badge: 'badge',
+    participation_history: 'participation_history',
+    participationHistory: 'participation_history',
+    fcm_token: 'fcm_token',
+    fcmToken: 'fcm_token',
+    fcm_token_updated_at: 'fcm_token_updated_at',
+    fcmTokenUpdatedAt: 'fcm_token_updated_at',
+    role: 'role',
+    last_activity: 'last_activity',
+    lastActivity: 'last_activity',
+  };
+  const mapped: Record<string, any> = {};
+  for (const [k, v] of Object.entries(patch)) {
+    const targetKey = mapping[k] || k;
+    if (v !== undefined) {
+      // Handle Date objects (like serverTimestamp fallback or new Date())
+      if (v instanceof Date) {
+        mapped[targetKey] = v.toISOString();
+      } else {
+        mapped[targetKey] = v;
+      }
+    }
+  }
+  return mapped;
+}
+
 const vpsStorage: AccountStorage = {
   backend: 'vps',
 
@@ -91,18 +160,77 @@ const vpsStorage: AccountStorage = {
     return res.json();
   },
 
+  async createAccount(data) {
+    const res = await vpsFetch('/accounts', {
+      method: 'POST',
+      body: JSON.stringify(mapToVpsFields(data)),
+    });
+    if (!res.ok) throw new Error(`VPS createAccount failed: ${res.status} ${await res.text()}`);
+    return res.json();
+  },
+
   async updateAccount(uid, patch) {
     const res = await vpsFetch(`/accounts/${encodeURIComponent(uid)}`, {
       method: 'PUT',
-      body: JSON.stringify(patch),
+      body: JSON.stringify(mapToVpsFields(patch)),
     });
     if (!res.ok) throw new Error(`VPS updateAccount failed: ${res.status} ${await res.text()}`);
     return res.json();
   },
 
+  async deleteAccount(uid) {
+    const res = await vpsFetch(`/accounts/${encodeURIComponent(uid)}`, {
+      method: 'DELETE',
+    });
+    if (!res.ok && res.status !== 404) {
+      throw new Error(`VPS deleteAccount failed: ${res.status} ${await res.text()}`);
+    }
+  },
+
   async listChildren(uid) {
     const res = await vpsFetch(`/accounts/${encodeURIComponent(uid)}/children`);
     if (!res.ok) throw new Error(`VPS listChildren failed: ${res.status} ${await res.text()}`);
+    return res.json();
+  },
+
+  async addChild(uid, tokenId, nickname) {
+    const res = await vpsFetch(`/accounts/${encodeURIComponent(uid)}/children`, {
+      method: 'POST',
+      body: JSON.stringify({ token_id: tokenId, nickname }),
+    });
+    if (!res.ok) throw new Error(`VPS addChild failed: ${res.status} ${await res.text()}`);
+    return res.json();
+  },
+
+  async updateChild(uid, tokenId, nickname) {
+    const res = await vpsFetch(
+      `/accounts/${encodeURIComponent(uid)}/children/${encodeURIComponent(tokenId)}`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({ nickname }),
+      }
+    );
+    if (!res.ok) throw new Error(`VPS updateChild failed: ${res.status} ${await res.text()}`);
+    return res.json();
+  },
+
+  async removeChild(uid, tokenId) {
+    const res = await vpsFetch(
+      `/accounts/${encodeURIComponent(uid)}/children/${encodeURIComponent(tokenId)}`,
+      { method: 'DELETE' }
+    );
+    if (!res.ok && res.status !== 404) {
+      throw new Error(`VPS removeChild failed: ${res.status} ${await res.text()}`);
+    }
+  },
+
+  async batchGetAccounts(uids) {
+    if (uids.length === 0) return [];
+    const res = await vpsFetch('/accounts/batch', {
+      method: 'POST',
+      body: JSON.stringify({ uids }),
+    });
+    if (!res.ok) throw new Error(`VPS batchGetAccounts failed: ${res.status} ${await res.text()}`);
     return res.json();
   },
 };
@@ -118,49 +246,100 @@ function firebaseTsToIso(v: any): string | null {
   return typeof v === 'string' ? v : null;
 }
 
+function firebaseRowToAccountData(uid: string, d: Record<string, any>): AccountData {
+  return {
+    uid,
+    email: d.email ?? null,
+    pseudo: d.pseudo ?? '',
+    avatar: d.avatar ?? null,
+    avatar_gen_count: d.avatarGenCount ?? 0,
+    last_avatar_gen_date: d.lastAvatarGenDate ?? null,
+    points: d.points ?? 0,
+    badge: d.badge ?? null,
+    participation_history: d.participationHistory ?? [],
+    fcm_token: d.fcmToken ?? null,
+    fcm_token_updated_at: firebaseTsToIso(d.fcmTokenUpdatedAt),
+    role: d.role ?? null,
+    created_at: firebaseTsToIso(d.createdAt) ?? undefined,
+    last_activity: firebaseTsToIso(d.lastActivity) ?? undefined,
+    updated_at: firebaseTsToIso(d.updatedAt) ?? undefined,
+  };
+}
+
+/** Maps snake_case AccountUpdate keys to camelCase Firebase field names. */
+function patchToFirebaseFields(patch: Record<string, any>): Record<string, any> {
+  const mapping: Record<string, string> = {
+    email: 'email',
+    pseudo: 'pseudo',
+    avatar: 'avatar',
+    avatar_gen_count: 'avatarGenCount',
+    last_avatar_gen_date: 'lastAvatarGenDate',
+    points: 'points',
+    badge: 'badge',
+    participation_history: 'participationHistory',
+    fcm_token: 'fcmToken',
+    fcm_token_updated_at: 'fcmTokenUpdatedAt',
+    role: 'role',
+    last_activity: 'lastActivity',
+  };
+  const mapped: Record<string, any> = {};
+  for (const [k, v] of Object.entries(patch)) {
+    if (v !== undefined && mapping[k]) {
+      mapped[mapping[k]] = v;
+    }
+  }
+  return mapped;
+}
+
 const firebaseStorage: AccountStorage = {
   backend: 'firebase',
 
   async getAccount(uid) {
     const snap = await getDoc(doc(db, 'accounts', uid));
     if (!snap.exists()) return null;
-    const d = snap.data();
-    return {
-      uid,
-      email: d.email ?? null,
-      pseudo: d.pseudo ?? '',
-      avatar: d.avatar ?? null,
-      avatar_gen_count: d.avatarGenCount ?? 0,
-      last_avatar_gen_date: d.lastAvatarGenDate ?? null,
-      points: d.points ?? 0,
-      badge: d.badge ?? null,
-      participation_history: d.participationHistory ?? [],
-      fcm_token: d.fcmToken ?? null,
-      fcm_token_updated_at: firebaseTsToIso(d.fcmTokenUpdatedAt),
-      role: d.role ?? null,
-      created_at: firebaseTsToIso(d.createdAt) ?? undefined,
-      last_activity: firebaseTsToIso(d.lastActivity) ?? undefined,
-      updated_at: firebaseTsToIso(d.updatedAt) ?? undefined,
+    return firebaseRowToAccountData(uid, snap.data());
+  },
+
+  async createAccount(data) {
+    const firebaseDoc: Record<string, any> = {
+      email: data.email ?? null,
+      pseudo: data.pseudo,
+      avatar: data.avatar ?? null,
+      avatarGenCount: data.avatar_gen_count ?? 0,
+      lastAvatarGenDate: data.last_avatar_gen_date ?? null,
+      points: data.points ?? 0,
+      badge: data.badge ?? null,
+      participationHistory: data.participation_history ?? [],
+      fcmToken: data.fcm_token ?? null,
+      fcmTokenUpdatedAt: data.fcm_token_updated_at ?? null,
+      role: data.role ?? null,
+      createdAt: serverTimestamp(),
+      lastActivity: serverTimestamp(),
     };
+    await setDoc(doc(db, 'accounts', data.uid), firebaseDoc, { merge: true });
+    const created = await firebaseStorage.getAccount(data.uid);
+    if (!created) throw new Error(`Account ${data.uid} vanished after creation`);
+    return created;
   },
 
   async updateAccount(uid, patch) {
-    const mapped: Record<string, any> = {};
-    if (patch.email !== undefined) mapped.email = patch.email;
-    if (patch.pseudo !== undefined) mapped.pseudo = patch.pseudo;
-    if (patch.avatar !== undefined) mapped.avatar = patch.avatar;
-    if (patch.avatar_gen_count !== undefined) mapped.avatarGenCount = patch.avatar_gen_count;
-    if (patch.last_avatar_gen_date !== undefined) mapped.lastAvatarGenDate = patch.last_avatar_gen_date;
-    if (patch.points !== undefined) mapped.points = patch.points;
-    if (patch.badge !== undefined) mapped.badge = patch.badge;
-    if (patch.participation_history !== undefined) mapped.participationHistory = patch.participation_history;
-    if (patch.fcm_token !== undefined) mapped.fcmToken = patch.fcm_token;
-    if (patch.fcm_token_updated_at !== undefined) mapped.fcmTokenUpdatedAt = patch.fcm_token_updated_at;
-    if (patch.role !== undefined) mapped.role = patch.role;
-    await updateDoc(doc(db, 'accounts', uid), mapped);
+    const mapped = patchToFirebaseFields(patch);
+    if (Object.keys(mapped).length > 0) {
+      await updateDoc(doc(db, 'accounts', uid), mapped);
+    }
     const next = await firebaseStorage.getAccount(uid);
     if (!next) throw new Error(`Account ${uid} vanished after update`);
     return next;
+  },
+
+  async deleteAccount(uid) {
+    // Delete children sub-collection first (Firebase requires manual sub-collection cleanup)
+    const childrenRef = collection(db, 'accounts', uid, 'children');
+    const childrenSnap = await getDocs(childrenRef);
+    const deletes = childrenSnap.docs.map((d) => deleteDoc(d.ref));
+    await Promise.all(deletes);
+    // Delete the account document
+    await deleteDoc(doc(db, 'accounts', uid));
   },
 
   async listChildren(uid) {
@@ -171,6 +350,50 @@ const firebaseStorage: AccountStorage = {
       nickname: d.data().nickname ?? '',
       added_at: firebaseTsToIso(d.data().addedAt) ?? new Date().toISOString(),
     }));
+  },
+
+  async addChild(uid, tokenId, nickname) {
+    const childRef = doc(db, 'accounts', uid, 'children', tokenId);
+    await setDoc(childRef, {
+      nickname,
+      addedAt: serverTimestamp(),
+    });
+    // Read back to get the server timestamp
+    const snap = await getDoc(childRef);
+    const data = snap.data();
+    return {
+      token_id: tokenId,
+      nickname,
+      added_at: firebaseTsToIso(data?.addedAt) ?? new Date().toISOString(),
+    };
+  },
+
+  async updateChild(uid, tokenId, nickname) {
+    const childRef = doc(db, 'accounts', uid, 'children', tokenId);
+    await updateDoc(childRef, { nickname });
+    const snap = await getDoc(childRef);
+    const data = snap.data();
+    return {
+      token_id: tokenId,
+      nickname,
+      added_at: firebaseTsToIso(data?.addedAt) ?? new Date().toISOString(),
+    };
+  },
+
+  async removeChild(uid, tokenId) {
+    await deleteDoc(doc(db, 'accounts', uid, 'children', tokenId));
+  },
+
+  async batchGetAccounts(uids) {
+    // Firebase doesn't have batch get — fetch in parallel
+    const results = await Promise.all(
+      uids.map(async (uid) => {
+        const snap = await getDoc(doc(db, 'accounts', uid));
+        if (!snap.exists()) return null;
+        return firebaseRowToAccountData(uid, snap.data());
+      })
+    );
+    return results.filter((r): r is AccountData => r !== null);
   },
 };
 

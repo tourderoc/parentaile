@@ -13,6 +13,7 @@ import { doc, updateDoc } from 'firebase/firestore';
 import { db } from './firebase';
 import { getApps } from 'firebase/app';
 import { areNotificationsEnabled, playNotificationSound } from './userPreferences';
+import { accountStorage } from './accountStorage';
 
 // Clé VAPID publique (Firebase Console > Cloud Messaging > Web Push certificates)
 const VAPID_KEY = 'BM_HWgoaVmHT8E44P9D4gHEf52594f6xUKO67r_HEnwmFusTwGP04BRy-fBxSw1YwLOTYicQOeXLOA1B5L94gLA';
@@ -179,8 +180,7 @@ export async function registerFcmTokenForParent(tokenId: string, fcmToken: strin
  */
 export async function registerFcmTokenForAccount(uid: string, fcmToken: string): Promise<boolean> {
   try {
-    const accountRef = doc(db, 'accounts', uid);
-    await updateDoc(accountRef, {
+    await accountStorage.updateAccount(uid, {
       fcmToken: fcmToken,
       fcmTokenUpdatedAt: new Date()
     });

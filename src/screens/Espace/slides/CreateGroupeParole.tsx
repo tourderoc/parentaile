@@ -27,8 +27,8 @@ import {
   ChevronDown,
   Share2,
 } from 'lucide-react';
-import { auth, db } from '../../../lib/firebase';
-import { doc, getDoc } from 'firebase/firestore';
+import { auth } from '../../../lib/firebase';
+import { accountStorage } from '../../../lib/accountStorage';
 import { canUseRefinement, getRemainingUses, incrementUsage, isAdminUser } from '../../../lib/rateLimiting';
 import { createGroupeParole } from '../../../lib/groupeParoleService';
 import type { ThemeGroupe, StructureEtape } from '../../../types/groupeParole';
@@ -405,8 +405,8 @@ export const CreateGroupeParole: React.FC<CreateGroupeParoleProps> = ({ onBack, 
 
     try {
       // Get user pseudo
-      const accountDoc = await getDoc(doc(db, 'accounts', user.uid));
-      const pseudo = accountDoc.exists() ? (accountDoc.data().pseudo || 'Parent') : 'Parent';
+      const accountData = await accountStorage.getAccount(user.uid);
+      const pseudo = accountData?.pseudo || 'Parent';
 
       const dateTime = new Date(`${dateVocal}T${heureVocal}:00`);
 

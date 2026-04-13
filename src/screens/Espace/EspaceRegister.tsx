@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { auth, db } from '../../lib/firebase';
+import { auth } from '../../lib/firebase';
 import {
   createUserWithEmailAndPassword,
   GoogleAuthProvider,
@@ -8,7 +8,8 @@ import {
   signInWithEmailAndPassword,
   signOut
 } from 'firebase/auth';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { accountStorage } from '../../lib/accountStorage';
+import { useUser } from '../../lib/userContext';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Eye, EyeOff, Loader2, CheckCircle, User, ArrowRight, ArrowLeft, X } from 'lucide-react';
@@ -23,6 +24,7 @@ type Step = 'auth' | 'profile';
 
 export const EspaceRegister: React.FC<EspaceRegisterProps> = ({ onLoginInstead }) => {
   const navigate = useNavigate();
+  const { setLocalData } = useUser();
   const [step, setStep] = useState<Step>(auth.currentUser ? 'profile' : 'auth');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -92,16 +94,23 @@ export const EspaceRegister: React.FC<EspaceRegisterProps> = ({ onLoginInstead }
       const user = auth.currentUser;
       if (!user) throw new Error('Utilisateur non connecté');
 
-      // Save Parent Account Info
-      const accountRef = doc(db, 'accounts', user.uid);
-      await setDoc(accountRef, {
-        email: user.email,
-        pseudo: parentPseudo.trim(),
-        createdAt: serverTimestamp(),
-        lastActivity: serverTimestamp()
-      }, { merge: true });
-
-      navigate('/espace/dashboard');
+        // Save Parent Account Info via accountStorage
+        await accountStorage.createAccount({
+          uid: user.uid,
+          email: user.email,
+          pseudo: parentPseudo.trim(),
+        });
+  
+        // Optimistic Update: Prime the context with registration data
+        // to avoid 404 race condition during dashboard load.
+        setLocalData({
+          pseudo: parentPseudo.trim(),
+          points: 0,
+          badge: 'none',
+          loading: false
+        });
+  
+        navigate('/espace/dashboard');
 
     } catch (err: any) {
       console.error('Registration completion error:', err);

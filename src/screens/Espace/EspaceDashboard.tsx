@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { auth, db } from '../../lib/firebase';
+import { auth } from '../../lib/firebase';
 import { signOut } from 'firebase/auth';
-import { collection, getDocs, query, orderBy, doc, getDoc } from 'firebase/firestore';
+import { accountStorage } from '../../lib/accountStorage';
 import {
   LogOut,
   Loader2,
@@ -43,23 +43,19 @@ export const EspaceDashboard = () => {
       }
 
       try {
-        const accountRef = doc(db, 'accounts', user.uid);
-        const accountSnap = await getDoc(accountRef);
-        if (accountSnap.exists()) {
-          setPseudo(accountSnap.data().pseudo || '');
+        const account = await accountStorage.getAccount(user.uid);
+        if (account) {
+          setPseudo(account.pseudo || '');
         }
 
-        const childrenRef = collection(db, 'accounts', user.uid, 'children');
-        const q = query(childrenRef, orderBy('addedAt', 'desc'));
-        const snapshot = await getDocs(q);
-
-        const childrenData: Child[] = snapshot.docs.map(docSnap => ({
-          tokenId: docSnap.id,
-          nickname: docSnap.data().nickname,
-          addedAt: docSnap.data().addedAt?.toDate?.() || new Date()
-        }));
-
-        setChildren(childrenData);
+        const childrenData = await accountStorage.listChildren(user.uid);
+        setChildren(
+          childrenData.map((c) => ({
+            tokenId: c.token_id,
+            nickname: c.nickname,
+            addedAt: c.added_at ? new Date(c.added_at) : new Date(),
+          }))
+        );
       } catch (error) {
         console.error('Erreur chargement données:', error);
       } finally {

@@ -6,8 +6,8 @@ import {
   ArrowLeft, Users, Mic, MicOff, Clock, ChevronDown, Send, Trash2,
   MessageCircle, Shield, Lock, Loader2, LogOut, AlertTriangle, Share2,
 } from 'lucide-react';
-import { auth, db } from '../../lib/firebase';
-import { doc, getDoc } from 'firebase/firestore';
+import { auth } from '../../lib/firebase';
+import { accountStorage } from '../../lib/accountStorage';
 import {
   onGroupeParole,
   onGroupeMessages,
@@ -213,9 +213,9 @@ export const GroupeDetailPage = () => {
   // Charger le pseudo
   useEffect(() => {
     if (!user) return;
-    getDoc(doc(db, 'accounts', user.uid)).then(snap => {
-      if (snap.exists()) {
-        setUserPseudo(snap.data().pseudo || 'Parent');
+    accountStorage.getAccount(user.uid).then(account => {
+      if (account) {
+        setUserPseudo(account.pseudo || 'Parent');
       }
     });
   }, [user]);

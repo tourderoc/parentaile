@@ -1,17 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { auth, db } from '../../../lib/firebase';
-import {
-  collection,
-  getDocs,
-  query,
-  orderBy,
-  doc,
-  updateDoc,
-  deleteDoc,
-  setDoc,
-  serverTimestamp,
-} from 'firebase/firestore';
+import { auth } from '../../../lib/firebase';
+import { accountStorage } from '../../../lib/accountStorage';
 import { validateToken } from '../../../lib/tokenService';
 import { QRScanner } from '../../../components/QRScanner';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -69,8 +59,7 @@ export const SlideContact = () => {
     if (!user) return;
 
     try {
-      const childRef = doc(db, 'accounts', user.uid, 'children', tokenId);
-      await updateDoc(childRef, { nickname: editNickname.trim() });
+      await accountStorage.updateChild(user.uid, tokenId, editNickname.trim());
       setChildren(prev =>
         prev.map(c =>
           c.tokenId === tokenId ? { ...c, nickname: editNickname.trim() } : c
@@ -78,6 +67,7 @@ export const SlideContact = () => {
       );
       setEditingChild(null);
       setEditNickname('');
+      await reloadChildren();
     } catch (err) {
       console.error('Erreur:', err);
     }
@@ -87,10 +77,10 @@ export const SlideContact = () => {
     if (!user) return;
 
     try {
-      const childRef = doc(db, 'accounts', user.uid, 'children', tokenId);
-      await deleteDoc(childRef);
+      await accountStorage.removeChild(user.uid, tokenId);
       setChildren(prev => prev.filter(c => c.tokenId !== tokenId));
       setShowDeleteConfirm(null);
+      await reloadChildren();
     } catch (err) {
       console.error('Erreur suppression:', err);
     }
@@ -123,11 +113,7 @@ export const SlideContact = () => {
 
       if (!user) throw new Error('Non connecte');
 
-      const childRef = doc(db, 'accounts', user.uid, 'children', newToken.trim());
-      await setDoc(childRef, {
-        nickname: newNickname.trim(),
-        addedAt: serverTimestamp()
-      });
+      await accountStorage.addChild(user.uid, newToken.trim(), newNickname.trim());
 
       await reloadChildren();
 

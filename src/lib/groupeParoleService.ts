@@ -23,6 +23,7 @@ import {
 } from 'firebase/firestore';
 import type { GroupeParole, MessageGroupe, ThemeGroupe, StructureEtape, EvaluationGroupe, EvaluationPendante, BadgeLevel, ParticipationEntry, UserProgression } from '../types/groupeParole';
 import { getBadgeForPoints, BADGE_THRESHOLDS } from '../types/groupeParole';
+import { accountStorage } from './accountStorage';
 import { sendParentNotification } from './parentNotificationService';
 
 export interface CreateGroupeData {
@@ -569,25 +570,30 @@ export async function addPoints(
   points: number,
   entry: Omit<ParticipationEntry, 'points'>
 ): Promise<void> {
-  const ref = doc(db, 'accounts', uid);
   try {
-    await updateDoc(ref, {
-      points: increment(points),
-      participationHistory: arrayUnion({
-        ...entry,
-        points,
-        date: Timestamp.now(),
-      }),
+    const account = await accountStorage.getAccount(uid);
+    const currentPoints = account ? (account.points || 0) : 0;
+    const currentHistory = account ? (account.participationHistory || account.participation_history || []) : [];
+    
+    const newPoints = currentPoints + points;
+    const newBadge = getBadgeForPoints(newPoints);
+    
+    // Add entry with a raw string date for compatibility
+    const newEntry = {
+      ...entry,
+      points,
+      date: new Date().toISOString()
+    };
+    
+    await accountStorage.updateAccount(uid, {
+      points: newPoints,
+      badge: newBadge,
+      participation_history: [...currentHistory, newEntry]
     });
-    // Update badge based on new points total
-    const snap = await getDoc(ref);
-    if (snap.exists()) {
-      const newPoints = snap.data().points || 0;
-      const newBadge = getBadgeForPoints(newPoints);
-      const currentBadge = snap.data().badge || 'none';
+
+    if (account) {
+      const currentBadge = account.badge || 'none';
       if (newBadge !== currentBadge) {
-        await updateDoc(ref, { badge: newBadge });
-        // Notifier le badge obtenu
         const badgeInfo = BADGE_THRESHOLDS.find(b => b.level === newBadge);
         if (badgeInfo) {
           sendParentNotification(
@@ -599,22 +605,8 @@ export async function addPoints(
         }
       }
     }
-  } catch {
-    // Account may not have these fields yet — initialize them
-    const snap = await getDoc(ref);
-    if (snap.exists()) {
-      const data = snap.data();
-      const currentPoints = data.points || 0;
-      const newPoints = currentPoints + points;
-      await updateDoc(ref, {
-        points: newPoints,
-        badge: getBadgeForPoints(newPoints),
-        participationHistory: [
-          ...(data.participationHistory || []),
-          { ...entry, points, date: Timestamp.now() },
-        ],
-      });
-    }
+  } catch (err) {
+    console.error('Erreur addPoints:', err);
   }
 }
 
@@ -623,16 +615,16 @@ export async function addPoints(
  */
 export async function getUserProgression(uid: string): Promise<UserProgression> {
   try {
-    const snap = await getDoc(doc(db, 'accounts', uid));
-    if (!snap.exists()) return { points: 0, badge: 'none', history: [] };
-    const data = snap.data();
+    const account = await accountStorage.getAccount(uid);
+    if (!account) return { points: 0, badge: 'none', history: [] };
+    
     return {
-      points: data.points || 0,
-      badge: (data.badge as BadgeLevel) || getBadgeForPoints(data.points || 0),
-      history: (data.participationHistory || []).map((h: any) => ({
+      points: account.points || 0,
+      badge: (account.badge as BadgeLevel) || getBadgeForPoints(account.points || 0),
+      history: (account.participationHistory || account.participation_history || []).map((h: any) => ({
         groupeId: h.groupeId || '',
         groupeTitre: h.groupeTitre || '',
-        date: h.date?.toDate?.() || new Date(),
+        date: typeof h.date === 'string' ? new Date(h.date) : (h.date?.toDate?.() || new Date()),
         type: h.type || 'participation',
         points: h.points || 0,
       })),

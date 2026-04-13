@@ -1,5 +1,4 @@
-import { db } from './firebase';
-import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { accountStorage } from './accountStorage';
 import type { AvatarConfig } from './avatarTypes';
 
 const VPS_URL = 'https://avatar.parentaile.fr';
@@ -98,12 +97,9 @@ export const AvatarAIService = {
       throw new Error(`Suppression photo echouee (${response.status}): ${msg}`);
     }
 
-    // Toujours nettoyer Firestore, que le fichier VPS ait existé ou non
-    const userRef = doc(db, 'accounts', userId);
-    await updateDoc(userRef, {
-      'avatar.aiUrl': '',
-      'avatar.avatarType': 'static',
-      updatedAt: serverTimestamp(),
+    // Toujours nettoyer le profil, que le fichier VPS ait existé ou non
+    await accountStorage.updateAccount(userId, {
+      avatar: { avatarType: 'static', aiUrl: '' },
     });
   },
 
@@ -112,11 +108,8 @@ export const AvatarAIService = {
    * Le type reste 'ai' pour compatibilite avec le code existant (UserAvatar, contextes, etc.).
    */
   async saveAvatar(userId: string, photoUrl: string): Promise<void> {
-    const userRef = doc(db, 'accounts', userId);
-    await updateDoc(userRef, {
-      'avatar.aiUrl': photoUrl,
-      'avatar.avatarType': 'ai',
-      updatedAt: serverTimestamp(),
+    await accountStorage.updateAccount(userId, {
+      avatar: { aiUrl: photoUrl, avatarType: 'ai' },
     });
   },
 

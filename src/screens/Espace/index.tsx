@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { auth, db } from '../../lib/firebase';
+import { auth } from '../../lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { accountStorage } from '../../lib/accountStorage';
 import { checkTokenStatus, getTokenFromCurrentUrl } from '../../lib/tokenService';
 import { TokenLogin } from './TokenLogin';
 import { EspaceLogin } from './EspaceLogin';
@@ -39,11 +39,10 @@ export const Espace = () => {
 
       if (user) {
         try {
-          const accountRef = doc(db, 'accounts', user.uid);
-          const accountSnap = await getDoc(accountRef);
+          const account = await accountStorage.getAccount(user.uid);
           if (cancelled) return;
 
-          if (!accountSnap.exists()) {
+          if (!account) {
             setView(token ? 'register-with-token' : 'register-free');
             return;
           }
