@@ -148,7 +148,11 @@ async def get_group(id: str):
 ALLOWED_PATCH_FIELDS = {
     'status', 'cancel_reason', 'session_state', 'participants',
     'message_count', 'reprogrammed_to_id', 'reprogrammed_from_id',
+    'titre', 'description', 'theme', 'date_vocal', 'date_expiration',
+    'participants_max', 'structure_type', 'structure',
 }
+
+DATETIME_FIELDS = {'date_vocal', 'date_expiration'}
 
 @router.put('/{id}', dependencies=[Depends(verify_api_key)])
 async def update_group(id: str, patch: dict):
@@ -162,11 +166,18 @@ async def update_group(id: str, patch: dict):
             # Construire la clause SET dynamiquement
             sets, vals = [], []
             for key, val in safe.items():
+                if key in DATETIME_FIELDS and isinstance(val, str):
+                    try:
+                        val = datetime.fromisoformat(val.replace('Z', '+00:00'))
+                    except ValueError:
+                        raise HTTPException(400, f"Format de date invalide pour {key}")
                 vals.append(
                     json.dumps(val) if isinstance(val, (dict, list)) else val
                 )
                 if key == 'session_state':
                     sets.append(f"session_state = ${len(vals)}::jsonb")
+                elif key == 'structure':
+                    sets.append(f"structure = ${len(vals)}::jsonb")
                 else:
                     sets.append(f"{key} = ${len(vals)}")
 
