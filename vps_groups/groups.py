@@ -3,12 +3,14 @@ Groupes de parole — FastAPI router
 Gère : groupes, participants, messages, évaluations, bannissement, sorties.
 """
 import json
+import os
 from fastapi import APIRouter, Depends, HTTPException, Query
 from auth import verify_api_key
 from db import pool
 from models import GroupCreate
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from typing import List, Optional
+from livekit.api import AccessToken, VideoGrants
 
 router = APIRouter(prefix='/groupes', tags=['groupes'])
 
@@ -430,3 +432,114 @@ async def is_banned(id: str, uid: str):
     if not row:
         return {"banned": False}
     return {"banned": bool(row['banni'])}
+
+# ─────────────────────────────────────────────
+# LIVEKIT — Token pour salle vocale
+# ─────────────────────────────────────────────
+
+@router.post('/{id}/token', dependencies=[Depends(verify_api_key)])
+async def get_livekit_token(id: str, payload: dict):
+    """
+    Génère un token LiveKit pour rejoindre la salle vocale du groupe.
+    Vérifie : groupe existant, participant inscrit, fenêtre temporelle, ban.
+    """
+    uid = payload.get('uid')
+    if not uid:
+        raise HTTPException(400, "uid requis")
+
+    async with pool().acquire() as conn:
+        group = await conn.fetchrow(
+            """
+            SELECT createur_uid, createur_pseudo, date_vocal, session_state
+            FROM groupes WHERE id = $1
+            """,
+            id
+        )
+        if not group:
+            raise HTTPException(404, "Groupe introuvable")
+
+        participant = await conn.fetchrow(
+            """
+            SELECT gp.banni, a.pseudo, a.avatar
+            FROM group_participants gp
+            JOIN accounts a ON a.uid = gp.user_uid
+            WHERE gp.groupe_id = $1 AND gp.user_uid = $2
+            """,
+            id, uid
+        )
+        if not participant:
+            raise HTTPException(403, "Vous devez être inscrit au groupe pour rejoindre le vocal")
+        if participant['banni']:
+            raise HTTPException(403, "Vous avez été exclu de cette session")
+
+        exit_row = await conn.fetchrow(
+            "SELECT exit_count FROM group_participant_exits WHERE groupe_id = $1 AND user_uid = $2",
+            id, uid
+        )
+        if exit_row and (exit_row['exit_count'] or 0) > 2:
+            raise HTTPException(403, "Vous avez été exclu de cette session")
+
+    date_vocal = group['date_vocal']
+    if date_vocal.tzinfo is None:
+        date_vocal = date_vocal.replace(tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc)
+    minutes_before = (date_vocal - now).total_seconds() / 60
+
+    if minutes_before > 15:
+        raise HTTPException(400, "La salle ouvre 15 minutes avant le vocal")
+    if minutes_before < -60:
+        raise HTTPException(400, "Le vocal est terminé")
+
+    session_state = group['session_state']
+    if isinstance(session_state, str):
+        try:
+            session_state = json.loads(session_state)
+        except Exception:
+            session_state = None
+
+    current_animateur_uid = (session_state or {}).get('currentAnimateurUid') if session_state else None
+    is_animateur = (group['createur_uid'] == uid) or (current_animateur_uid == uid)
+
+    pseudo = payload.get('pseudo') or participant['pseudo'] or 'Parent'
+    avatar = participant['avatar']
+    mood = payload.get('mood')
+
+    api_key = os.environ.get('LIVEKIT_API_KEY')
+    api_secret = os.environ.get('LIVEKIT_API_SECRET')
+    ws_url = os.environ.get('LIVEKIT_URL', '')
+
+    if not api_key or not api_secret:
+        raise HTTPException(500, "Configuration LiveKit manquante")
+
+    room_name = f"parentaile-{id}"
+    metadata = json.dumps({
+        "isAnimateur": is_animateur,
+        "groupeId": id,
+        "avatar": avatar,
+        "mood": mood,
+    })
+
+    grants = VideoGrants(
+        room=room_name,
+        room_join=True,
+        can_publish=True,
+        can_subscribe=True,
+        can_publish_data=True,
+    )
+
+    token = (
+        AccessToken(api_key, api_secret)
+        .with_identity(uid)
+        .with_name(pseudo)
+        .with_ttl(timedelta(hours=1))
+        .with_metadata(metadata)
+        .with_grants(grants)
+    )
+
+    return {
+        "token": token.to_jwt(),
+        "roomName": room_name,
+        "wsUrl": ws_url,
+        "isAnimateur": is_animateur,
+        "pseudo": pseudo,
+    }
