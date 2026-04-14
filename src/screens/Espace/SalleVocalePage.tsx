@@ -27,9 +27,9 @@ import { UserAvatar } from '../../components/ui/UserAvatar';
 import type { AvatarConfig } from '../../lib/avatarTypes';
 import { auth } from '../../lib/firebase';
 import { accountStorage } from '../../lib/accountStorage';
-import { 
-  submitEvaluation, markEvaluationPending, getEvaluationStatus, addPoints, 
-  advancePhase, 
+import {
+  submitEvaluation, markEvaluationPending, getEvaluationStatus, addPoints,
+  advancePhase, onGroupeParole,
   extendSession, endSession, submitBanFeedback,
   initSessionStateV2,
   cancelGroup, banParticipantExplicit, isParticipantBanned
@@ -2756,8 +2756,7 @@ const CharteScreen: React.FC<{
   const handleContinue = async () => {
     if (skipNext && currentUser) {
       try {
-        const { updateDoc: ud, doc: d } = await import('firebase/firestore');
-        await ud(d(db, 'accounts', currentUser.uid), { skipCharte: true });
+        await accountStorage.updateAccount(currentUser.uid, { skipCharte: true } as any);
       } catch { /* ignore */ }
     }
     onContinue();
@@ -3567,63 +3566,46 @@ export const SalleVocalePage = () => {
   };
 
   // Main group sync listener (Metadata, Role, Status, and Entry Logic)
+  // Utilise onGroupeParole : Firebase onSnapshot en mode firebase, polling 5s en mode vps
   useEffect(() => {
     if (!groupeId) return;
 
-    const unsub = onSnapshot(doc(db, 'groupes', groupeId), async (snap) => {
+    const unsub = onGroupeParole(groupeId, async (groupe) => {
+      if (!groupe) return;
 
-      const data = snap.data();
-      if (!data) return;
-      
       // 1. Metadata Sync
-      setGroupeTitre(data.titre || '');
-      setGroupeTheme(data.theme || data.categorie || undefined);
-      setGroupeDescription(data.description || '');
-      setDateVocal(data.dateVocal?.toDate?.() || new Date());
-      setCreateurUid(data.createurUid || '');
-      setStructureType(data.structureType || 'libre');
-      setStructure(data.structureType === 'structuree' ? (data.structure || STRUCTURE_DEFAUT) : []);
-      if (data.durationMin) setCustomDurationMin(data.durationMin);
-      setGroupeStatus(data.status || 'scheduled');
-      
-      // 2. Critical Role & Session Sync
-      const currentAnim = data.sessionState?.currentAnimateurUid || data.createurUid || null;
-      setCurrentAnimateurUid(currentAnim);
-      
-      const rawSS = data.sessionState;
-      setSessionState(rawSS ? {
-        ...rawSS,
-        phaseStartedAt: rawSS.phaseStartedAt ? (typeof rawSS.phaseStartedAt.toDate === 'function' ? rawSS.phaseStartedAt.toDate() : new Date(rawSS.phaseStartedAt)) : undefined,
-        sessionStartedAt: rawSS.sessionStartedAt ? (typeof rawSS.sessionStartedAt.toDate === 'function' ? rawSS.sessionStartedAt.toDate() : new Date(rawSS.sessionStartedAt)) : undefined,
-        suspendedAt: rawSS.suspendedAt ? (typeof rawSS.suspendedAt.toDate === 'function' ? rawSS.suspendedAt.toDate() : new Date(rawSS.suspendedAt)) : undefined,
-      } : null);
+      setGroupeTitre(groupe.titre || '');
+      setGroupeTheme(groupe.theme || undefined);
+      setGroupeDescription(groupe.description || '');
+      setDateVocal(groupe.dateVocal instanceof Date ? groupe.dateVocal : new Date(groupe.dateVocal as any));
+      setCreateurUid(groupe.createurUid || '');
+      setStructureType(groupe.structureType || 'libre');
+      setStructure(groupe.structureType === 'structuree' ? (groupe.structure || STRUCTURE_DEFAUT) : []);
+      setGroupeStatus(groupe.status || 'scheduled');
 
-      // 3. Participant List Sync
-      setGroupeParticipants(
-        (data.participants || []).map((p: any) => ({
-          uid: p.uid || '',
-          pseudo: p.pseudo || '',
-          inscritVocal: p.inscritVocal ?? true,
-          dateInscription: p.dateInscription?.toDate?.() || new Date(),
-          banni: !!p.banni
-        }))
-      );
-      // Keep ban ref in sync for callbacks that can't read state
-      isBannedRef.current = (data.participants || []).some(
-        (p: any) => p.uid === auth.currentUser?.uid && p.banni
+      // 2. Critical Role & Session Sync
+      const currentAnim = groupe.sessionState?.currentAnimateurUid || groupe.createurUid || null;
+      setCurrentAnimateurUid(currentAnim);
+      setSessionState(groupe.sessionState ?? null);
+
+      // 3. Participant List Sync (déjà normalisé par mapFromVps / Firebase branch)
+      setGroupeParticipants(groupe.participants || []);
+      isBannedRef.current = (groupe.participants || []).some(
+        (p) => p.uid === auth.currentUser?.uid && p.banni
       );
 
       // 4. Flow Control
-      if (data.status === 'cancelled') {
+      if (groupe.status === 'cancelled') {
         setStep('cancelled');
         return;
       }
 
-      // Entry flow: only run once or if we are still in the transition phase
+      // Entry flow : seulement à l'arrivée (step === 'loading')
       if (step === 'loading') {
-        // ... (Logic remains identical to previous correct version)
         const now = Date.now();
-        const vocalTime = data.dateVocal?.toDate?.() || new Date();
+        const vocalTime = groupe.dateVocal instanceof Date
+          ? groupe.dateVocal
+          : new Date(groupe.dateVocal as any);
         const minutesBefore = (vocalTime.getTime() - now) / 60000;
 
         if (minutesBefore > 15) {
@@ -3631,15 +3613,15 @@ export const SalleVocalePage = () => {
           return;
         }
 
-        // Late join check: session active since > 15 min → blocked (except animateur)
-        const rawSessionState = data.sessionState;
-        if (rawSessionState?.sessionActive === true && rawSessionState?.sessionStartedAt) {
-          const startTime = typeof rawSessionState.sessionStartedAt.toDate === 'function'
-            ? rawSessionState.sessionStartedAt.toDate()
-            : new Date(rawSessionState.sessionStartedAt);
+        // Arrivée tardive : session active depuis > 15 min → bloqué (sauf animateur)
+        const ss = groupe.sessionState;
+        if (ss?.sessionActive === true && ss?.sessionStartedAt) {
+          const startTime = ss.sessionStartedAt instanceof Date
+            ? ss.sessionStartedAt
+            : new Date(ss.sessionStartedAt as any);
           const minutesSinceStart = (Date.now() - startTime.getTime()) / 60000;
           const currentUid = auth.currentUser?.uid;
-          const isAnim = currentUid === (rawSessionState.currentAnimateurUid || data.createurUid);
+          const isAnim = currentUid === (ss.currentAnimateurUid || groupe.createurUid);
           if (minutesSinceStart > 15 && !isAnim) {
             setStep('too_late');
             return;
@@ -3647,17 +3629,22 @@ export const SalleVocalePage = () => {
         }
 
         const currentUser = auth.currentUser;
-        const isBannedInArray = (data.participants || []).some((p: any) => p.uid === currentUser?.uid && p.banni);
-        const isBannedInExits = currentUser ? await isParticipantBanned(groupeId, currentUser.uid) : false;
+        const isBannedInArray = (groupe.participants || []).some(
+          (p) => p.uid === currentUser?.uid && p.banni
+        );
+        const isBannedInExits = currentUser
+          ? await isParticipantBanned(groupeId, currentUser.uid)
+          : false;
         if (isBannedInArray || isBannedInExits) {
           setStep('cancelled');
           alert('Vous avez été définitivement banni de cette salle.');
           return;
         }
 
-        // Only redirect to evaluation if the session was actually started and then ended/cancelled
-        const sessionWasStartedThenEnded = data.sessionState?.sessionActive === false
-          && (data.status === 'cancelled' || data.status === 'completed');
+        // Redirection évaluation si session terminée/annulée
+        const sessionWasStartedThenEnded =
+          groupe.sessionState?.sessionActive === false &&
+          (groupe.status === 'cancelled' || groupe.status === 'completed');
         if (currentUser && sessionWasStartedThenEnded) {
           try {
             const evalStatus = await getEvaluationStatus(groupeId, currentUser.uid);
@@ -3682,8 +3669,6 @@ export const SalleVocalePage = () => {
         }
         setStep('charte');
       }
-    }, (err) => {
-      console.error('[SalleVocalePage] sync error:', err);
     });
 
     return () => unsub();

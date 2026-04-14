@@ -4,10 +4,6 @@ import {
   addDoc,
   doc,
   getDoc,
-  getDocs,
-  setDoc,
-  updateDoc,
-  deleteDoc,
   serverTimestamp,
   Timestamp,
   query,
@@ -15,11 +11,6 @@ import {
   orderBy,
   limit,
   onSnapshot,
-  arrayUnion,
-  increment,
-  deleteField,
-  writeBatch,
-  runTransaction,
 } from 'firebase/firestore';
 import type { 
   GroupeParole, MessageGroupe, ThemeGroupe, StructureEtape, 
@@ -464,73 +455,45 @@ export function onPendingEvaluations(
 
 /**
  * Récupère la note moyenne d'un groupe (toutes les évaluations complétées).
- * Retourne null si aucune évaluation.
  */
 export async function getGroupeAverageRating(
   groupeId: string
 ): Promise<{ average: number; count: number } | null> {
-  const evalsRef = collection(db, 'groupes', groupeId, 'evaluations');
-  const snapshot = await getDocs(evalsRef);
-
-  const completed = snapshot.docs.filter(
-    (d) => d.data().status !== 'pending' && d.data().noteAmbiance
-  );
-
-  if (completed.length === 0) return null;
-
-  let totalAmbiance = 0;
-  let totalTheme = 0;
-  let totalTechnique = 0;
-
-  for (const d of completed) {
-    const data = d.data();
-    totalAmbiance += data.noteAmbiance || 0;
-    totalTheme += data.noteTheme || 0;
-    totalTechnique += data.noteTechnique || 0;
-  }
-
-  const count = completed.length;
-  const average = (totalAmbiance + totalTheme + totalTechnique) / (count * 3);
-
-  return { average: Math.round(average * 10) / 10, count };
+  return groupStorage.getEvaluationsAverage(groupeId);
 }
 
 /**
- * Écoute en temps réel la note moyenne d'un groupe.
+ * Écoute la note moyenne d'un groupe (Firebase: onSnapshot, VPS: polling 30s).
  */
 export function onGroupeRating(
   groupeId: string,
   callback: (rating: { average: number; count: number } | null) => void
 ): () => void {
-  const evalsRef = collection(db, 'groupes', groupeId, 'evaluations');
-  return onSnapshot(evalsRef, (snapshot) => {
-    const completed = snapshot.docs.filter(
-      (d) => d.data().status !== 'pending' && d.data().noteAmbiance
-    );
+  if (groupStorage.backend === 'firebase') {
+    const evalsRef = collection(db, 'groupes', groupeId, 'evaluations');
+    return onSnapshot(evalsRef, (snapshot) => {
+      const completed = snapshot.docs.filter(
+        (d) => d.data().status !== 'pending' && d.data().noteAmbiance
+      );
+      if (completed.length === 0) { callback(null); return; }
+      let total = 0;
+      for (const d of completed) {
+        const data = d.data();
+        total += (data.noteAmbiance || 0) + (data.noteTheme || 0) + (data.noteTechnique || 0);
+      }
+      const count = completed.length;
+      callback({ average: Math.round(total / (count * 3) * 10) / 10, count });
+    }, () => callback(null));
+  }
 
-    if (completed.length === 0) {
-      callback(null);
-      return;
-    }
-
-    let totalAmbiance = 0;
-    let totalTheme = 0;
-    let totalTechnique = 0;
-
-    for (const d of completed) {
-      const data = d.data();
-      totalAmbiance += data.noteAmbiance || 0;
-      totalTheme += data.noteTheme || 0;
-      totalTechnique += data.noteTechnique || 0;
-    }
-
-    const count = completed.length;
-    const average = (totalAmbiance + totalTheme + totalTechnique) / (count * 3);
-    callback({ average: Math.round(average * 10) / 10, count });
-  }, () => {
-    // Firestore rules may not allow reading evaluations — fail silently
-    callback(null);
-  });
+  // VPS polling
+  const poll = async () => {
+    const result = await groupStorage.getEvaluationsAverage(groupeId);
+    callback(result);
+  };
+  poll();
+  const interval = setInterval(poll, 30000);
+  return () => clearInterval(interval);
 }
 
 // ========== POINTS & BADGES ==========
@@ -609,32 +572,43 @@ export async function getUserProgression(uid: string): Promise<UserProgression> 
 }
 
 /**
- * Écoute en temps réel la progression d'un utilisateur.
+ * Écoute la progression d'un utilisateur (Firebase: onSnapshot, VPS: polling 30s).
  */
 export function onUserProgression(
   uid: string,
   callback: (prog: UserProgression) => void
 ): () => void {
-  return onSnapshot(doc(db, 'accounts', uid), (snap) => {
-    if (!snap.exists()) {
+  if (accountStorage.backend === 'firebase') {
+    return onSnapshot(doc(db, 'accounts', uid), (snap) => {
+      if (!snap.exists()) {
+        callback({ points: 0, badge: 'none', history: [] });
+        return;
+      }
+      const data = snap.data();
+      callback({
+        points: data.points || 0,
+        badge: (data.badge as BadgeLevel) || getBadgeForPoints(data.points || 0),
+        history: (data.participationHistory || []).map((h: any) => ({
+          groupeId: h.groupeId || '',
+          groupeTitre: h.groupeTitre || '',
+          date: h.date?.toDate?.() || new Date(),
+          type: h.type || 'participation',
+          points: h.points || 0,
+        })),
+      });
+    }, () => {
       callback({ points: 0, badge: 'none', history: [] });
-      return;
-    }
-    const data = snap.data();
-    callback({
-      points: data.points || 0,
-      badge: (data.badge as BadgeLevel) || getBadgeForPoints(data.points || 0),
-      history: (data.participationHistory || []).map((h: any) => ({
-        groupeId: h.groupeId || '',
-        groupeTitre: h.groupeTitre || '',
-        date: h.date?.toDate?.() || new Date(),
-        type: h.type || 'participation',
-        points: h.points || 0,
-      })),
     });
-  }, () => {
-    callback({ points: 0, badge: 'none', history: [] });
-  });
+  }
+
+  // VPS polling
+  const poll = async () => {
+    const prog = await getUserProgression(uid);
+    callback(prog);
+  };
+  poll();
+  const interval = setInterval(poll, 30000);
+  return () => clearInterval(interval);
 }
 
 /**
@@ -642,10 +616,9 @@ export function onUserProgression(
  */
 export async function getUserBadge(uid: string): Promise<BadgeLevel> {
   try {
-    const snap = await getDoc(doc(db, 'accounts', uid));
-    if (!snap.exists()) return 'none';
-    const data = snap.data();
-    return (data.badge as BadgeLevel) || getBadgeForPoints(data.points || 0);
+    const account = await accountStorage.getAccount(uid);
+    if (!account) return 'none';
+    return (account.badge as BadgeLevel) || getBadgeForPoints(account.points || 0);
   } catch {
     return 'none';
   }
@@ -693,35 +666,31 @@ export async function suspendSession(
   groupeId: string,
   reason: 'animateur_left' | 'below_minimum'
 ): Promise<void> {
-  const ref = doc(db, 'groupes', groupeId);
-  const snap = await getDoc(ref);
-  if (!snap.exists()) return;
+  const current = await groupStorage.getGroup(groupeId);
+  if (!current) return;
+  if (current.status === 'cancelled' || current.status === 'completed') return;
 
-  const data = snap.data();
-  if (data.status === 'cancelled' || data.status === 'completed') return; // Garde terminale
-
-  const state = data.sessionState;
+  const state = current.sessionState;
   if (!state) return;
-
   if (state.suspended) return; // Déjà suspendu
 
-  const count = state.suspensionCount || 0;
-  
+  const count = state.suspensionCount ?? 0;
+
   if (count >= 2 || (state.replacementUsed && reason === 'animateur_left')) {
-    // Si c'est la 3ème tentative de suspension OU l'animateur de remplacement vient de partir
-    // => Fin automatique pure et simple
-    await updateDoc(ref, {
+    // 3ème tentative ou animateur de remplacement parti → fin automatique
+    await groupStorage.updateGroup(groupeId, {
       status: 'completed',
-      'sessionState.sessionActive': false,
+      session_state: { ...state, sessionActive: false },
     });
     return;
   }
 
-  await updateDoc(ref, {
-    'sessionState.suspended': true,
-    'sessionState.suspendedAt': serverTimestamp(),
-    'sessionState.suspensionReason': reason,
-    'sessionState.suspensionCount': count + 1,
+  await groupStorage.updateSessionState(groupeId, {
+    ...state,
+    suspended: true,
+    suspendedAt: new Date().toISOString(),
+    suspensionReason: reason,
+    suspensionCount: count + 1,
   });
 }
 
@@ -729,16 +698,15 @@ export async function suspendSession(
  * Reprend une session suspendue.
  */
 export async function resumeSession(groupeId: string): Promise<void> {
-  const ref = doc(db, 'groupes', groupeId);
-  const snap = await getDoc(ref);
-  if (snap.exists()) {
-    const status = snap.data().status;
-    if (status === 'cancelled' || status === 'completed') return;
-  }
-  await updateDoc(ref, {
-    'sessionState.suspended': false,
-    'sessionState.suspendedAt': deleteField(),
-    'sessionState.suspensionReason': deleteField(),
+  const current = await groupStorage.getGroup(groupeId);
+  if (!current) return;
+  if (current.status === 'cancelled' || current.status === 'completed') return;
+  if (!current.sessionState) return;
+
+  const { suspendedAt: _a, suspensionReason: _b, ...rest } = current.sessionState as any;
+  await groupStorage.updateSessionState(groupeId, {
+    ...rest,
+    suspended: false,
   });
 }
 
@@ -842,16 +810,13 @@ export async function proposeAsAnimateur(
  * Retourne le nouveau count.
  */
 export async function incrementAnimateurDisconnect(groupeId: string): Promise<number> {
-  const ref = doc(db, 'groupes', groupeId);
-  let newCount = 0;
-  await runTransaction(db, async (transaction) => {
-    const snap = await transaction.get(ref);
-    if (!snap.exists()) return;
-    const state = snap.data().sessionState;
-    newCount = (state?.animateurDisconnectCount || 0) + 1;
-    transaction.update(ref, {
-      'sessionState.animateurDisconnectCount': newCount,
-    });
+  const current = await groupStorage.getGroup(groupeId);
+  if (!current?.sessionState) return 0;
+
+  const newCount = (current.sessionState.animateurDisconnectCount ?? 0) + 1;
+  await groupStorage.updateSessionState(groupeId, {
+    ...current.sessionState,
+    animateurDisconnectCount: newCount,
   });
   return newCount;
 }
@@ -924,30 +889,8 @@ export async function incrementParticipantExit(
   groupeId: string,
   uid: string
 ): Promise<number> {
-  const exitRef = doc(db, 'groupes', groupeId, 'participantExits', uid);
-  let newCount = 0;
-
-  await runTransaction(db, async (transaction) => {
-    const snap = await transaction.get(exitRef);
-    if (snap.exists()) {
-      newCount = (snap.data().count || 0) + 1;
-      const banned = newCount > 2; // MAX_PARTICIPANT_EXITS = 2
-      transaction.update(exitRef, {
-        count: newCount,
-        lastExitAt: serverTimestamp(),
-        ...(banned ? { banned: true } : {}),
-      });
-    } else {
-      newCount = 1;
-      transaction.set(exitRef, {
-        count: 1,
-        lastExitAt: serverTimestamp(),
-        banned: false,
-      });
-    }
-  });
-
-  return newCount;
+  const result = await groupStorage.incrementParticipantExit(groupeId, uid);
+  return result.count;
 }
 
 /**

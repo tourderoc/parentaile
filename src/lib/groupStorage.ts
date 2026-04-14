@@ -19,31 +19,33 @@ import type { GroupeParole, MessageGroupe, ThemeGroupe, StructureEtape } from '.
 
 export interface GroupStorage {
   backend: 'firebase' | 'vps';
-  
+
   // Groupes
   getGroup(id: string): Promise<GroupeParole | null>;
   listGroups(filters?: { status?: string; creatorUid?: string }): Promise<GroupeParole[]>;
   createGroup(data: any): Promise<string>;
   updateGroup(id: string, patch: any): Promise<void>;
   deleteGroup(id: string): Promise<void>;
-  
+
   // Participants
   joinGroup(id: string, user: { uid: string; pseudo: string }): Promise<void>;
   leaveGroup(id: string, uid: string): Promise<void>;
-  
+
   // Chat
   listMessages(id: string): Promise<MessageGroupe[]>;
   sendMessage(id: string, message: { auteurUid: string; auteurPseudo: string; contenu: string }): Promise<string>;
   deleteMessage(id: string, messageId: string): Promise<void>;
-  
+
   // Session State
   updateSessionState(id: string, state: any): Promise<void>;
-  
+
   // Évaluations
   submitEvaluation(id: string, evaluation: any): Promise<void>;
   getEvaluationStatus(id: string, uid: string): Promise<'none' | 'pending' | 'done'>;
-  
-  // Bannissement
+  getEvaluationsAverage(id: string): Promise<{ average: number; count: number } | null>;
+
+  // Sorties & Bannissement
+  incrementParticipantExit(id: string, uid: string): Promise<{ count: number; banned: boolean }>;
   banParticipant(id: string, uid: string): Promise<void>;
   isBanned(id: string, uid: string): Promise<boolean>;
 }
@@ -101,11 +103,23 @@ function mapFromVps(data: any): GroupeParole {
             currentPhaseIndex: data.session_state.currentPhaseIndex ?? 0,
             extendedMinutes: data.session_state.extendedMinutes ?? 0,
             sessionActive: data.session_state.sessionActive ?? true,
-            phaseStartedAt: new Date(data.session_state.phaseStartedAt || Date.now()),
-            sessionStartedAt: new Date(data.session_state.sessionStartedAt || Date.now()),
-            suspended: data.session_state.suspended,
-            suspensionReason: data.session_state.suspensionReason
-        } : undefined
+            phaseStartedAt: data.session_state.phaseStartedAt
+                ? new Date(data.session_state.phaseStartedAt)
+                : new Date(),
+            sessionStartedAt: data.session_state.sessionStartedAt
+                ? new Date(data.session_state.sessionStartedAt)
+                : new Date(),
+            suspended: data.session_state.suspended ?? false,
+            suspendedAt: data.session_state.suspendedAt
+                ? new Date(data.session_state.suspendedAt)
+                : undefined,
+            suspensionReason: data.session_state.suspensionReason,
+            suspensionCount: data.session_state.suspensionCount ?? 0,
+            replacementUsed: data.session_state.replacementUsed ?? false,
+            currentAnimateurUid: data.session_state.currentAnimateurUid,
+            currentAnimateurPseudo: data.session_state.currentAnimateurPseudo,
+            animateurDisconnectCount: data.session_state.animateurDisconnectCount ?? 0,
+        } : undefined,
     } as GroupeParole;
 }
 
@@ -238,16 +252,32 @@ const vpsStorage: GroupStorage = {
     return data.status || 'none';
   },
 
+  async getEvaluationsAverage(id) {
+    const res = await vpsFetch(`/groupes/${id}/evaluations/average`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data.average === null || data.count === 0) return null;
+    return { average: data.average, count: data.count };
+  },
+
+  async incrementParticipantExit(id, uid) {
+    const res = await vpsFetch(`/groupes/${id}/exits/${encodeURIComponent(uid)}`, {
+      method: 'POST',
+    });
+    if (!res.ok) return { count: 1, banned: false };
+    return res.json();
+  },
+
   async banParticipant(id, uid) {
-    await vpsFetch(`/groupes/${id}/ban?uid=${uid}`, { method: 'POST' });
+    await vpsFetch(`/groupes/${id}/ban?uid=${encodeURIComponent(uid)}`, { method: 'POST' });
   },
 
   async isBanned(id, uid) {
-    const res = await vpsFetch(`/groupes/${id}/banned/${uid}`);
+    const res = await vpsFetch(`/groupes/${id}/banned/${encodeURIComponent(uid)}`);
     if (!res.ok) return false;
     const data = await res.json();
     return data.banned;
-  }
+  },
 };
 
 // ============================================
@@ -354,6 +384,38 @@ const firebaseStorage: GroupStorage = {
         return snap.data().status === 'pending' ? 'pending' : 'done';
     },
 
+    async getEvaluationsAverage(id) {
+        const snap = await getDocs(collection(db, 'groupes', id, 'evaluations'));
+        const completed = snap.docs.filter(
+            (d) => d.data().status !== 'pending' && d.data().noteAmbiance
+        );
+        if (completed.length === 0) return null;
+        let total = 0;
+        for (const d of completed) {
+            const data = d.data();
+            total += (data.noteAmbiance || 0) + (data.noteTheme || 0) + (data.noteTechnique || 0);
+        }
+        const count = completed.length;
+        return { average: Math.round(total / (count * 3) * 10) / 10, count };
+    },
+
+    async incrementParticipantExit(id, uid) {
+        const exitRef = doc(db, 'groupes', id, 'participantExits', uid);
+        let newCount = 1;
+        let banned = false;
+        const snap = await getDoc(exitRef);
+        if (snap.exists()) {
+            newCount = (snap.data().count || 0) + 1;
+        }
+        banned = newCount > 2;
+        await setDoc(exitRef, {
+            count: newCount,
+            lastExitAt: new Date(),
+            banned,
+        }, { merge: true });
+        return { count: newCount, banned };
+    },
+
     async banParticipant(id, uid) {
         await setDoc(doc(db, 'groupes', id, 'participantExits', uid), { banned: true }, { merge: true });
     },
@@ -361,7 +423,7 @@ const firebaseStorage: GroupStorage = {
     async isBanned(id, uid) {
         const snap = await getDoc(doc(db, 'groupes', id, 'participantExits', uid));
         return snap?.exists() ? snap.data().banned === true : false;
-    }
+    },
 };
 
 // ============================================
