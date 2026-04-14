@@ -139,12 +139,19 @@ const vpsStorage: GroupStorage = {
   },
 
   async listGroups(filters) {
-    let url = '/groupes?';
+    // include_ended=true : on laisse les groupes 'completed' dans la liste
+    // pour que le chat post-vocal reste accessible pendant la fenêtre
+    // dateExpiration (7 jours). Le filtrage 'cancelled' est fait côté
+    // client (upcomingGroupContext) selon le contexte d'affichage.
+    let url = '/groupes?include_ended=true&';
     if (filters?.status) url += `status=${filters.status}&`;
     const res = await vpsFetch(url);
     if (!res.ok) return [];
     const items = await res.json();
-    return items.map(mapFromVps);
+    const now = new Date();
+    return items
+      .map(mapFromVps)
+      .filter((g: any) => !g.dateExpiration || g.dateExpiration > now);
   },
 
   async createGroup(data) {
