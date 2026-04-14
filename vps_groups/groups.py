@@ -189,14 +189,23 @@ async def update_group(id: str, patch: dict):
                 *vals
             )
 
-            # Auto-cleanup : groupe annulé sans messages → suppression immédiate
+            # Auto-cleanup : groupe annulé sans interaction d'un autre parent → suppression
+            # (réplique la logique de l'ancienne Cloud Function cleanupCancelledGroup)
+            # Les groupes 'completed' ne sont JAMAIS supprimés automatiquement.
             if safe.get('status') == 'cancelled':
-                msg_count = await conn.fetchval(
-                    "SELECT COUNT(*) FROM group_messages WHERE groupe_id = $1", id
+                createur_uid = await conn.fetchval(
+                    "SELECT createur_uid FROM groupes WHERE id = $1", id
                 )
-                if msg_count == 0:
+                other_msg_count = await conn.fetchval(
+                    """
+                    SELECT COUNT(*) FROM group_messages
+                    WHERE groupe_id = $1 AND auteur_uid != $2
+                    """,
+                    id, createur_uid
+                )
+                if other_msg_count == 0:
                     await conn.execute("DELETE FROM groupes WHERE id = $1", id)
-                    return {"status": "deleted", "reason": "cancelled_no_messages"}
+                    return {"status": "deleted", "reason": "cancelled_no_interaction"}
 
     return {"status": "updated"}
 
