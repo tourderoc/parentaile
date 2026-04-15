@@ -134,6 +134,8 @@ function mapToVpsFields(patch: Record<string, any>): Record<string, any> {
     role: 'role',
     last_activity: 'last_activity',
     lastActivity: 'last_activity',
+    skip_charte: 'skip_charte',
+    skipCharte: 'skip_charte',
   };
   const mapped: Record<string, any> = {};
   for (const [k, v] of Object.entries(patch)) {
