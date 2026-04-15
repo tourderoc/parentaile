@@ -1,24 +1,15 @@
 /**
- * Couche d'aiguillage Firebase <-> VPS pour les groupes de parole.
- * 
- * Bascule via VITE_STORAGE_BACKEND.
- * Gère le stockage normalisé (VPS) vs dénormalisé (Firebase).
+ * Couche d'accès VPS pour les groupes de parole.
  */
 
-import { 
-  doc, getDoc, setDoc, updateDoc, deleteDoc, 
-  collection, getDocs, addDoc, query, where, orderBy, limit,
-  serverTimestamp, Timestamp, increment, arrayUnion, arrayRemove
-} from 'firebase/firestore';
-import { db } from './firebase';
-import type { GroupeParole, MessageGroupe, ThemeGroupe, StructureEtape } from '../types/groupeParole';
+import type { GroupeParole, MessageGroupe } from '../types/groupeParole';
 
 // ============================================
 // TYPES & INTERFACES
 // ============================================
 
 export interface GroupStorage {
-  backend: 'firebase' | 'vps';
+  backend: 'vps';
 
   // Groupes
   getGroup(id: string): Promise<GroupeParole | null>;
@@ -127,7 +118,7 @@ function mapFromVps(data: any): GroupeParole {
 // VPS IMPLEMENTATION
 // ============================================
 
-const vpsStorage: GroupStorage = {
+export const groupStorage: GroupStorage = {
   backend: 'vps',
 
   async getGroup(id) {
@@ -177,12 +168,12 @@ const vpsStorage: GroupStorage = {
         method: 'POST',
         body: JSON.stringify(payload)
     });
-    
+
     if (!res.ok) {
         const errText = await res.text();
         throw new Error(`Erreur création groupe: ${res.status} ${errText}`);
     }
-    
+
     const result = await res.json();
     return result.id;
   },
@@ -286,156 +277,3 @@ const vpsStorage: GroupStorage = {
     return data.banned;
   },
 };
-
-// ============================================
-// FIREBASE IMPLEMENTATION
-// ============================================
-
-const firebaseStorage: GroupStorage = {
-    backend: 'firebase',
-
-    async getGroup(id) {
-        const snap = await getDoc(doc(db, 'groupes', id));
-        if (!snap.exists()) return null;
-        const d = snap.data();
-        return { id: snap.id, ...d, 
-                 dateVocal: d.dateVocal?.toDate(),
-                 dateExpiration: d.dateExpiration?.toDate(),
-                 dateCreation: d.dateCreation?.toDate() } as any;
-    },
-
-    async listGroups(filters) {
-        let q = query(collection(db, 'groupes'), orderBy('dateVocal', 'asc'));
-        if (filters?.status) q = query(q, where('status', '==', filters.status));
-        const snap = await getDocs(q);
-        return snap.docs.map(d => ({ id: d.id, ...d.data() } as any));
-    },
-
-    async createGroup(data) {
-        const docRef = await addDoc(collection(db, 'groupes'), {
-            ...data,
-            dateCreation: serverTimestamp(),
-            dateVocal: Timestamp.fromDate(data.dateVocal),
-            dateExpiration: Timestamp.fromDate(data.dateExpiration),
-            status: 'scheduled',
-            participants: [
-                {
-                  uid: data.createurUid,
-                  pseudo: data.createurPseudo,
-                  inscritVocal: true,
-                  dateInscription: Timestamp.now(),
-                },
-              ],
-        });
-        return docRef.id;
-    },
-
-    async updateGroup(id, patch) {
-        await updateDoc(doc(db, 'groupes', id), patch);
-    },
-
-    async deleteGroup(id) {
-        await deleteDoc(doc(db, 'groupes', id));
-    },
-
-    async joinGroup(id, user) {
-        await updateDoc(doc(db, 'groupes', id), {
-            participants: arrayUnion({
-                uid: user.uid,
-                pseudo: user.pseudo,
-                inscritVocal: true,
-                dateInscription: Timestamp.now(),
-            }),
-        });
-    },
-
-    async leaveGroup(id, uid) {
-        const snap = await getDoc(doc(db, 'groupes', id));
-        if (!snap.exists()) return;
-        const data = snap.data();
-        const updated = (data.participants || []).filter((p: any) => p.uid !== uid);
-        await updateDoc(doc(db, 'groupes', id), { participants: updated });
-    },
-
-    async listMessages(id) {
-        const q = query(collection(db, 'groupes', id, 'messages'), orderBy('dateEnvoi', 'asc'));
-        const snap = await getDocs(q);
-        return snap.docs.map(d => ({ id: d.id, ...d.data() } as any));
-    },
-
-    async sendMessage(id, message) {
-        const res = await addDoc(collection(db, 'groupes', id, 'messages'), {
-            ...message,
-            dateEnvoi: serverTimestamp()
-        });
-        await updateDoc(doc(db, 'groupes', id), { messageCount: increment(1) });
-        return res.id;
-    },
-
-    async deleteMessage(id, messageId) {
-        await deleteDoc(doc(db, 'groupes', id, 'messages', messageId));
-        await updateDoc(doc(db, 'groupes', id), { messageCount: increment(-1) });
-    },
-
-    async updateSessionState(id, state) {
-        await updateDoc(doc(db, 'groupes', id), { sessionState: state });
-    },
-
-    async submitEvaluation(id, evaluation) {
-        await setDoc(doc(db, 'groupes', id, 'evaluations', evaluation.participantUid), evaluation);
-    },
-
-    async getEvaluationStatus(id, uid) {
-        const snap = await getDoc(doc(db, 'groupes', id, 'evaluations', uid));
-        if (!snap.exists()) return 'none';
-        return snap.data().status === 'pending' ? 'pending' : 'done';
-    },
-
-    async getEvaluationsAverage(id) {
-        const snap = await getDocs(collection(db, 'groupes', id, 'evaluations'));
-        const completed = snap.docs.filter(
-            (d) => d.data().status !== 'pending' && d.data().noteAmbiance
-        );
-        if (completed.length === 0) return null;
-        let total = 0;
-        for (const d of completed) {
-            const data = d.data();
-            total += (data.noteAmbiance || 0) + (data.noteTheme || 0) + (data.noteTechnique || 0);
-        }
-        const count = completed.length;
-        return { average: Math.round(total / (count * 3) * 10) / 10, count };
-    },
-
-    async incrementParticipantExit(id, uid) {
-        const exitRef = doc(db, 'groupes', id, 'participantExits', uid);
-        let newCount = 1;
-        let banned = false;
-        const snap = await getDoc(exitRef);
-        if (snap.exists()) {
-            newCount = (snap.data().count || 0) + 1;
-        }
-        banned = newCount > 2;
-        await setDoc(exitRef, {
-            count: newCount,
-            lastExitAt: new Date(),
-            banned,
-        }, { merge: true });
-        return { count: newCount, banned };
-    },
-
-    async banParticipant(id, uid) {
-        await setDoc(doc(db, 'groupes', id, 'participantExits', uid), { banned: true }, { merge: true });
-    },
-
-    async isBanned(id, uid) {
-        const snap = await getDoc(doc(db, 'groupes', id, 'participantExits', uid));
-        return snap?.exists() ? snap.data().banned === true : false;
-    },
-};
-
-// ============================================
-// EXPORT
-// ============================================
-
-const choice = import.meta.env.VITE_STORAGE_BACKEND || 'firebase';
-export const groupStorage: GroupStorage = choice === 'vps' ? vpsStorage : firebaseStorage;

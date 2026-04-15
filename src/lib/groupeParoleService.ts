@@ -2,15 +2,7 @@ import { db } from './firebase';
 import {
   collection,
   addDoc,
-  doc,
-  getDoc,
   serverTimestamp,
-  Timestamp,
-  query,
-  where,
-  orderBy,
-  limit,
-  onSnapshot,
 } from 'firebase/firestore';
 import type { 
   GroupeParole, MessageGroupe, ThemeGroupe, StructureEtape, 
@@ -99,77 +91,17 @@ export async function createGroupeParole(data: CreateGroupeData): Promise<string
 export function onGroupesParole(
   callback: (groupes: GroupeParole[]) => void
 ): () => void {
-  const backend = groupStorage.backend;
-
-  if (backend === 'firebase') {
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - 3);
-
-    const q = query(
-      collection(db, 'groupes'),
-      where('dateVocal', '>=', Timestamp.fromDate(cutoff)),
-      orderBy('dateVocal', 'asc'),
-      limit(100)
-    );
-
-    return onSnapshot(q, (snapshot) => {
-      const now = new Date();
-      const groupes: GroupeParole[] = snapshot.docs
-        .map((doc) => {
-          const d = doc.data();
-          return {
-            id: doc.id,
-            titre: d.titre || '',
-            description: d.description || '',
-            theme: d.theme || 'autre',
-            createurUid: d.createurUid || '',
-            createurPseudo: d.createurPseudo || '',
-            dateCreation: d.dateCreation?.toDate?.() || new Date(),
-            dateVocal: d.dateVocal?.toDate?.() || new Date(),
-            dateExpiration: d.dateExpiration?.toDate?.() || new Date(),
-            participantsMax: d.participantsMax || 5,
-            structureType: d.structureType || 'libre',
-            structure: d.structure,
-            participants: (d.participants || []).map((p: any) => ({
-              uid: p.uid,
-              pseudo: p.pseudo,
-              inscritVocal: p.inscritVocal ?? false,
-              dateInscription: p.dateInscription?.toDate?.() || new Date(),
-              banni: !!p.banni
-            })),
-            messages: [],
-            messageCount: d.messageCount || 0,
-            status: d.status || undefined,
-            sessionState: d.sessionState ? {
-              currentPhaseIndex: d.sessionState.currentPhaseIndex ?? 0,
-              extendedMinutes: d.sessionState.extendedMinutes ?? 0,
-              sessionActive: d.sessionState.sessionActive ?? true,
-              phaseStartedAt: d.sessionState.phaseStartedAt?.toDate?.() || new Date(),
-              sessionStartedAt: d.sessionState.sessionStartedAt?.toDate?.() || new Date(),
-            } : undefined,
-          } as GroupeParole;
-        })
-        .filter((g) => g.dateExpiration > now);
-
-      callback(groupes);
-    }, (error) => {
-      console.error('Erreur chargement groupes:', error);
-      callback([]);
-    });
-  } else {
-    // VPS Polling (toutes les 10 secondes pour les groupes)
-    const poll = async () => {
-      try {
-        const groups = await groupStorage.listGroups();
-        callback(groups);
-      } catch (err) {
-        console.error('Erreur Polling Groupes:', err);
-      }
-    };
-    poll();
-    const interval = setInterval(poll, 10000);
-    return () => clearInterval(interval);
-  }
+  const poll = async () => {
+    try {
+      const groups = await groupStorage.listGroups();
+      callback(groups);
+    } catch (err) {
+      console.error('Erreur Polling Groupes:', err);
+    }
+  };
+  poll();
+  const interval = setInterval(poll, 10000);
+  return () => clearInterval(interval);
 }
 
 /**
@@ -179,56 +111,17 @@ export function onGroupeParole(
   groupeId: string,
   callback: (groupe: GroupeParole | null) => void
 ): () => void {
-  const backend = groupStorage.backend;
-
-  if (backend === 'firebase') {
-    return onSnapshot(doc(db, 'groupes', groupeId), (snapshot) => {
-      if (!snapshot.exists()) {
-        callback(null);
-        return;
-      }
-      const d = snapshot.data();
-      callback({
-        id: snapshot.id,
-        titre: d.titre || '',
-        description: d.description || '',
-        theme: d.theme || 'autre',
-        createurUid: d.createurUid || '',
-        createurPseudo: d.createurPseudo || '',
-        dateCreation: d.dateCreation?.toDate?.() || new Date(),
-        dateVocal: d.dateVocal?.toDate?.() || new Date(),
-        dateExpiration: d.dateExpiration?.toDate?.() || new Date(),
-        participantsMax: d.participantsMax || 5,
-        structureType: d.structureType || 'libre',
-        structure: d.structure,
-        participants: (d.participants || []).map((p: any) => ({
-          uid: p.uid,
-          pseudo: p.pseudo,
-          inscritVocal: p.inscritVocal ?? false,
-          dateInscription: p.dateInscription?.toDate?.() || new Date(),
-          banni: !!p.banni
-        })),
-        messages: [],
-        messageCount: d.messageCount || 0,
-      } as GroupeParole);
-    }, (error) => {
-      console.error('Erreur chargement groupe:', error);
-      callback(null);
-    });
-  } else {
-    // VPS Polling (toutes les 5 secondes pour les détails d'un groupe ouvert)
-    const poll = async () => {
-      try {
-        const group = await groupStorage.getGroup(groupeId);
-        callback(group);
-      } catch (err) {
-        console.error('Erreur Polling Groupe Unique:', err);
-      }
-    };
-    poll();
-    const interval = setInterval(poll, 5000);
-    return () => clearInterval(interval);
-  }
+  const poll = async () => {
+    try {
+      const group = await groupStorage.getGroup(groupeId);
+      callback(group);
+    } catch (err) {
+      console.error('Erreur Polling Groupe Unique:', err);
+    }
+  };
+  poll();
+  const interval = setInterval(poll, 5000);
+  return () => clearInterval(interval);
 }
 
 /**
@@ -238,41 +131,17 @@ export function onGroupeMessages(
   groupeId: string,
   callback: (messages: MessageGroupe[]) => void
 ): () => void {
-  const backend = groupStorage.backend;
-
-  if (backend === 'firebase') {
-    const q = query(
-      collection(db, 'groupes', groupeId, 'messages'),
-      orderBy('dateEnvoi', 'asc')
-    );
-
-    return onSnapshot(q, (snapshot) => {
-      const messages: MessageGroupe[] = snapshot.docs.map((d) => ({
-        id: d.id,
-        auteurUid: d.data().auteurUid || '',
-        auteurPseudo: d.data().auteurPseudo || '',
-        contenu: d.data().contenu || '',
-        dateEnvoi: d.data().dateEnvoi?.toDate?.() || new Date(),
-      }));
-      callback(messages);
-    }, (error) => {
-      console.error('Erreur chargement messages:', error);
-      callback([]);
-    });
-  } else {
-    // VPS Polling (toutes les 3 secondes pour le chat)
-    const poll = async () => {
-      try {
-        const msgs = await groupStorage.listMessages(groupeId);
-        callback(msgs);
-      } catch (err) {
-        console.error('Erreur Polling Messages:', err);
-      }
-    };
-    poll();
-    const interval = setInterval(poll, 3000);
-    return () => clearInterval(interval);
-  }
+  const poll = async () => {
+    try {
+      const msgs = await groupStorage.listMessages(groupeId);
+      callback(msgs);
+    } catch (err) {
+      console.error('Erreur Polling Messages:', err);
+    }
+  };
+  poll();
+  const interval = setInterval(poll, 3000);
+  return () => clearInterval(interval);
 }
 
 /**
@@ -458,30 +327,12 @@ export async function getGroupeAverageRating(
 }
 
 /**
- * Écoute la note moyenne d'un groupe (Firebase: onSnapshot, VPS: polling 30s).
+ * Écoute la note moyenne d'un groupe (polling 30s).
  */
 export function onGroupeRating(
   groupeId: string,
   callback: (rating: { average: number; count: number } | null) => void
 ): () => void {
-  if (groupStorage.backend === 'firebase') {
-    const evalsRef = collection(db, 'groupes', groupeId, 'evaluations');
-    return onSnapshot(evalsRef, (snapshot) => {
-      const completed = snapshot.docs.filter(
-        (d) => d.data().status !== 'pending' && d.data().noteAmbiance
-      );
-      if (completed.length === 0) { callback(null); return; }
-      let total = 0;
-      for (const d of completed) {
-        const data = d.data();
-        total += (data.noteAmbiance || 0) + (data.noteTheme || 0) + (data.noteTechnique || 0);
-      }
-      const count = completed.length;
-      callback({ average: Math.round(total / (count * 3) * 10) / 10, count });
-    }, () => callback(null));
-  }
-
-  // VPS polling
   const poll = async () => {
     const result = await groupStorage.getEvaluationsAverage(groupeId);
     callback(result);
@@ -567,36 +418,12 @@ export async function getUserProgression(uid: string): Promise<UserProgression> 
 }
 
 /**
- * Écoute la progression d'un utilisateur (Firebase: onSnapshot, VPS: polling 30s).
+ * Écoute la progression d'un utilisateur (polling 30s).
  */
 export function onUserProgression(
   uid: string,
   callback: (prog: UserProgression) => void
 ): () => void {
-  if (accountStorage.backend === 'firebase') {
-    return onSnapshot(doc(db, 'accounts', uid), (snap) => {
-      if (!snap.exists()) {
-        callback({ points: 0, badge: 'none', history: [] });
-        return;
-      }
-      const data = snap.data();
-      callback({
-        points: data.points || 0,
-        badge: (data.badge as BadgeLevel) || getBadgeForPoints(data.points || 0),
-        history: (data.participationHistory || []).map((h: any) => ({
-          groupeId: h.groupeId || '',
-          groupeTitre: h.groupeTitre || '',
-          date: h.date?.toDate?.() || new Date(),
-          type: h.type || 'participation',
-          points: h.points || 0,
-        })),
-      });
-    }, () => {
-      callback({ points: 0, badge: 'none', history: [] });
-    });
-  }
-
-  // VPS polling
   const poll = async () => {
     const prog = await getUserProgression(uid);
     callback(prog);
