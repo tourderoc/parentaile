@@ -107,36 +107,52 @@ Ces 3 collections (`tokens`, `messages`, `notifications`) forment un **pont bidi
 **Déjà livré :**
 - **Phase 1 — Avatar service** (`https://avatar.parentaile.fr`) ✅
   - Upload photo, stockage `/static/avatars/{uid}.jpg`, clé API, backups
-- **Phase 2 — Account service** (`https://account.parentaile.fr`) ✅ *(2026-04-12)*
+- **Phase 2 — Account service** (`https://account.parentaile.fr`) ✅ *(2026-04-12, branché 2026-04-14)*
   - PostgreSQL 16 installé sur le VPS, DB `account_db`, user `account_service`
-  - Schéma : `accounts`, `children`, `ban_reports`
+  - Schéma : `accounts`, `children`, `ban_reports`, colonne `skip_charte` (ajoutée 2026-04-14)
   - FastAPI + asyncpg + systemd (`parentaile-account.service`) + nginx + HTTPS
-  - CRUD complet testé bout-en-bout
+  - CRUD complet + `batch` + enfants liés
   - Backup Postgres quotidien 03h15, rotation 30j
-  - Couche React `src/lib/accountStorage.ts` avec feature flag `VITE_STORAGE_BACKEND=firebase|vps`
-  - Routers `children` et `ban_reports` enregistrés dans `main.py`
-- **Phase 3C-A — Groupes (partiel)** ✅ *(2026-04-13)*
-  - Schéma PostgreSQL ajouté dans `account_db` : `groupes`, `group_participants`, `group_messages`, `group_evaluations`, `group_participant_exits`, `groupe_reminders_sent`
-  - Routes FastAPI `/groupes` ajoutées dans `account-service` : CRUD, participants, messages, évaluations, ban, auto-delete groupes annulés sans messages
-  - Couche React `src/lib/groupStorage.ts` : aiguillage Firebase ↔ VPS, polling 10s (liste), 5s (détail), 3s (messages)
-  - Fonctions migrées dans `groupeParoleService.ts` : `createGroupeParole`, `onGroupesParole`, `onGroupeParole`, `onGroupeMessages`, `sendMessage`, `deleteMessage`, `rejoindreGroupe`, `quitterGroupe`, `submitEvaluation`, `getEvaluationStatus`, `cancelGroup`, `banParticipant`, `isBanned`
-  - `accountStorage.listChildren` : retourne `[]` sur 404 (robustesse dev)
-  - Committé sur branche `dev` — prod (`main`) inchangée
+  - Quotas avatar migrés Firebase → SQLite (2026-04-14), admin illimité via email en query param
+  - Sync avatars directement depuis VPS (plus de passage Firebase)
+- **Phase 3C — Groupes de parole + session vocale VPS** ✅ *(2026-04-13 → 2026-04-15)*
+  - Schéma PostgreSQL dans `account_db` : `groupes`, `group_messages`, `group_evaluations`, `participant_exits`, `groupe_reminders_sent`
+  - Routes FastAPI `/groupes` complètes : CRUD, participants, messages, évaluations, ban, session_state, LiveKit token (remplace Cloud Function)
+  - Couche React `src/lib/groupStorage.ts` : polling 10s (liste), 5s (détail), 3s (messages)
+  - Toutes les fonctions `groupeParoleService.ts` migrées — y compris session vocale : `initSessionStateV2`, `suspendSession`, `resumeSession`, `advancePhase`, `extendSession`, `endSession`, `proposeAsAnimateur`, `incrementParticipantExit`, `incrementAnimateurDisconnect`
+  - `SalleVocalePage.tsx` : `onSnapshot` → polling 5s + mises à jour optimistes (animateur) pour zéro latence perçue
+  - `liveKitService.ts` : appel direct VPS `POST /groupes/{id}/token` (plus de `httpsCallable`)
+- **Phase 3C-B — Webhook LiveKit auto-close** ✅ *(2026-04-14)*
+  - Endpoint VPS `/livekit/webhook` (vérif signature `WebhookReceiver`)
+  - Sur `room_finished` : groupe marqué `completed` si ≥30 min écoulées depuis `date_vocal`, sinon `cancelled`
+  - Remplace la Cloud Function `cleanupCancelledGroup` + évite les groupes bloqués `in_progress` après sortie de tous les participants
+  - Réutilisable pour futurs événements (participant_joined, room_started…)
+- **Mono-repo VPS `/root/`** ✅ *(2026-04-14)*
+  - Git initialisé in place (venvs non déplaçables), `.gitignore` en whitelist
+  - Tracké : `account-service/`, `avatar-service/`, `infra/` (snapshots sanitisés de `livekit.yaml`, nginx, systemd, crons)
+  - Deploy key GitHub configurée, push vers repo privé `parentaile-vps`
+  - Script `infra/sync-from-system.sh` avec sanitisation auto des secrets LiveKit
+  - Backup/restore possible en cas de crash VPS
+- **Nettoyage code Firebase obsolète** ✅ *(2026-04-15, commit `00b6102` sur dev)*
+  - Suppression de `firebaseStorage` dans `accountStorage.ts` et `groupStorage.ts`
+  - Suppression du feature flag `VITE_STORAGE_BACKEND` (VPS est désormais la seule voie)
+  - Suppression des 5 branches Firebase (`onSnapshot`/`query`/`doc`) dans `groupeParoleService.ts` : `onGroupesParole`, `onGroupeParole`, `onGroupeMessages`, `onGroupeRating`, `onUserProgression`
+  - Suppression des Cloud Functions `getLiveKitToken` et `cleanupCancelledGroup`
+  - Suppression dossier `vps_groups/` (versions initiales obsolètes)
+  - Bilan : -1535 lignes / +75 lignes
 
-**Optimisations Firebase (réduction coûts en attendant la migration) :**
-- Auto-purge des notifications (max 10/catégorie) sur `parentNotifications` et `notifications` côté React
-- Listener temps réel tokens remplacé par polling 60s côté MedCompanion
+**Stratégie de bascule (2026-04-14) :** au lieu d'attendre une fenêtre de maintenance globale, la bascule s'est faite **brique par brique en direct** une fois chaque service validé. Les tests mobiles en conditions réelles ont remplacé les dual-writes. Plus rapide, plus sûr pour une V1 bêta.
 
 **Encore dans Firebase :**
-- Firestore : `accounts`, `users`, `parentNotifications`, `banReports`, `tokens`, `messages`, `notifications`
-- Firestore `groupes` : toujours actif pour la session vocale (`SalleVocalePage` — fonctions non encore migrées)
-- Cloud Functions : `manageVocalTasks`, `handleVocalReminder`, `cleanupCancelledGroup`, `getLiveKitToken`
+- **Firebase Auth** (à vie — règle)
+- **FCM** (à vie — règle)
+- Firestore `parentNotifications` + Cloud Functions `manageVocalTasks` et `handleVocalReminder` → reste à migrer (Phase 3B — notifications)
+- Firestore `banReports` → conservé pour l'admin (usage résiduel, peu critique)
+- Collections MedCompanion ↔ Parent'aile : `tokens`, `messages`, `notifications` → Phase 4 (Bridge)
 
 **Prochaine étape :**
-- **3C-A suite** : migrer les fonctions de session vocale (`initSessionStateV2`, `suspendSession`, `resumeSession`, `advancePhase`, `extendSession`, `endSession`, `proposeAsAnimateur`, `incrementParticipantExit`, `incrementAnimateurDisconnect`) + `SalleVocalePage` `onSnapshot` → polling 5s
-- **3C-B** : `getLiveKitToken` → VPS, `handleVocalReminder` absorbée par cron, suppression Cloud Functions Firebase
-- **3B** : Notifications VPS (`parentNotifications` + cron vocal)
-- **4** : Bridge Service MedCompanion ↔ Parent'aile
+- **3B — Notifications VPS** : migrer `parentNotifications` + FCM dispatch + cron de rappels vocaux (remplace `manageVocalTasks` + `handleVocalReminder`). Planifié 2026-04-16.
+- **4 — Bridge Service** MedCompanion ↔ Parent'aile
 
 ---
 
@@ -681,16 +697,17 @@ VPS Hostinger (145.223.117.145)
 | Etape | Service | Apps impactées | Impact coût | Complexité | Statut |
 |-------|---------|----------------|-------------|------------|--------|
 | 1 | Avatar service | Parent'aile | Faible | Faible | ✅ livré |
-| 2 | Account service + PostgreSQL (socle) | Parent'aile | Très élevé | Elevé | ✅ livré 2026-04-12 (non branché) |
-| 3C-A | **Groupes — Phase A** : CRUD + messages + évaluations + ban + cancel migrés VPS. Session vocale (SalleVocalePage) encore sur Firebase | Parent'aile | Très élevé | Elevé | 🔄 en cours (2026-04-13) — session vocale reste à migrer |
-| 3C-B | **Groupes — Phase B** : getLiveKitToken → VPS, handleVocalReminder absorbée par cron, suppression toutes Cloud Functions Firebase | Parent'aile | Elevé | Faible | ⏳ après fin 3C-A |
-| 3B | Notifications VPS (parentNotifications + cron vocal) | Parent'aile | Elevé | Moyen | ⏳ après 3C |
+| 2 | Account service + PostgreSQL (socle, quotas, skip_charte) | Parent'aile | Très élevé | Elevé | ✅ livré et branché 2026-04-14 |
+| 3C-A | **Groupes — Phase A** : CRUD + messages + évaluations + ban + session vocale + optimistic UI animateur | Parent'aile | Très élevé | Elevé | ✅ livré 2026-04-13 → 2026-04-15 |
+| 3C-B | **Groupes — Phase B** : `getLiveKitToken` → VPS, webhook LiveKit auto-close (remplace `cleanupCancelledGroup`), suppression Cloud Functions obsolètes | Parent'aile | Elevé | Faible | ✅ livré 2026-04-14 |
+| — | **Nettoyage code Firebase obsolète** (feature flag, branches `onSnapshot`, firebaseStorage, vps_groups/) | Parent'aile | — | Faible | ✅ livré 2026-04-15 (commit `00b6102`) |
+| — | **Mono-repo git VPS** (`/root/` + deploy key + sync script) | Infra | — | Moyen | ✅ livré 2026-04-14 |
+| 3B | Notifications VPS : `parentNotifications` + FCM + cron rappels vocaux (remplace `manageVocalTasks` + `handleVocalReminder`) | Parent'aile | Elevé | Moyen | 🔜 planifié 2026-04-16 |
 | 4 | Bridge Service (tokens + messages + notifications MedCompanion) | MedCompanion + Parent'aile | Elevé | Elevé | ⏳ à faire |
-| 5 | **Cut-over maintenance global** (bascule `VITE_STORAGE_BACKEND=vps` accounts + groupes + migration données one-shot) | Parent'aile | — | Moyen | ⏳ une fois 3 + 4 livrés |
 
-> **Pourquoi 3C avant 3B :** les Cloud Functions Firebase (rappels vocaux) dépendent de `groupes`. Migrer `groupes` en premier (3C) permet ensuite de migrer les Cloud Functions de rappel proprement dans la Phase B, sans avoir à les toucher deux fois.
+> **Changement de stratégie 2026-04-14 :** abandon du cut-over global en fenêtre de maintenance au profit de **bascules brique par brique en direct**, validées par les tests mobiles en conditions réelles. Plus rapide, plus sûr, adapté à une V1 bêta à petite échelle.
 
-> **3A (LiveKit token) absorbé dans 3C-B :** le service LiveKit token est la dernière Cloud Function Firebase à migrer. Il n'a plus de raison d'être un chantier séparé puisqu'il sera migré naturellement quand `groupes` est sur VPS.
+> **3A (LiveKit token) absorbé dans 3C-B :** migré naturellement avec `groupes` vers le VPS.
 
 ---
 
