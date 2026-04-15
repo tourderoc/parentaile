@@ -375,6 +375,21 @@ export const GroupeDetailPage = () => {
     setJoining(true);
     try {
       await rejoindreGroupe(groupeId, { uid: user.uid, pseudo: userPseudo });
+      // Optimistic update : ajouter immédiatement le user aux participants pour
+      // que le bouton "S'inscrire" disparaisse sans attendre le prochain polling.
+      setGroupe(prev => prev ? {
+        ...prev,
+        participants: [
+          ...prev.participants,
+          {
+            uid: user.uid,
+            pseudo: userPseudo,
+            inscritVocal: true,
+            dateInscription: new Date(),
+            banni: false,
+          },
+        ],
+      } : prev);
     } catch (err) {
       console.error('Erreur inscription:', err);
     } finally {
