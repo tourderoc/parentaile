@@ -1088,9 +1088,10 @@ const RoomContent: React.FC<{
   sessionCancelledRef: React.RefObject<boolean>;
   groupeStatus: string;
   firestoreSession?: SessionState | null;
+  onOptimisticSessionUpdate?: (patch: Partial<SessionState>) => void;
   lightMode?: boolean;
   onToggleLight?: () => void;
-}> = ({ isAnimateur, groupeId, groupeTitre, groupeTheme, dateVocal, onLeave, onCancelled, animateurNotes, structureType, structure, defaultDurationMin, onSessionProgress, onSessionEnded, sessionPrenom, createurUid, sessionCancelledRef, groupeStatus, firestoreSession, lightMode, onToggleLight }) => {
+}> = ({ isAnimateur, groupeId, groupeTitre, groupeTheme, dateVocal, onLeave, onCancelled, animateurNotes, structureType, structure, defaultDurationMin, onSessionProgress, onSessionEnded, sessionPrenom, createurUid, sessionCancelledRef, groupeStatus, firestoreSession, onOptimisticSessionUpdate, lightMode, onToggleLight }) => {
   useWakeLock(); // Keep screen on during vocal session
   const participants = useParticipants();
   const { localParticipant } = useLocalParticipant();
@@ -1342,6 +1343,11 @@ const RoomContent: React.FC<{
     if (!firestoreSession) return;
     const newIndex = firestoreSession.currentPhaseIndex + 1;
     if (newIndex < structure.length) {
+      // Optimistic update : l'UI avance immédiatement, sans attendre le polling (~5s).
+      onOptimisticSessionUpdate?.({
+        currentPhaseIndex: newIndex,
+        phaseStartedAt: new Date(),
+      });
       await advancePhase(groupeId, newIndex);
       // If the new phase requires muted mics → broadcast mute-all
       if (structure[newIndex]?.micMode === 'muted' && localParticipant) {
@@ -1350,16 +1356,18 @@ const RoomContent: React.FC<{
         await localParticipant.publishData(data, { reliable: true });
       }
     }
-  }, [firestoreSession, structure, groupeId, localParticipant]);
+  }, [firestoreSession, structure, groupeId, localParticipant, onOptimisticSessionUpdate]);
 
   const handleExtendTime = useCallback(async () => {
     if (!firestoreSession || firestoreSession.extendedMinutes > 0) return;
+    onOptimisticSessionUpdate?.({ extendedMinutes: 5 });
     await extendSession(groupeId, 5);
-  }, [firestoreSession, groupeId]);
+  }, [firestoreSession, groupeId, onOptimisticSessionUpdate]);
 
   const handleEndSession = useCallback(async () => {
+    onOptimisticSessionUpdate?.({ sessionActive: false });
     await endSession(groupeId);
-  }, [groupeId]);
+  }, [groupeId, onOptimisticSessionUpdate]);
 
   // Current suggestions for animateur
   const currentSuggestions = useMemo(() => {
@@ -4165,6 +4173,9 @@ export const SalleVocalePage = () => {
           sessionCancelledRef={sessionCancelledRef}
           groupeStatus={groupeStatus}
           firestoreSession={sessionState}
+          onOptimisticSessionUpdate={(patch) =>
+            setSessionState((prev) => (prev ? { ...prev, ...patch } : prev))
+          }
           lightMode={lightMode}
           onToggleLight={() => setLightMode(prev => !prev)}
         />
