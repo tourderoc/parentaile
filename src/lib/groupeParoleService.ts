@@ -304,42 +304,37 @@ export async function rejoindreGroupe(
 ): Promise<void> {
   await groupStorage.joinGroup(groupeId, participant);
 
-  // Notifier le créateur du groupe aux jalons importants (plus simple via le backend VPS plus tard, 
-  // mais on garde la logique client pour Firebase)
-  if (groupStorage.backend === 'firebase') {
-    try {
-      const groupeSnap = await getDoc(doc(db, 'groupes', groupeId));
-      if (groupeSnap.exists()) {
-        const data = groupeSnap.data();
-        const currentCount = (data.participants || []).length;
-        
-        if (data.createurUid && data.createurUid !== participant.uid) {
-          if (currentCount === 3) {
-            const notifId = `milestone_min_${groupeId}_${data.createurUid}`;
-            sendParentNotification(
-              data.createurUid,
-              'group_join',
-              'Minimum atteint !',
-              `Bonne nouvelle, 3 parents sont inscrits à "${data.titre}", le groupe aura bien lieu.`,
-              { groupeId, groupeTitre: data.titre },
-              notifId
-            );
-          } else if (currentCount === data.participantsMax) {
-            const notifId = `milestone_full_${groupeId}_${data.createurUid}`;
-            sendParentNotification(
-              data.createurUid,
-              'group_join',
-              'Groupe complet !',
-              `Le groupe "${data.titre}" est complet (${data.participantsMax} inscrits).`,
-              { groupeId, groupeTitre: data.titre },
-              notifId
-            );
-          }
-        }
+  // Notifier le créateur du groupe aux jalons importants (3 inscrits = minimum
+  // atteint, N inscrits = complet). Fonctionne sur les deux backends via
+  // l'abstraction groupStorage — pas de lecture directe de Firestore.
+  try {
+    const groupe = await groupStorage.getGroup(groupeId);
+    if (groupe && groupe.createurUid && groupe.createurUid !== participant.uid) {
+      const currentCount = (groupe.participants || []).length;
+      if (currentCount === 3) {
+        const notifId = `milestone_min_${groupeId}_${groupe.createurUid}`;
+        sendParentNotification(
+          groupe.createurUid,
+          'group_join',
+          'Minimum atteint !',
+          `Bonne nouvelle, 3 parents sont inscrits à "${groupe.titre}", le groupe aura bien lieu.`,
+          { groupeId, groupeTitre: groupe.titre },
+          notifId
+        );
+      } else if (currentCount === groupe.participantsMax) {
+        const notifId = `milestone_full_${groupeId}_${groupe.createurUid}`;
+        sendParentNotification(
+          groupe.createurUid,
+          'group_join',
+          'Groupe complet !',
+          `Le groupe "${groupe.titre}" est complet (${groupe.participantsMax} inscrits).`,
+          { groupeId, groupeTitre: groupe.titre },
+          notifId
+        );
       }
-    } catch {
-      // Non-bloquant
     }
+  } catch {
+    // Non-bloquant
   }
 }
 
