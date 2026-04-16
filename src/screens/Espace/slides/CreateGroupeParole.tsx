@@ -336,8 +336,8 @@ export const CreateGroupeParole: React.FC<CreateGroupeParoleProps> = ({ onBack, 
     const remaining = MAX_TOTAL_MINUTES - currentTotal;
 
     if (remaining >= newPhaseDuration) {
-      // Enough room — just add
-      setStructure(prev => [...prev, { label, dureeMinutes: newPhaseDuration }]);
+      // Insert before Clôture (last element)
+      setStructure(prev => [...prev.slice(0, -1), { label, dureeMinutes: newPhaseDuration }, prev[prev.length - 1]]);
     } else {
       // Need to redistribute: reduce other phases proportionally
       const deficit = newPhaseDuration - remaining;
@@ -357,7 +357,7 @@ export const CreateGroupeParole: React.FC<CreateGroupeParoleProps> = ({ onBack, 
         const longestIdx = adjusted.reduce((maxI, s, i, arr) => s.dureeMinutes > arr[maxI].dureeMinutes ? i : maxI, 0);
         adjusted[longestIdx] = { ...adjusted[longestIdx], dureeMinutes: adjusted[longestIdx].dureeMinutes - toReduce };
       }
-      setStructure([...adjusted, { label, dureeMinutes: newPhaseDuration }]);
+      setStructure([...adjusted.slice(0, -1), { label, dureeMinutes: newPhaseDuration }, adjusted[adjusted.length - 1]]);
       setStructureToast('Durées ajustées pour rester à 45 min');
       setTimeout(() => setStructureToast(null), 3000);
     }
@@ -931,7 +931,12 @@ export const CreateGroupeParole: React.FC<CreateGroupeParoleProps> = ({ onBack, 
                                   type="text"
                                   value={etape.label}
                                   onChange={(e) => updateStructureEtape(index, 'label', e.target.value)}
-                                  className="flex-1 min-w-[100px] bg-white/60 rounded-xl px-3 py-2 text-sm font-semibold text-gray-700 focus:outline-none focus:ring-2 focus:ring-orange-200 border border-gray-100"
+                                  readOnly={isFixed}
+                                  className={`flex-1 min-w-[100px] rounded-xl px-3 py-2 text-sm font-semibold focus:outline-none border border-gray-100 ${
+                                    isFixed
+                                      ? 'bg-gray-50/60 text-gray-500 cursor-default'
+                                      : 'bg-white/60 text-gray-700 focus:ring-2 focus:ring-orange-200'
+                                  }`}
                                   style={{ fontSize: '14px' }}
                                   placeholder="Nom de l'étape"
                                 />
