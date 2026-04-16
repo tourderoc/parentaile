@@ -143,16 +143,25 @@ Ces 3 collections (`tokens`, `messages`, `notifications`) forment un **pont bidi
 
 **Stratégie de bascule (2026-04-14) :** au lieu d'attendre une fenêtre de maintenance globale, la bascule s'est faite **brique par brique en direct** une fois chaque service validé. Les tests mobiles en conditions réelles ont remplacé les dual-writes. Plus rapide, plus sûr pour une V1 bêta.
 
+- **Phase 3B — Notifications parentales VPS** ✅ *(2026-04-16)*
+  - Table PostgreSQL `parent_notifications` + `groupe_reminders_sent`
+  - Routes FastAPI `/notifications` : CRUD, mark read, unread-count, delete all
+  - FCM push via `firebase-admin` Python (service account sur VPS)
+  - Cron systemd toutes les 2 min (`vocal-reminders.timer`) : rappels 30/15/5 min, annulation <3 participants à T-30, annulation no-show (T+10 min), cleanup groupes annulés sans interaction
+  - Polling 15s côté React (remplace `onSnapshot` Firestore)
+  - Optimistic UI pour suppression/lecture instantanée
+  - Cloud Functions `manageVocalTasks` + `handleVocalReminder` supprimées (`functions/src/index.ts` vidé)
+  - Auto-création compte VPS au login si absent (fallback `userContext.tsx` lit pseudo depuis Firestore `users/{uid}`)
+  - `RegisterForm.tsx` (legacy) crée maintenant le compte VPS en plus de Firestore
+
 **Encore dans Firebase :**
 - **Firebase Auth** (à vie — règle)
-- **FCM** (à vie — règle)
-- Firestore `parentNotifications` + Cloud Functions `manageVocalTasks` et `handleVocalReminder` → reste à migrer (Phase 3B — notifications)
+- **FCM** (à vie — règle, transport push uniquement)
 - Firestore `banReports` → conservé pour l'admin (usage résiduel, peu critique)
-- Collections MedCompanion ↔ Parent'aile : `tokens`, `messages`, `notifications` → Phase 4 (Bridge)
+- Collections MedCompanion ↔ Parent'aile : `tokens`, `messages`, `notifications` (médecin) → Phase 4 (Bridge)
 
 **Prochaine étape :**
-- **3B — Notifications VPS** : migrer `parentNotifications` + FCM dispatch + cron de rappels vocaux (remplace `manageVocalTasks` + `handleVocalReminder`). Planifié 2026-04-16.
-- **4 — Bridge Service** MedCompanion ↔ Parent'aile
+- **4 — Bridge MedCompanion ↔ Parent'aile** : tokens + notifications médecin + messages. Planifié 2026-04-17.
 
 ---
 
@@ -589,64 +598,212 @@ Pour chaque collection à migrer (accounts, groupes, parentNotifications, banRep
 
 ---
 
-## Phase 4 — Bridge Service MedCompanion ↔ Parent'aile
+## Phase 4 — Bridge MedCompanion ↔ Parent'aile
 
-> **Priorité : moyenne (après Phase 3)**
-> Chantier coordonné : nécessite de modifier **deux codebases** simultanément.
-> MedCompanion (C#) + Parent'aile (React) doivent changer d'URL en même temps.
+> **Statut : planifié 2026-04-17**
+> Chantier coordonné : deux codebases (MedCompanion C# + Parent'aile React).
+> **Stratégie : dual-write** — MedCompanion écrit sur VPS + Firebase en parallèle.
+> Les parents sur main lisent Firebase, ceux sur dev lisent VPS.
+> Au merge (dimanche, 250 users), on coupe Firebase dans MedCompanion.
 
-### Pourquoi un service dédié
+### Changement d'architecture
 
-Les collections `tokens`, `messages` et `notifications` forment un pont entre deux applications différentes. Les regrouper dans un seul **Bridge Service** permet :
-- Un point d'entrée unique pour la communication médecin ↔ parent
-- Un seul endroit à maintenir, monitorer, sécuriser
-- Une clé API commune aux deux apps pour ce flux
+**Avant (plan initial)** : bridge-service dédié sur port 8004.
+**Après (décision 2026-04-16)** : routes `/bridge/*` intégrées dans **account-service** (port 8001).
 
-### Endpoints Bridge Service
+Raisons :
+- Même base PostgreSQL (`account_db`), pas besoin d'un service séparé
+- Le bridge lit `accounts` (pseudos, FCM tokens) — déjà dans account-service
+- Moins d'infra (pas de nouveau port, venv, systemd, nginx)
+- Préfixe `/bridge/` pour séparation logique claire
 
-**Tokens médecin → parent :**
+### Ordre de migration (3 étapes)
+
+#### Étape 4A — Tokens (fondation) 🔜
+
+Les tokens sont le socle du lien médecin ↔ parent. Sans eux, ni les messages ni les notifications ne fonctionnent.
+
+**Firestore actuel** : collection `tokens/{tokenId}`
+```
+tokenId, doctorId, patientId, patientName, status (pending/used/revoked),
+pseudo, fcmToken, createdAt, usedAt, revokedAt
+```
+
+**Table PostgreSQL** :
+```sql
+CREATE TABLE bridge_tokens (
+  token_id      TEXT PRIMARY KEY,
+  doctor_id     TEXT NOT NULL,
+  patient_id    TEXT,
+  patient_name  TEXT NOT NULL,
+  status        TEXT NOT NULL DEFAULT 'pending',  -- pending, used, revoked
+  pseudo        TEXT,
+  fcm_token     TEXT,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  used_at       TIMESTAMPTZ,
+  revoked_at    TIMESTAMPTZ
+);
+CREATE INDEX idx_bridge_tokens_doctor ON bridge_tokens(doctor_id);
+```
+
+**Endpoints** :
 ```
 POST   /bridge/tokens                      → MedCompanion crée un token patient
 GET    /bridge/tokens/{tokenId}            → Parent'aile valide un token
-PUT    /bridge/tokens/{tokenId}/use        → Parent'aile active le token
+PUT    /bridge/tokens/{tokenId}/use        → Parent'aile active le token (+ stocke pseudo, uid, fcm_token)
 PUT    /bridge/tokens/{tokenId}/revoke     → MedCompanion révoque
 DELETE /bridge/tokens/{tokenId}            → MedCompanion supprime
 GET    /bridge/tokens/sync/{doctorId}      → MedCompanion sync statuts + pseudos (remplace SyncFromFirebaseAsync)
 ```
 
-**Messages parent → médecin :**
+**Côté MedCompanion (C#)** :
+- `FirebaseService.cs` : dual-write (VPS en premier, Firebase en fallback)
+- Polling sync toutes les 60s → appeler `/bridge/tokens/sync/{doctorId}` au lieu de Firestore
+- Fonctions : `CreateTokenAsync`, `RevokeTokenAsync`, `DeleteTokenAsync`, `SyncFromFirebaseAsync`
+
+**Côté Parent'aile (React)** :
+- `src/lib/tokenService.ts` ou équivalent : remplacer Firestore par VPS
+- Validation token : `GET /bridge/tokens/{tokenId}`
+- Activation : `PUT /bridge/tokens/{tokenId}/use`
+
+**Migration one-shot** : script pour copier tous les tokens Firestore existants → PostgreSQL.
+
+#### Étape 4B — Notifications médecin (unidirectionnel) 🔜
+
+Le médecin envoie, le parent reçoit. Pas de conflit de bascule.
+**Amélioration** : ajout FCM push (aujourd'hui absent — le parent ne voit la notif que s'il ouvre l'app).
+
+**Firestore actuel** : collection `notifications/{notificationId}`
+```
+type (EmailReply/Quick/Info/Broadcast), title, body,
+targetParentId, tokenId, replyToMessageId, createdAt, read, senderName
+```
+
+**Table PostgreSQL** :
+```sql
+CREATE TABLE bridge_notifications (
+  id                  TEXT PRIMARY KEY,
+  type                TEXT NOT NULL,          -- EmailReply, Quick, Info, Broadcast
+  title               TEXT NOT NULL,
+  body                TEXT NOT NULL,
+  target_parent_id    TEXT,                   -- UID parent ou "all"
+  token_id            TEXT REFERENCES bridge_tokens(token_id),
+  reply_to_message_id TEXT,
+  sender_name         TEXT NOT NULL,
+  read                BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX idx_bridge_notifs_token ON bridge_notifications(token_id, created_at DESC);
+```
+
+**Endpoints** :
+```
+POST   /bridge/notifications               → MedCompanion envoie une notification (+ FCM push)
+POST   /bridge/notifications/broadcast     → MedCompanion envoie à tous ses parents actifs
+GET    /bridge/notifications/{tokenId}     → Parent'aile lit ses notifications médecin
+PUT    /bridge/notifications/{id}/read     → Parent'aile marque comme lue
+DELETE /bridge/notifications/{id}          → Suppression
+```
+
+**FCM push** : quand MedCompanion crée une notification, le VPS :
+1. Insère dans `bridge_notifications`
+2. Lit `fcm_token` depuis `bridge_tokens` (via `token_id`)
+3. Envoie un push FCM via `firebase-admin` Python (déjà installé pour les notifs parent)
+4. Le parent reçoit "Vous avez un message de votre médecin" même si l'app est fermée
+
+**Côté MedCompanion (C#)** :
+- `WriteNotificationAsync` : dual-write VPS + Firebase
+- `SendBroadcastNotificationAsync` : dual-write VPS + Firebase
+- Fonctions concernées dans `FirebaseService.cs`
+
+**Côté Parent'aile (React)** :
+- `src/lib/doctorNotifications.ts` : remplacer `subscribeToNotifications` (Firestore listener) par polling VPS 15s
+- `DoctorNotifications.tsx` : aucun changement (consomme les mêmes données)
+- `MessageHistory.tsx` : adapter `getNotificationsForMessage` pour VPS
+
+#### Étape 4C — Messages (bidirectionnel, le plus complexe)
+
+Parent écrit → médecin lit et répond. Nécessite le dual-write le plus soigné.
+
+**Firestore actuel** : collection `messages/{messageId}`
+```
+tokenId, doctorId, parentUid, content, urgency (normal/urgent),
+aiSummary, status (unread/read/replied/archived),
+replyContent, repliedAt, createdAt
+```
+
+**Table PostgreSQL** :
+```sql
+CREATE TABLE bridge_messages (
+  id              TEXT PRIMARY KEY,
+  token_id        TEXT NOT NULL REFERENCES bridge_tokens(token_id),
+  doctor_id       TEXT NOT NULL,
+  parent_uid      TEXT NOT NULL,
+  content         TEXT NOT NULL,
+  urgency         TEXT NOT NULL DEFAULT 'normal',    -- normal, urgent
+  ai_summary      TEXT,
+  status          TEXT NOT NULL DEFAULT 'unread',    -- unread, read, replied, archived
+  reply_content   TEXT,
+  replied_at      TIMESTAMPTZ,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX idx_bridge_messages_doctor ON bridge_messages(doctor_id, created_at DESC);
+CREATE INDEX idx_bridge_messages_token ON bridge_messages(token_id, created_at DESC);
+```
+
+**Endpoints** :
 ```
 POST   /bridge/messages                    → Parent écrit un message au médecin
-GET    /bridge/messages?since={ts}         → MedCompanion récupère les nouveaux messages
-PUT    /bridge/messages/{id}/reply         → MedCompanion répond
-DELETE /bridge/messages/{id}              → MedCompanion supprime
+GET    /bridge/messages/doctor/{doctorId}  → MedCompanion récupère les messages (filtres: since, status, tokenId)
+GET    /bridge/messages/token/{tokenId}    → Parent'aile voit ses messages envoyés + réponses
+PUT    /bridge/messages/{id}/read          → MedCompanion marque comme lu
+PUT    /bridge/messages/{id}/reply         → MedCompanion répond (+ crée une notification auto)
+PUT    /bridge/messages/{id}/archive       → MedCompanion archive
+DELETE /bridge/messages/{id}               → MedCompanion supprime
 ```
 
-**Notifications médecin → parent :**
+**Côté MedCompanion (C#)** :
+- `FirestoreChangeListener` (temps réel Firestore) → **polling 30s** sur `/bridge/messages/doctor/{doctorId}?since={lastSync}`
+- Dual-write pour les réponses et changements de statut
+- Fonctions : `ReplyToMessageAsync`, `MarkAsReadAsync`, `DeleteMessageAsync`
+
+**Côté Parent'aile (React)** :
+- `MessageHistory.tsx` : remplacer Firestore listener par polling VPS
+- Envoi message : POST `/bridge/messages` au lieu de Firestore write
+
+**Migration one-shot** : script pour copier les messages Firestore existants → PostgreSQL.
+
+### Stratégie dual-write MedCompanion
+
+```csharp
+// Pseudo-code pour chaque opération MedCompanion
+async Task DualWrite(Action vpsCall, Action firebaseCall)
+{
+    try { await vpsCall(); }
+    catch (Exception ex) { Log.Warning("VPS write failed: " + ex.Message); }
+
+    try { await firebaseCall(); }
+    catch (Exception ex) { Log.Warning("Firebase write failed: " + ex.Message); }
+}
 ```
-POST   /bridge/notifications               → MedCompanion envoie une notification
-POST   /bridge/notifications/broadcast     → MedCompanion envoie à tous ses parents
-GET    /bridge/notifications/{uid}         → Parent'aile lit ses notifications médecin
-```
 
-### Stockage Bridge Service
+- VPS en premier, Firebase en fallback
+- Si VPS échoue → Firebase assure la continuité pour les parents sur main
+- Si Firebase échoue → VPS assure la continuité pour les parents sur dev
+- Au merge : supprimer tous les appels Firebase, ne garder que VPS
 
-```sql
--- Tokens médecin-parent
-bridge_tokens (token_id, doctor_id, patient_id, patient_name, status, pseudo, created_at, used_at, revoked_at)
+### Planning prévisionnel
 
--- Messages parent → médecin
-bridge_messages (id, token_id, doctor_id, parent_uid, content, urgency, ai_summary, status, reply_content, replied_at, created_at)
-
--- Notifications médecin → parent
-bridge_notifications (id, doctor_id, recipient_uid, token_id, type, title, body, reply_to_message_id, created_at)
-```
-
-### Listener temps réel MedCompanion
-
-MedCompanion utilise aujourd'hui `FirestoreChangeListener` (SDK Firestore) pour recevoir les messages en temps réel. Sur VPS, ce listener sera remplacé par :
-- **Polling** toutes les 30s (simple, suffisant pour un cabinet médical)
-- Ou **WebSocket** si la réactivité temps réel est nécessaire
+| Jour | Tâche | Apps modifiées |
+|------|-------|----------------|
+| J1 | VPS : tables PostgreSQL + endpoints tokens + notifications | VPS |
+| J1 | Parent'aile (dev) : tokens service → VPS | Parent'aile |
+| J2 | VPS : endpoints messages + FCM push notifications médecin | VPS |
+| J2 | Parent'aile (dev) : doctorNotifications + MessageHistory → VPS | Parent'aile |
+| J3 | MedCompanion : dual-write tokens + notifications + messages | MedCompanion |
+| J3 | Migration one-shot Firestore → PostgreSQL (tokens + messages + notifs existants) | Script |
+| J4 | Tests end-to-end (créer token, envoyer message, répondre, notification, push) | Les deux |
+| Merge | Supprimer code Firebase dans MedCompanion | MedCompanion |
 
 ---
 
@@ -657,27 +814,32 @@ VPS Hostinger (145.223.117.145)
 │
 ├── nginx (reverse proxy HTTPS)
 │   ├── avatar.parentaile.fr    → :8000  (avatar-service) ✅
-│   ├── account.parentaile.fr   → :8001  (account-service)         [Phase 2]
-│   ├── api.parentaile.fr       → :8002  (livekit + notif)         [Phase 3]
-│   ├── bridge.parentaile.fr    → :8004  (bridge-service)          [Phase 4]
+│   ├── account.parentaile.fr   → :8001  (account-service — socle central) ✅
+│   ├── group.parentaile.fr     → :8001  (account-service — /groupes) ✅
 │   └── livekit.parentaile.fr   → :7880  (livekit) ✅
 │
 ├── Services Python/FastAPI
 │   ├── avatar-service    :8000  ✅ (Phase 1)
-│   ├── account-service   :8001  (Phase 2 — socle central, Postgres)
-│   │   ├── accounts (+ users fusionné)
-│   │   ├── ban_reports
-│   │   ├── participation_history
-│   │   ├── groupes (+ inscriptions, sessions)
-│   │   └── points/badges (extensions internes)
-│   ├── livekit-service   :8002  (Phase 3A)
-│   ├── notif-service     :8003  (Phase 3B — parentNotifications + cron)
-│   └── bridge-service    :8004  (Phase 4 — tokens/messages/notifications MedCompanion)
+│   ├── account-service   :8001  ✅ (Phase 2/3/4 — service central)
+│   │   ├── accounts (+ users fusionné)          [Phase 2]
+│   │   ├── ban_reports, children                 [Phase 2]
+│   │   ├── groupes, group_messages, evaluations  [Phase 3C]
+│   │   ├── parent_notifications, reminders       [Phase 3B]
+│   │   ├── bridge_tokens                         [Phase 4A]
+│   │   ├── bridge_notifications                  [Phase 4B]
+│   │   └── bridge_messages                       [Phase 4C]
+│   │
+│   └── Routers FastAPI :
+│       ├── accounts.py        (CRUD comptes)
+│       ├── groupes.py         (CRUD groupes + session vocale)
+│       ├── notif_router.py    (notifications parent + cron)
+│       ├── livekit_router.py  (webhook LiveKit)
+│       └── bridge_router.py   (tokens + messages + notifs médecin) [Phase 4]
 │
-├── PostgreSQL            :5432  (Phase 2)
+├── PostgreSQL            :5432  (DB: account_db, user: account_service)
 │
 └── Cron (systemd timers)
-    └── vocal-reminders          (Phase 3B, remplace Cloud Scheduler Firebase)
+    └── vocal-reminders.timer   (toutes les 2 min, rappels vocaux)
 ```
 
 ---
@@ -688,7 +850,7 @@ VPS Hostinger (145.223.117.145)
 - Le UID Firebase reste l'identifiant universel (jamais remplacé)
 - PostgreSQL accessible uniquement en local (jamais exposé publiquement)
 - Backups PostgreSQL quotidiens + rotation 30 jours
-- Bridge Service : clé API partagée entre MedCompanion et Parent'aile pour le flux commun
+- Bridge (routes `/bridge/*`) : même clé API account-service, partagée entre MedCompanion et Parent'aile
 
 ---
 
@@ -702,8 +864,12 @@ VPS Hostinger (145.223.117.145)
 | 3C-B | **Groupes — Phase B** : `getLiveKitToken` → VPS, webhook LiveKit auto-close (remplace `cleanupCancelledGroup`), suppression Cloud Functions obsolètes | Parent'aile | Elevé | Faible | ✅ livré 2026-04-14 |
 | — | **Nettoyage code Firebase obsolète** (feature flag, branches `onSnapshot`, firebaseStorage, vps_groups/) | Parent'aile | — | Faible | ✅ livré 2026-04-15 (commit `00b6102`) |
 | — | **Mono-repo git VPS** (`/root/` + deploy key + sync script) | Infra | — | Moyen | ✅ livré 2026-04-14 |
-| 3B | Notifications VPS : `parentNotifications` + FCM + cron rappels vocaux (remplace `manageVocalTasks` + `handleVocalReminder`) | Parent'aile | Elevé | Moyen | 🔜 planifié 2026-04-16 |
-| 4 | Bridge Service (tokens + messages + notifications MedCompanion) | MedCompanion + Parent'aile | Elevé | Elevé | ⏳ à faire |
+| 3B | Notifications VPS : `parentNotifications` + FCM + cron rappels vocaux | Parent'aile | Elevé | Moyen | ✅ livré 2026-04-16 |
+| 4A | **Bridge — Tokens** : `bridge_tokens` + CRUD + sync + dual-write MedCompanion | MedCompanion + Parent'aile | Moyen | Moyen | 🔜 planifié 2026-04-17 |
+| 4B | **Bridge — Notifications médecin** : `bridge_notifications` + FCM push + dual-write | MedCompanion + Parent'aile | Moyen | Moyen | 🔜 planifié 2026-04-17 |
+| 4C | **Bridge — Messages** : `bridge_messages` + CRUD + reply + polling 30s MedCompanion | MedCompanion + Parent'aile | Elevé | Elevé | 🔜 planifié 2026-04-18 |
+| — | **Migration one-shot** Firestore → PostgreSQL (tokens + messages + notifs existants) | Script | — | Moyen | 🔜 avant merge |
+| — | **Merge** : couper Firebase dans MedCompanion, déployer Parent'aile main | Les deux | — | Faible | ⏳ dimanche, objectif 250 users |
 
 > **Changement de stratégie 2026-04-14 :** abandon du cut-over global en fenêtre de maintenance au profit de **bascules brique par brique en direct**, validées par les tests mobiles en conditions réelles. Plus rapide, plus sûr, adapté à une V1 bêta à petite échelle.
 
@@ -720,4 +886,4 @@ VPS Hostinger (145.223.117.145)
 5. **Dual-write = temporaire** — filet de sécurité de 7 jours maximum, jamais permanent. Une brique validée = code dual-write supprimé, Firebase coupé pour cette collection.
 6. **Variable de bascule** — chaque service expose `STORAGE_BACKEND=vps|firebase` pour rollback d'urgence en 5 minutes sans redéploiement
 7. **Tuple return pattern** — `(success, result, error)` pour cohérence avec MedCompanion (C#)
-8. **Ne jamais bloquer les deux apps** — chaque étape déployable sans coordination simultanée, sauf Phase 4 (Bridge)
+8. **Ne jamais bloquer les deux apps** — dual-write MedCompanion (VPS + Firebase) pendant la transition Phase 4, coupure Firebase au merge
