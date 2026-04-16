@@ -240,7 +240,7 @@ async def cron_vocal_reminders():
 
     async with pool().acquire() as conn:
         groups = await conn.fetch(
-            """SELECT id, titre, date_vocal, status, participants
+            """SELECT id, titre, date_vocal, status
                FROM groupes
                WHERE status = 'scheduled'
                  AND date_vocal BETWEEN $1 AND $2""",
@@ -255,13 +255,12 @@ async def cron_vocal_reminders():
             if date_vocal.tzinfo is None:
                 date_vocal = date_vocal.replace(tzinfo=timezone.utc)
 
-            participants_raw = g["participants"]
-            if isinstance(participants_raw, str):
-                try:
-                    participants_raw = json.loads(participants_raw)
-                except Exception:
-                    participants_raw = []
-            participants = participants_raw or []
+            # Lire les participants depuis la table group_participants (pas la colonne JSONB)
+            participant_rows = await conn.fetch(
+                "SELECT user_uid FROM group_participants WHERE groupe_id = $1 AND banni = FALSE",
+                groupe_id,
+            )
+            participants = [{"uid": r["user_uid"]} for r in participant_rows]
 
             minutes_before = (date_vocal - now).total_seconds() / 60
 
@@ -291,7 +290,7 @@ async def cron_vocal_reminders():
                     )
                     # Notifier les inscrits de l'annulation
                     for p in participants:
-                        p_uid = p.get("user_uid") or p.get("uid")
+                        p_uid = p.get("uid")
                         if not p_uid:
                             continue
                         cancel_id = f"cancel_{groupe_id}_{p_uid}"
@@ -321,7 +320,7 @@ async def cron_vocal_reminders():
                 }
 
                 for p in participants:
-                    p_uid = p.get("user_uid") or p.get("uid")
+                    p_uid = p.get("uid")
                     if not p_uid:
                         continue
                     notif_id = f"reminder_{rtype}_{groupe_id}_{p_uid}"
