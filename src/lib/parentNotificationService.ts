@@ -1,31 +1,33 @@
-import { db } from './firebase';
-import {
-  collection,
-  addDoc,
-  query,
-  where,
-  orderBy,
-  onSnapshot,
-  updateDoc,
-  deleteDoc,
-  doc,
-  setDoc,
-  serverTimestamp,
-  writeBatch,
-  getDocs,
-} from 'firebase/firestore';
+/**
+ * Service de notifications internes Parent'aile.
+ * Backend : VPS account-service (PostgreSQL).
+ */
+
+const VPS_URL = import.meta.env.VITE_GROUP_API_URL || import.meta.env.VITE_ACCOUNT_API_URL;
+const VPS_KEY = import.meta.env.VITE_ACCOUNT_API_KEY;
+
+async function notifFetch(path: string, init: RequestInit = {}): Promise<Response> {
+  return fetch(`${VPS_URL}${path}`, {
+    ...init,
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Api-Key': VPS_KEY,
+      ...(init.headers || {}),
+    },
+  });
+}
 
 // ========== TYPES ==========
 
 export type ParentNotifType =
-  | 'group_join'        // Un parent a rejoint votre groupe
-  | 'badge_earned'      // Vous avez obtenu un nouveau badge
-  | 'evaluation_received' // Un participant a évalué votre groupe
-  | 'session_ended'     // La session vocale est terminée
-  | 'group_created'     // Votre groupe a été créé
-  | 'group_cancelled'   // Votre groupe a été annulé
-  | 'group_banned'      // Vous avez été banni d'un groupe
-  | 'vocal_reminder';   // Rappel avant le début d'une session vocale
+  | 'group_join'
+  | 'badge_earned'
+  | 'evaluation_received'
+  | 'session_ended'
+  | 'group_created'
+  | 'group_cancelled'
+  | 'group_banned'
+  | 'vocal_reminder';
 
 export interface ParentNotification {
   id: string;
@@ -35,7 +37,6 @@ export interface ParentNotification {
   body: string;
   read: boolean;
   createdAt: Date;
-  // Contexte pour la navigation
   groupeId?: string;
   groupeTitre?: string;
 }
@@ -53,6 +54,22 @@ export const NOTIF_CONFIG: Record<ParentNotifType, { icon: string; color: string
   vocal_reminder:      { icon: '🔔', color: 'text-blue-600',    bg: 'bg-blue-50' },
 };
 
+// ========== HELPERS ==========
+
+function mapNotif(raw: any): ParentNotification {
+  return {
+    id: raw.id,
+    type: raw.type as ParentNotifType,
+    recipientUid: raw.recipient_uid,
+    title: raw.title,
+    body: raw.body,
+    read: raw.read,
+    createdAt: new Date(raw.created_at),
+    groupeId: raw.groupe_id || undefined,
+    groupeTitre: raw.groupe_titre || undefined,
+  };
+}
+
 // ========== ÉCRITURE ==========
 
 export async function sendParentNotification(
@@ -64,96 +81,69 @@ export async function sendParentNotification(
   notifId?: string
 ): Promise<void> {
   try {
-    const data = {
-      type,
-      recipientUid,
-      title,
-      body,
-      read: false,
-      createdAt: serverTimestamp(),
-      ...(context?.groupeId ? { groupeId: context.groupeId } : {}),
-      ...(context?.groupeTitre ? { groupeTitre: context.groupeTitre } : {}),
-    };
-
-    if (notifId) {
-      await setDoc(doc(db, 'parentNotifications', notifId), data);
-    } else {
-      await addDoc(collection(db, 'parentNotifications'), data);
-    }
+    await notifFetch('/notifications', {
+      method: 'POST',
+      body: JSON.stringify({
+        type,
+        recipient_uid: recipientUid,
+        title,
+        body,
+        groupe_id: context?.groupeId || null,
+        groupe_titre: context?.groupeTitre || null,
+        notif_id: notifId || null,
+        send_push: false,
+      }),
+    });
   } catch (err) {
     console.error('Erreur envoi notification parent:', err);
   }
 }
 
-// ========== PURGE ==========
-
-const MAX_NOTIFS = 10;
-
-async function purgeOldParentNotifs(docs: { id: string }[]): Promise<void> {
-  try {
-    if (docs.length <= MAX_NOTIFS) return;
-    // Les docs sont triés par createdAt desc → les plus anciens sont en fin de tableau
-    const toDelete = docs.slice(MAX_NOTIFS);
-    await Promise.all(
-      toDelete.map(d => deleteDoc(doc(db, 'parentNotifications', d.id)))
-    );
-  } catch (err) {
-    // On ignore silencieusement car c'est une opération de maintenance non-critique
-    console.warn('[parentNotificationService] Échec de la purge automatique (permissions probablement restreintes)');
-  }
-}
-
-// ========== LECTURE ==========
+// ========== LECTURE (polling) ==========
 
 export function onParentNotifications(
   uid: string,
   callback: (notifications: ParentNotification[]) => void
 ): () => void {
-  const q = query(
-    collection(db, 'parentNotifications'),
-    where('recipientUid', '==', uid),
-    orderBy('createdAt', 'desc')
-  );
-
-  return onSnapshot(q, (snapshot) => {
-    const notifs: ParentNotification[] = snapshot.docs.map((d) => ({
-      id: d.id,
-      ...d.data(),
-      createdAt: d.data().createdAt?.toDate?.() || new Date(),
-    })) as ParentNotification[];
-
-    // Purge silencieuse : garde les 10 plus récentes, supprime les anciennes
-    if (snapshot.docs.length > MAX_NOTIFS) {
-      purgeOldParentNotifs(snapshot.docs.map(d => ({ id: d.id })));
+  const poll = async () => {
+    try {
+      const res = await notifFetch(`/notifications/${encodeURIComponent(uid)}`);
+      if (!res.ok) { callback([]); return; }
+      const items = await res.json();
+      callback(items.map(mapNotif));
+    } catch {
+      callback([]);
     }
-
-    callback(notifs.slice(0, MAX_NOTIFS));
-  }, (err) => {
-    console.error('Erreur écoute notifications parent:', err);
-    callback([]);
-  });
+  };
+  poll();
+  const interval = setInterval(poll, 15000);
+  return () => clearInterval(interval);
 }
 
 export function onUnreadParentNotifCount(
   uid: string,
   callback: (count: number) => void
 ): () => void {
-  const q = query(
-    collection(db, 'parentNotifications'),
-    where('recipientUid', '==', uid),
-    where('read', '==', false)
-  );
-
-  return onSnapshot(q, (snapshot) => {
-    callback(snapshot.docs.length);
-  }, () => {
-    callback(0);
-  });
+  const poll = async () => {
+    try {
+      const res = await notifFetch(`/notifications/${encodeURIComponent(uid)}/unread-count`);
+      if (!res.ok) { callback(0); return; }
+      const data = await res.json();
+      callback(data.count || 0);
+    } catch {
+      callback(0);
+    }
+  };
+  poll();
+  const interval = setInterval(poll, 15000);
+  return () => clearInterval(interval);
 }
+
+// ========== ACTIONS ==========
 
 export async function markParentNotifAsRead(notifId: string): Promise<void> {
   try {
-    await updateDoc(doc(db, 'parentNotifications', notifId), { read: true });
+    await notifFetch(`/notifications/${encodeURIComponent(notifId)}/read`, { method: 'PUT' });
   } catch (err) {
     console.error('Erreur marquage notification:', err);
   }
@@ -161,7 +151,7 @@ export async function markParentNotifAsRead(notifId: string): Promise<void> {
 
 export async function deleteParentNotification(notifId: string): Promise<void> {
   try {
-    await deleteDoc(doc(db, 'parentNotifications', notifId));
+    await notifFetch(`/notifications/${encodeURIComponent(notifId)}`, { method: 'DELETE' });
   } catch (err) {
     console.error('Erreur suppression notification:', err);
   }
@@ -169,16 +159,7 @@ export async function deleteParentNotification(notifId: string): Promise<void> {
 
 export async function deleteAllParentNotifs(uid: string): Promise<void> {
   try {
-    const q = query(
-      collection(db, 'parentNotifications'),
-      where('recipientUid', '==', uid)
-    );
-    const snap = await getDocs(q);
-    if (snap.empty) return;
-
-    const batch = writeBatch(db);
-    snap.docs.forEach((d) => batch.delete(d.ref));
-    await batch.commit();
+    await notifFetch(`/notifications/${encodeURIComponent(uid)}/all`, { method: 'DELETE' });
   } catch (err) {
     console.error('Erreur suppression toutes notifs:', err);
   }
@@ -186,17 +167,7 @@ export async function deleteAllParentNotifs(uid: string): Promise<void> {
 
 export async function markAllParentNotifsAsRead(uid: string): Promise<void> {
   try {
-    const q = query(
-      collection(db, 'parentNotifications'),
-      where('recipientUid', '==', uid),
-      where('read', '==', false)
-    );
-    const snap = await getDocs(q);
-    if (snap.empty) return;
-
-    const batch = writeBatch(db);
-    snap.docs.forEach((d) => batch.update(d.ref, { read: true }));
-    await batch.commit();
+    await notifFetch(`/notifications/${encodeURIComponent(uid)}/read-all`, { method: 'PUT' });
   } catch (err) {
     console.error('Erreur marquage toutes notifs:', err);
   }
