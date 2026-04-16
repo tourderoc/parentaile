@@ -111,17 +111,22 @@ export function onGroupeParole(
   groupeId: string,
   callback: (groupe: GroupeParole | null) => void
 ): () => void {
+  let interval: ReturnType<typeof setInterval> | null = null;
   const poll = async () => {
     try {
       const group = await groupStorage.getGroup(groupeId);
       callback(group);
+      if (group === null && interval) {
+        clearInterval(interval);
+        interval = null;
+      }
     } catch (err) {
       console.error('Erreur Polling Groupe Unique:', err);
     }
   };
   poll();
-  const interval = setInterval(poll, 5000);
-  return () => clearInterval(interval);
+  interval = setInterval(poll, 5000);
+  return () => { if (interval) clearInterval(interval); };
 }
 
 /**
