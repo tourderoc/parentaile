@@ -28,14 +28,27 @@ export const MesMessagesPage = () => {
   const unreadCount = parentNotifs.filter(n => !n.read).length;
 
   const handleNotifClick = (notif: ParentNotification) => {
-    if (!notif.read) markParentNotifAsRead(notif.id);
+    if (!notif.read) {
+      setParentNotifs(prev => prev.map(n => n.id === notif.id ? { ...n, read: true } : n));
+      markParentNotifAsRead(notif.id);
+    }
     if (notif.groupeId) {
       navigate(`/espace/groupes/${notif.groupeId}`);
     }
   };
 
   const handleMarkAllRead = () => {
-    if (user) markAllParentNotifsAsRead(user.uid);
+    if (user) {
+      setParentNotifs(prev => prev.map(n => ({ ...n, read: true })));
+      markAllParentNotifsAsRead(user.uid);
+    }
+  };
+
+  const handleDeleteAll = () => {
+    if (user) {
+      setParentNotifs([]);
+      deleteAllParentNotifs(user.uid);
+    }
   };
 
   const formatDate = (date: Date) => {
@@ -78,7 +91,7 @@ export const MesMessagesPage = () => {
           <div className="flex items-center gap-2">
             {parentNotifs.length > 0 && (
               <button
-                onClick={() => { if (user) deleteAllParentNotifs(user.uid); }}
+                onClick={handleDeleteAll}
                 className="flex items-center gap-1 px-3 py-1.5 bg-red-50 rounded-xl active:scale-95 transition-transform"
               >
                 <Trash2 size={12} className="text-red-400" />
@@ -144,7 +157,7 @@ export const MesMessagesPage = () => {
                     >
                       {/* Delete button */}
                       <button
-                        onClick={(e) => { e.stopPropagation(); deleteParentNotification(notif.id); }}
+                        onClick={(e) => { e.stopPropagation(); setParentNotifs(prev => prev.filter(n => n.id !== notif.id)); deleteParentNotification(notif.id); }}
                         className="absolute top-2 right-2 w-7 h-7 rounded-full bg-gray-100 hover:bg-red-50 flex items-center justify-center text-gray-300 hover:text-red-400 transition-colors"
                       >
                         <X size={14} />

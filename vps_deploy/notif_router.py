@@ -336,6 +336,35 @@ async def cron_vocal_reminders():
                 )
                 results.append({"groupe": groupe_id, "reminder": rtype, "participants": len(participants)})
 
+        # ── Étape 2 : annuler les groupes scheduled dont le vocal est dépassé ──
+        # Si date_vocal + 10 min est passée et le groupe est toujours 'scheduled'
+        # (jamais passé en 'in_progress'), il n'aura pas lieu → annuler.
+        stale = await conn.fetch(
+            """SELECT id, titre FROM groupes
+               WHERE status = 'scheduled'
+                 AND date_vocal < $1""",
+            now - timedelta(minutes=10),
+        )
+        for g in stale:
+            await conn.execute(
+                "UPDATE groupes SET status = 'cancelled', cancel_reason = 'no_show' WHERE id = $1",
+                g["id"],
+            )
+            # Notifier les inscrits
+            stale_participants = await conn.fetch(
+                "SELECT user_uid FROM group_participants WHERE groupe_id = $1",
+                g["id"],
+            )
+            for p in stale_participants:
+                nid = f"cancel_noshow_{g['id']}_{p['user_uid']}"
+                await _create_and_push(
+                    conn, nid, "group_cancelled", p["user_uid"],
+                    "Groupe annulé",
+                    f'Le groupe "{g["titre"]}" n\'a pas eu lieu (personne n\'a rejoint la salle).',
+                    g["id"], g["titre"],
+                )
+            results.append({"groupe": g["id"], "action": "cancelled_no_show"})
+
     return {"processed": len(results), "details": results}
 
 
