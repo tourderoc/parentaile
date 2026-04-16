@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
-import { auth } from './firebase';
+import { doc, getDoc } from 'firebase/firestore';
+import { auth, db } from './firebase';
 import { accountStorage } from './accountStorage';
 import type { BadgeLevel } from '../types/groupeParole';
 import { getBadgeForPoints } from '../types/groupeParole';
@@ -98,13 +99,38 @@ export const UserProvider = ({ children: reactChildren }: { children: React.Reac
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // ---- Core fetch : reads account from accountStorage ----
+  // Si le compte VPS n'existe pas encore (inscription legacy ou Firebase-only),
+  // on le crée automatiquement avec les infos Firebase Auth.
   const fetchAccount = useCallback(async (uid: string) => {
     const now = Date.now();
     if (now - lastFetchRef.current < MIN_FETCH_GAP) return; // debounce
     lastFetchRef.current = now;
 
     try {
-      const data = await accountStorage.getAccount(uid);
+      let data = await accountStorage.getAccount(uid);
+
+      if (!data && auth.currentUser) {
+        const user = auth.currentUser;
+        let pseudo = user.displayName || '';
+        if (!pseudo) {
+          try {
+            const snap = await getDoc(doc(db, 'users', user.uid));
+            if (snap.exists()) pseudo = snap.data().pseudo || '';
+          } catch { /* Firestore indisponible, on continue */ }
+        }
+        if (!pseudo) pseudo = user.email?.split('@')[0] || 'Parent';
+        try {
+          data = await accountStorage.createAccount({
+            uid: user.uid,
+            email: user.email,
+            pseudo,
+          });
+          console.info('[UserContext] Compte VPS auto-créé pour', uid);
+        } catch (createErr) {
+          console.error('[UserContext] Auto-création compte VPS échouée:', createErr);
+        }
+      }
+
       if (data) {
         setPseudo(data.pseudo || '');
         setAvatarConfig(data.avatar || null);

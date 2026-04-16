@@ -11,6 +11,7 @@ import { createUserWithEmailAndPassword, GoogleAuthProvider, signInWithPopup } f
 import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { Eye, EyeOff, Loader2, ArrowRight } from "lucide-react";
 import { validatePseudo } from "../../lib/pseudoFilter";
+import { accountStorage } from "../../lib/accountStorage";
 
 const usernameSchema = z.object({
   username: z.string().min(3, "Le pseudo doit contenir au moins 3 caractères"),
@@ -72,6 +73,12 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({ onClose }) => {
         date_inscription: serverTimestamp()
       });
 
+      await accountStorage.createAccount({
+        uid: userCredential.user.uid,
+        email: userCredential.user.email,
+        pseudo: validatedUsername,
+      });
+
       onClose();
       navigate("/dashboard");
     } catch (error: any) {
@@ -114,6 +121,12 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({ onClose }) => {
         email: values.email,
         pseudo: validatedUsername,
         date_inscription: serverTimestamp()
+      });
+
+      await accountStorage.createAccount({
+        uid: userCredential.user.uid,
+        email: values.email,
+        pseudo: validatedUsername,
       });
 
       onClose();
