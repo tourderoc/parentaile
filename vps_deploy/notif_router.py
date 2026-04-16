@@ -365,6 +365,21 @@ async def cron_vocal_reminders():
                 )
             results.append({"groupe": g["id"], "action": "cancelled_no_show"})
 
+        # ── Étape 3 : cleanup groupes annulés sans interaction ──
+        # Si un groupe cancelled n'a aucun message d'un autre parent que le créateur,
+        # le supprimer complètement (pas d'intérêt à le garder).
+        cancelled = await conn.fetch(
+            "SELECT id, createur_uid FROM groupes WHERE status = 'cancelled'",
+        )
+        for c in cancelled:
+            other_msgs = await conn.fetchval(
+                "SELECT COUNT(*) FROM group_messages WHERE groupe_id = $1 AND auteur_uid != $2",
+                c["id"], c["createur_uid"],
+            )
+            if other_msgs == 0:
+                await conn.execute("DELETE FROM groupes WHERE id = $1", c["id"])
+                results.append({"groupe": c["id"], "action": "deleted_no_interaction"})
+
     return {"processed": len(results), "details": results}
 
 
