@@ -527,14 +527,15 @@ export const EspaceSettings = () => {
               </button>
             </div>
 
-            {/* Preview - always visible */}
+            {/* Preview du haut — toujours l'avatar ACTUEL (enregistré) */}
             <div className="flex flex-col items-center">
-              <UserAvatar config={avatarConfig} size={100} className="shadow-premium" />
+              <UserAvatar config={contextAvatar ?? avatarConfig} size={100} className="shadow-premium" />
+              <p className="mt-1.5 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Avatar actuel</p>
               {avatarSuccess && (
                 <motion.p
                   initial={{ opacity: 0, y: 5 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="mt-2 text-xs font-bold text-green-600 flex items-center gap-1"
+                  className="mt-1 text-xs font-bold text-green-600 flex items-center gap-1"
                 >
                   <Check size={14} />
                   {avatarSuccess}
@@ -693,6 +694,24 @@ export const EspaceSettings = () => {
                     )}
                   </motion.div>
                 </AnimatePresence>
+
+                {/* Aperçu du nouvel avatar dessiné — visible si différent de l'actuel */}
+                {(avatarConfig.seed !== contextAvatar?.seed ||
+                  avatarConfig.dicebearStyle !== contextAvatar?.dicebearStyle ||
+                  avatarConfig.bgColor !== contextAvatar?.bgColor) && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="flex flex-col items-center mb-3"
+                  >
+                    <div className="relative">
+                      <div className="p-1 rounded-[2rem] border-4 border-orange-200 shadow-lg">
+                        <UserAvatar config={avatarConfig} size={120} className="shadow-premium" />
+                      </div>
+                    </div>
+                    <p className="mt-2 text-[11px] text-orange-600 font-bold">Aperçu avant enregistrement</p>
+                  </motion.div>
+                )}
 
                 {/* Navigation + Save (Pinned) */}
                 <div className="flex gap-3 mt-auto shrink-0 pb-4">

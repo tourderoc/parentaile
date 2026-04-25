@@ -2,14 +2,14 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { auth } from '../../../lib/firebase';
-import { Bell, Users, ChevronRight, LayoutGrid, Loader2, Heart, X, Star } from 'lucide-react';
+import { Bell, Users, ChevronRight, LayoutGrid, Loader2, Heart, X, Star, Check } from 'lucide-react';
 import { subscribeToNotifications } from '../../../lib/doctorNotifications';
 import { motion, AnimatePresence } from 'framer-motion';
 import { onPendingEvaluations, dismissEvaluation, isParticipantBanned } from '../../../lib/groupeParoleService';
 import { useUpcomingGroup } from '../../../lib/upcomingGroupContext';
 import { useUser } from '../../../lib/userContext';
 import { AuthWall } from '../../../components/ui/AuthWall';
-import type { GroupeParole, EvaluationPendante } from '../../../types/groupeParole';
+import type { GroupeParole, EvaluationPendante, BadgeLevel } from '../../../types/groupeParole';
 import { getNextBadge, BADGE_THRESHOLDS, THEME_COLORS, THEME_LABELS } from '../../../types/groupeParole';
 
 const SquareCard = ({ icon: Icon, label, description, count, bgImage, onClick, colorClasses, isBadge }: any) => (
@@ -303,7 +303,94 @@ export const SlideMonEspace = ({ unreadParentCount = 0 }: { unreadParentCount?: 
                    "Un membre pilier de la communauté Parent'aile."}
                 </p>
 
-                <div className="mt-8 bg-gray-50 rounded-3xl p-6">
+                {/* ── Ligne de progression des badges ── */}
+                {(() => {
+                  const levels = [
+                    { key: 'plume' as BadgeLevel, label: 'Plume', pts: 50, icon: '/assets/badges/badge_plume.png', gradient: 'from-yellow-300 to-orange-400' },
+                    { key: 'envol' as BadgeLevel, label: 'Envol', pts: 150, icon: '/assets/badges/badge_envol.png', gradient: 'from-purple-400 to-indigo-600' },
+                    { key: 'nid'   as BadgeLevel, label: 'Nid',   pts: 300, icon: '/assets/badges/badge_nid.png', gradient: 'from-amber-400 to-orange-600' },
+                  ];
+                  const pts = progression.points;
+                  const badgeOrder = ['none', 'plume', 'envol', 'nid'];
+                  const currentIdx = badgeOrder.indexOf(progression.badge);
+
+                  return (
+                    <div className="mt-8 mb-2 px-2">
+                      {/* Timeline row */}
+                      <div className="relative flex items-center justify-between">
+                        {/* Background track line */}
+                        <div className="absolute top-1/2 left-[16%] right-[16%] h-[3px] bg-gray-200 rounded-full -translate-y-1/2 z-0" />
+
+                        {levels.map((lvl, i) => {
+                          const reached = badgeOrder.indexOf(lvl.key) <= currentIdx;
+                          // Segment fill between this badge and the next
+                          const segFill = (() => {
+                            if (i >= levels.length - 1) return null; // no segment after last
+                            const segStart = lvl.pts;
+                            const segEnd = levels[i + 1].pts;
+                            if (pts >= segEnd) return 100;
+                            if (pts <= segStart) return 0;
+                            return ((pts - segStart) / (segEnd - segStart)) * 100;
+                          })();
+
+                          return (
+                            <div key={lvl.key} className="relative z-10 flex flex-col items-center" style={{ width: '33%' }}>
+                              {/* Filled segment going to the next node */}
+                              {segFill !== null && (
+                                <div
+                                  className="absolute top-1/2 -translate-y-1/2 h-[3px] rounded-full z-0"
+                                  style={{
+                                    left: '60%',
+                                    width: '120%',
+                                    background: segFill > 0
+                                      ? `linear-gradient(90deg, ${lvl.key === 'plume' ? '#F59E0B' : lvl.key === 'envol' ? '#8B5CF6' : '#F59E0B'} ${segFill}%, #E5E7EB ${segFill}%)`
+                                      : '#E5E7EB',
+                                  }}
+                                />
+                              )}
+
+                              {/* Badge node */}
+                              <motion.div
+                                initial={{ scale: 0.5, opacity: 0 }}
+                                animate={{ scale: 1, opacity: 1 }}
+                                transition={{ delay: 0.15 + i * 0.12, type: 'spring', stiffness: 200 }}
+                                className={`relative w-14 h-14 rounded-2xl overflow-hidden border-[3px] shadow-lg ${
+                                  reached
+                                    ? progression.badge === lvl.key
+                                      ? 'border-orange-400 shadow-orange-200/60 ring-4 ring-orange-100'
+                                      : 'border-green-300 shadow-green-100/40'
+                                    : 'border-gray-200 grayscale opacity-50'
+                                }`}
+                              >
+                                <img src={lvl.icon} alt={lvl.label} className="w-full h-full object-cover" />
+                                {/* Checkmark for completed past badges */}
+                                {reached && progression.badge !== lvl.key && (
+                                  <div className="absolute inset-0 bg-green-500/30 flex items-center justify-center">
+                                    <Check size={20} className="text-white drop-shadow-md" />
+                                  </div>
+                                )}
+                              </motion.div>
+
+                              {/* Label + pts */}
+                              <p className={`mt-2 text-[10px] font-black uppercase tracking-wider ${
+                                reached ? 'text-gray-800' : 'text-gray-400'
+                              }`}>
+                                {lvl.label}
+                              </p>
+                              <p className={`text-[9px] font-bold ${
+                                reached ? 'text-orange-500' : 'text-gray-300'
+                              }`}>
+                                {lvl.pts} pts
+                              </p>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                <div className="mt-6 bg-gray-50 rounded-3xl p-6">
                    <div className="flex items-baseline justify-center gap-1">
                       <span className="text-4xl font-black text-orange-500">{progression.points}</span>
                       <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">points cumulés</span>
