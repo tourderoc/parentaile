@@ -12,7 +12,7 @@ interface AvatarAISelectorProps {
 }
 
 export const AvatarAISelector = ({ onPreviewGenerated, onSaved, onReset }: AvatarAISelectorProps) => {
-  const { currentUser, avatarConfig } = useUser();
+  const { currentUser, avatarConfig, setLocalData } = useUser();
   const [isUploading, setIsUploading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
@@ -58,6 +58,7 @@ export const AvatarAISelector = ({ onPreviewGenerated, onSaved, onReset }: Avata
     setError(null);
     try {
       await AvatarAIService.saveAvatar(currentUser.uid, pendingUrl);
+      setLocalData({ avatarConfig: { aiUrl: pendingUrl, avatarType: 'ai' } });
       setIsSaved(true);
       setTimeout(() => {
         setPendingUrl(null);
@@ -82,8 +83,8 @@ export const AvatarAISelector = ({ onPreviewGenerated, onSaved, onReset }: Avata
     setIsDeleting(true);
     setError(null);
     try {
-      // deletePhoto efface le fichier VPS (tolère 404) ET remet avatarType='static' dans Firestore
       await AvatarAIService.deletePhoto(currentUser.uid);
+      setLocalData({ avatarConfig: { avatarType: 'static', aiUrl: '' } });
       setPendingUrl(null);
       onSaved?.();
     } catch (err: any) {
