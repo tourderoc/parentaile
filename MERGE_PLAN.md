@@ -37,9 +37,54 @@ La version actuelle de MedCompanion (commit `f0beef4`) inclut le dual-write VPS.
 Rebuild l'exe et l'utiliser quelques jours avant le merge pour vérifier que les tokens,
 notifications et réponses arrivent bien sur le VPS.
 
+### 3. Test VPS-only en conditions réelles (dimanche 27 avril 2026)
+
+Test grandeur nature : couper Firebase temporairement, vérifier que tout fonctionne,
+puis revenir sur Firebase. Aucun risque de perte de données (Firestore conserve tout).
+
+**Pré-requis :** MedCompanion rebuild avec le dual-write (commit `f0beef4`).
+
+**Étape A — Migrer les données Firestore → PostgreSQL (5 min)**
+
+```bash
+ssh root@145.223.117.145
+cd /root/account-service
+export DATABASE_URL='postgresql://account_service:1e72630fed2a950b67c4a7eade300993dfa2adb9e07e7c54@127.0.0.1:5432/account_db'
+export FIREBASE_SA_PATH='/root/account-service/firebase-service-account.json'
+venv/bin/python3 migrate_firebase_to_vps.py
+```
+
+**Étape B — Couper Firebase (2 min)**
+
+```bash
+# Dans le .env de Parent'aile
+VITE_FIREBASE_BRIDGE=false
+npm run build && firebase deploy --only hosting
+```
+
+**Étape C — Tests (10 min)**
+
+- [ ] Créer un token dans MedCompanion → vérifier qu'il apparaît sur Parent'aile
+- [ ] Envoyer un message depuis Parent'aile → vérifier dans MedCompanion
+- [ ] Répondre depuis MedCompanion → vérifier la notification push côté parent
+- [ ] Notification rapide depuis MedCompanion → badge + push reçu
+- [ ] Dashboard Parent'aile : liste des messages, historique, badges notifs
+- [ ] Vérifier les logs VPS : `journalctl -u parentaile-account --since "10 min ago" | grep -i error`
+
+**Étape D — Revenir sur Firebase (2 min)**
+
+```bash
+# Remettre dans le .env
+VITE_FIREBASE_BRIDGE=true   # ou supprimer la ligne
+npm run build && firebase deploy --only hosting
+```
+
+**Résultat attendu :** si tout passe → le merge final sera une simple répétition de ce test,
+sans l'étape D. Si des problèmes sont détectés → on les corrige avant le vrai merge.
+
 ---
 
-## Jour du merge (dimanche) — Checklist
+## Jour du merge (dimanche, après 250 users) — Checklist
 
 ### Étape 1 — Migration des données (5 min)
 
