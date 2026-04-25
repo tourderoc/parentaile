@@ -11,7 +11,7 @@ import { Link } from 'react-router-dom';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { AlertCircle, QrCode, Home, ArrowRight, Loader2 } from 'lucide-react';
-import { validateToken } from '../../lib/tokenService';
+import { checkTokenStatus } from '../../lib/tokenService';
 
 interface TokenLoginProps {
   error?: string | null;
@@ -40,7 +40,7 @@ export const TokenLogin: React.FC<TokenLoginProps> = ({
     setIsValidating(true);
     setValidationError(null);
 
-    const result = await validateToken(token);
+    const result = await checkTokenStatus(token);
 
     if (result.valid) {
       onManualToken(token);

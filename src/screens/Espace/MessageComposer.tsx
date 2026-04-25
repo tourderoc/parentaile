@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { auth, db } from '../../lib/firebase';
-import { collection, getDocs, query, orderBy, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore'; // @FIREBASE_LEGACY
+import { accountStorage } from '../../lib/accountStorage';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Mic,
@@ -66,13 +67,10 @@ export const MessageComposer: React.FC = () => {
       }
 
       try {
-        const childrenRef = collection(db, 'accounts', user.uid, 'children');
-        const q = query(childrenRef, orderBy('addedAt', 'desc'));
-        const snapshot = await getDocs(q);
-
-        const childrenData: Child[] = snapshot.docs.map(doc => ({
-          tokenId: doc.id,
-          nickname: doc.data().nickname
+        const items = await accountStorage.listChildren(user.uid);
+        const childrenData: Child[] = items.map(c => ({
+          tokenId: c.token_id,
+          nickname: c.nickname || '',
         }));
 
         setChildren(childrenData);
@@ -280,16 +278,38 @@ export const MessageComposer: React.FC = () => {
       const user = auth.currentUser;
       if (!user) throw new Error('Non connecté');
 
-      const messagesRef = collection(db, 'messages');
-      await addDoc(messagesRef, {
-        tokenId: selectedChild.tokenId,
-        childNickname: selectedChild.nickname,
-        parentUid: user.uid,
-        parentEmail: user.email,
-        content: message,
-        status: 'sent',
-        createdAt: serverTimestamp()
+      const VPS_URL = import.meta.env.VITE_GROUP_API_URL || import.meta.env.VITE_ACCOUNT_API_URL;
+      const VPS_KEY = import.meta.env.VITE_ACCOUNT_API_KEY;
+
+      // VPS bridge
+      await fetch(`${VPS_URL}/bridge/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Api-Key': VPS_KEY },
+        body: JSON.stringify({
+          token_id: selectedChild.tokenId,
+          doctor_id: '',
+          parent_uid: user.uid,
+          parent_email: user.email,
+          child_nickname: selectedChild.nickname,
+          content: message,
+        }),
       });
+
+      // @FIREBASE_LEGACY — dual-write Firebase
+      if (import.meta.env.VITE_FIREBASE_BRIDGE !== 'false') {
+        try {
+          const messagesRef = collection(db, 'messages');
+          await addDoc(messagesRef, {
+            tokenId: selectedChild.tokenId,
+            childNickname: selectedChild.nickname,
+            parentUid: user.uid,
+            parentEmail: user.email,
+            content: message,
+            status: 'sent',
+            createdAt: serverTimestamp(),
+          });
+        } catch { /* Firebase indisponible, VPS fait foi */ }
+      }
 
       setIsSent(true);
       setTimeout(() => navigate('/espace/messages'), 2500);

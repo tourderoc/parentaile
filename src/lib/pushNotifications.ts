@@ -9,11 +9,15 @@
  */
 
 import { getMessaging, getToken, onMessage, isSupported } from 'firebase/messaging';
-import { doc, updateDoc } from 'firebase/firestore';
-import { db } from './firebase';
+import { doc, updateDoc } from 'firebase/firestore'; // @FIREBASE_LEGACY
+import { db } from './firebase'; // @FIREBASE_LEGACY
 import { getApps } from 'firebase/app';
 import { areNotificationsEnabled, playNotificationSound } from './userPreferences';
 import { accountStorage } from './accountStorage';
+
+const VPS_URL = import.meta.env.VITE_GROUP_API_URL || import.meta.env.VITE_ACCOUNT_API_URL;
+const VPS_KEY = import.meta.env.VITE_ACCOUNT_API_KEY;
+const USE_FIREBASE = import.meta.env.VITE_FIREBASE_BRIDGE !== 'false'; // @FIREBASE_LEGACY
 
 // Clé VAPID publique (Firebase Console > Cloud Messaging > Web Push certificates)
 const VAPID_KEY = 'BM_HWgoaVmHT8E44P9D4gHEf52594f6xUKO67r_HEnwmFusTwGP04BRy-fBxSw1YwLOTYicQOeXLOA1B5L94gLA';
@@ -159,11 +163,21 @@ export async function getFcmToken(): Promise<string | null> {
  */
 export async function registerFcmTokenForParent(tokenId: string, fcmToken: string): Promise<boolean> {
   try {
-    const tokenRef = doc(db, 'tokens', tokenId);
-    await updateDoc(tokenRef, {
-      fcmToken: fcmToken,
-      fcmTokenUpdatedAt: new Date()
+    // VPS bridge
+    await fetch(`${VPS_URL}/bridge/tokens/${encodeURIComponent(tokenId)}/fcm`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'X-Api-Key': VPS_KEY },
+      body: JSON.stringify({ fcm_token: fcmToken }),
     });
+
+    // @FIREBASE_LEGACY — aussi écrire sur Firestore
+    if (USE_FIREBASE) {
+      try {
+        const tokenRef = doc(db, 'tokens', tokenId);
+        await updateDoc(tokenRef, { fcmToken, fcmTokenUpdatedAt: new Date() });
+      } catch { /* ignore */ }
+    }
+
     console.log('[PushNotifications] Token FCM enregistré pour:', tokenId);
     return true;
   } catch (error) {

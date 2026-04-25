@@ -2,10 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { MessageSquare, User, Settings } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { auth, db } from '../../lib/firebase';
-import { collection, query, where, orderBy, getDocs, onSnapshot } from 'firebase/firestore';
+import { auth } from '../../lib/firebase';
 import { useSwiperMode } from '../../lib/swiperContext';
 import { onUnreadParentNotifCount } from '../../lib/parentNotificationService';
+import { useUser } from '../../lib/userContext';
+import { subscribeToNotifications } from '../../lib/doctorNotifications';
 
 export const BottomNav: React.FC = () => {
   const { isSwiperMode } = useSwiperMode();
@@ -14,48 +15,21 @@ export const BottomNav: React.FC = () => {
   const [unreadDoctorCount, setUnreadDoctorCount] = useState(0);
   const [unreadParentCount, setUnreadParentCount] = useState(0);
   const unreadCount = unreadDoctorCount + unreadParentCount;
+  const { currentUser, tokenIds } = useUser();
 
-  // Écouter les notifications médecin (via token)
+  // Notifications médecin — via doctorNotifications (VPS ou Firebase selon config)
   useEffect(() => {
     if (isSwiperMode) return;
-    const user = auth.currentUser;
-    if (!user) return;
+    if (!currentUser || tokenIds.length === 0) return;
 
-    let unsubscribes: (() => void)[] = [];
+    const unsubscribes = tokenIds.map(tokenId =>
+      subscribeToNotifications(tokenId, (notifs) => {
+        setUnreadDoctorCount(notifs.filter(n => !n.read).length);
+      })
+    );
 
-    const setupListeners = async () => {
-      try {
-        const childrenRef = collection(db, 'accounts', user.uid, 'children');
-        const childrenSnap = await getDocs(query(childrenRef, orderBy('addedAt', 'desc')));
-        const tokenIds = childrenSnap.docs.map(d => d.id);
-
-        if (tokenIds.length === 0) return;
-
-        const chunks: string[][] = [];
-        for (let i = 0; i < tokenIds.length; i += 10) {
-          chunks.push(tokenIds.slice(i, i + 10));
-        }
-
-        for (const chunk of chunks) {
-          const notifRef = collection(db, 'notifications');
-          const q = query(
-            notifRef,
-            where('tokenId', 'in', chunk),
-            where('read', '==', false)
-          );
-
-          const unsub = onSnapshot(q, (snapshot) => {
-            setUnreadDoctorCount(snapshot.docs.length);
-          }, () => {});
-
-          unsubscribes.push(unsub);
-        }
-      } catch {}
-    };
-
-    setupListeners();
     return () => unsubscribes.forEach(unsub => unsub());
-  }, [isSwiperMode]);
+  }, [isSwiperMode, currentUser, tokenIds]);
 
   // Écouter les notifications parentales (groupes, badges, etc.)
   useEffect(() => {

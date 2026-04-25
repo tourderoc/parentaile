@@ -2,9 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Home, MessageSquarePlus, LayoutGrid, Users, Settings } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { db } from '../../lib/firebase';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { useUser } from '../../lib/userContext';
+import { subscribeToNotifications } from '../../lib/doctorNotifications';
 
 interface BottomNavSwiperProps {
   activeIndex: number;
@@ -18,19 +17,15 @@ export const BottomNavSwiper: React.FC<BottomNavSwiperProps> = ({ activeIndex, o
   const { currentUser, tokenIds } = useUser();
   const navigate = useNavigate();
 
-  // Notifications médecin — tokenIds depuis UserContext, pas de lecture /accounts/children
+  // Notifications médecin — via doctorNotifications (VPS ou Firebase selon config)
   useEffect(() => {
     if (!currentUser || tokenIds.length === 0) return;
 
-    const unsubscribes: (() => void)[] = [];
-    const chunks: string[][] = [];
-    for (let i = 0; i < tokenIds.length; i += 10) chunks.push(tokenIds.slice(i, i + 10));
-
-    for (const chunk of chunks) {
-      const q = query(collection(db, 'notifications'), where('tokenId', 'in', chunk), where('read', '==', false));
-      const unsub = onSnapshot(q, (snapshot) => setUnreadDoctorCount(snapshot.docs.length), () => {});
-      unsubscribes.push(unsub);
-    }
+    const unsubscribes = tokenIds.map(tokenId =>
+      subscribeToNotifications(tokenId, (notifs) => {
+        setUnreadDoctorCount(notifs.filter(n => !n.read).length);
+      })
+    );
 
     return () => unsubscribes.forEach(unsub => unsub());
   }, [currentUser, tokenIds]);

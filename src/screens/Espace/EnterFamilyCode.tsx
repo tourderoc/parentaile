@@ -9,7 +9,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { auth } from '../../lib/firebase';
 import { accountStorage } from '../../lib/accountStorage';
-import { validateToken, markTokenAsUsed } from '../../lib/tokenService';
+import { checkTokenStatus, validateToken } from '../../lib/tokenService';
 import { validateNickname } from '../../lib/pseudoFilter';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
@@ -52,7 +52,7 @@ export const EnterFamilyCode: React.FC<EnterFamilyCodeProps> = ({ onBack }) => {
     setIsLoading(true);
 
     try {
-      const result = await validateToken(cleanToken);
+      const result = await checkTokenStatus(cleanToken);
 
       if (!result.valid) {
         setError(result.error || 'Ce code ne correspond pas. Vérifiez le document remis en consultation.');
@@ -60,7 +60,7 @@ export const EnterFamilyCode: React.FC<EnterFamilyCodeProps> = ({ onBack }) => {
         return;
       }
 
-      // Code valide → demander le prénom
+      // Code valide → demander le prénom (activation se fait à l'étape suivante)
       setStep('nickname');
 
     } catch (err) {
@@ -91,10 +91,16 @@ export const EnterFamilyCode: React.FC<EnterFamilyCodeProps> = ({ onBack }) => {
 
       const cleanToken = token.trim().toLowerCase();
 
-      // Ajouter l'enfant au compte via accountStorage (qui gère db ou vps selon config)
-      await accountStorage.addChild(user.uid, cleanToken, nickname.trim());
+      // Activer le token sur VPS avec uid et pseudo
+      const activation = await validateToken(cleanToken, user.uid, nickname.trim());
+      if (!activation.valid) {
+        setError(activation.error || 'Erreur lors de l\'activation du code.');
+        setIsLoading(false);
+        return;
+      }
 
-      // Token déjà marqué "used" dans validateToken (single-use)
+      // Ajouter l'enfant au compte via accountStorage
+      await accountStorage.addChild(user.uid, cleanToken, nickname.trim());
 
       // Rediriger vers le dashboard (qui affichera maintenant l'enfant)
       navigate('/espace/dashboard');

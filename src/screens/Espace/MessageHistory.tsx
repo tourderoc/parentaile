@@ -1,8 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { auth, db } from '../../lib/firebase';
-import { collection, query, where, orderBy, limit, deleteDoc, doc, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, orderBy, limit, deleteDoc, doc, onSnapshot } from 'firebase/firestore'; // @FIREBASE_LEGACY
 import { useUser } from '../../lib/userContext';
+
+const VPS_URL = import.meta.env.VITE_GROUP_API_URL || import.meta.env.VITE_ACCOUNT_API_URL;
+const VPS_KEY = import.meta.env.VITE_ACCOUNT_API_KEY;
+const USE_FIREBASE = import.meta.env.VITE_FIREBASE_BRIDGE !== 'false'; // @FIREBASE_LEGACY
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -89,7 +93,7 @@ export const MessageHistory = () => {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // Charger les messages — tokenIds depuis UserContext, limit(50) par chunk
+  // Charger les messages — VPS bridge ou Firebase listener
   useEffect(() => {
     if (userLoading) return;
     if (tokenIds.length === 0) { setIsLoading(false); return; }
@@ -97,64 +101,77 @@ export const MessageHistory = () => {
     const childrenMap = new Map<string, string>();
     contextChildren.forEach(c => childrenMap.set(c.tokenId, c.nickname || 'Enfant'));
 
-    let unsubscribes: (() => void)[] = [];
+    // @FIREBASE_LEGACY — utiliser Firebase listener pendant la transition
+    if (USE_FIREBASE) {
+      let unsubscribes: (() => void)[] = [];
+      const chunks: string[][] = [];
+      for (let i = 0; i < tokenIds.length; i += 10) chunks.push(tokenIds.slice(i, i + 10));
 
-    const setup = () => {
-      try {
-
-        // Firestore 'in' queries limited to 10
-        const chunks: string[][] = [];
-        for (let i = 0; i < tokenIds.length; i += 10) {
-          chunks.push(tokenIds.slice(i, i + 10));
-        }
-
-        for (const chunk of chunks) {
-          const q = query(
-            collection(db, 'messages'),
-            where('tokenId', 'in', chunk),
-            orderBy('createdAt', 'desc'),
-            limit(50)
-          );
-
-          const unsub = onSnapshot(q, (snapshot) => {
-            const msgs: Message[] = snapshot.docs.map(d => {
-              const data = d.data();
-              let status: Message['status'] = 'pending';
-              if (data.status === 'treated' || data.status === 'read') status = 'treated';
-              else if (data.replyContent || data.status === 'replied') status = 'replied';
-
-              return {
-                id: d.id,
-                content: data.content,
-                status,
-                createdAt: data.createdAt?.toDate?.() || new Date(),
-                childNickname: childrenMap.get(data.tokenId) || 'Enfant',
-                tokenId: data.tokenId,
-                replyContent: data.replyContent,
-                replyDate: data.replyDate?.toDate?.(),
-                replyAuthor: data.replyAuthor || 'Dr.',
-              };
-            });
-
-            // Merge all chunks — sort by date
-            setMessages(prev => {
-              const otherChunkMsgs = prev.filter(m => !chunk.includes(m.tokenId));
-              return [...otherChunkMsgs, ...msgs].sort(
-                (a, b) => b.createdAt.getTime() - a.createdAt.getTime()
-              );
-            });
-            setIsLoading(false);
-          }, () => setIsLoading(false));
-
-          unsubscribes.push(unsub);
-        }
-      } catch {
-        setIsLoading(false);
+      for (const chunk of chunks) {
+        const q = query(
+          collection(db, 'messages'),
+          where('tokenId', 'in', chunk),
+          orderBy('createdAt', 'desc'),
+          limit(50)
+        );
+        const unsub = onSnapshot(q, (snapshot) => {
+          const msgs: Message[] = snapshot.docs.map(d => {
+            const data = d.data();
+            let status: Message['status'] = 'pending';
+            if (data.status === 'treated' || data.status === 'read') status = 'treated';
+            else if (data.replyContent || data.status === 'replied') status = 'replied';
+            return {
+              id: d.id, content: data.content, status,
+              createdAt: data.createdAt?.toDate?.() || new Date(),
+              childNickname: childrenMap.get(data.tokenId) || 'Enfant',
+              tokenId: data.tokenId, replyContent: data.replyContent,
+              replyDate: data.replyDate?.toDate?.(), replyAuthor: data.replyAuthor || 'Dr.',
+            };
+          });
+          setMessages(prev => {
+            const other = prev.filter(m => !chunk.includes(m.tokenId));
+            return [...other, ...msgs].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+          });
+          setIsLoading(false);
+        }, () => setIsLoading(false));
+        unsubscribes.push(unsub);
       }
-    };
+      return () => unsubscribes.forEach(u => u());
+    }
 
-    setup();
-    return () => unsubscribes.forEach(u => u());
+    // VPS polling
+    const poll = async () => {
+      try {
+        const allMsgs: Message[] = [];
+        for (const tokenId of tokenIds) {
+          const res = await fetch(`${VPS_URL}/bridge/messages/token/${encodeURIComponent(tokenId)}?limit=50`, {
+            headers: { 'X-Api-Key': VPS_KEY },
+          });
+          if (!res.ok) continue;
+          const items = await res.json();
+          for (const data of items) {
+            let status: Message['status'] = 'pending';
+            if (data.status === 'archived' || data.status === 'read') status = 'treated';
+            else if (data.reply_content || data.status === 'replied') status = 'replied';
+            allMsgs.push({
+              id: data.id, content: data.content, status,
+              createdAt: new Date(data.created_at),
+              childNickname: childrenMap.get(data.token_id) || data.child_nickname || 'Enfant',
+              tokenId: data.token_id, replyContent: data.reply_content,
+              replyDate: data.replied_at ? new Date(data.replied_at) : undefined,
+              replyAuthor: 'Dr.',
+            });
+          }
+        }
+        setMessages(allMsgs.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()));
+      } catch (err) {
+        console.error('[MessageHistory] Erreur polling VPS:', err);
+      }
+      setIsLoading(false);
+    };
+    poll();
+    const interval = setInterval(poll, 15000);
+    return () => clearInterval(interval);
   }, [tokenIds, userLoading, contextChildren]);
 
   // Clear badge
@@ -175,7 +192,19 @@ export const MessageHistory = () => {
     if (!selectedMessage) return;
     setIsDeleting(true);
     try {
-      await deleteDoc(doc(db, 'messages', selectedMessage.id));
+      // VPS bridge
+      await fetch(`${VPS_URL}/bridge/messages/${encodeURIComponent(selectedMessage.id)}`, {
+        method: 'DELETE',
+        headers: { 'X-Api-Key': VPS_KEY },
+      });
+
+      // @FIREBASE_LEGACY — aussi supprimer sur Firestore
+      if (USE_FIREBASE) {
+        try {
+          await deleteDoc(doc(db, 'messages', selectedMessage.id));
+        } catch { /* ignore */ }
+      }
+
       setMessages(prev => prev.filter(m => m.id !== selectedMessage.id));
       setShowDeleteConfirm(false);
       setSelectedMessage(null);

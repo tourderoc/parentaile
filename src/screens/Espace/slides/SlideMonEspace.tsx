@@ -1,14 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
-import { auth, db } from '../../../lib/firebase';
-import {
-  collection,
-  query,
-  where,
-  onSnapshot,
-} from 'firebase/firestore';
+import { auth } from '../../../lib/firebase';
 import { Bell, Users, ChevronRight, LayoutGrid, Loader2, Heart, X, Star } from 'lucide-react';
+import { subscribeToNotifications } from '../../../lib/doctorNotifications';
 import { motion, AnimatePresence } from 'framer-motion';
 import { onPendingEvaluations, dismissEvaluation, isParticipantBanned } from '../../../lib/groupeParoleService';
 import { useUpcomingGroup } from '../../../lib/upcomingGroupContext';
@@ -80,22 +75,18 @@ export const SlideMonEspace = ({ unreadParentCount = 0 }: { unreadParentCount?: 
   const [isLoading, setIsLoading] = useState(true);
   const [showEvalsModal, setShowEvalsModal] = useState(false);
 
-  // Unread doctor notifications count (via token) — tokenIds from UserContext
+  // Unread doctor notifications — via doctorNotifications (VPS ou Firebase selon config)
   useEffect(() => {
     if (!currentUser || tokenIds.length === 0) {
       setUnreadDoctorCount(0);
       return;
     }
 
-    const unsubscribes: (() => void)[] = [];
-    const chunks: string[][] = [];
-    for (let i = 0; i < tokenIds.length; i += 10) chunks.push(tokenIds.slice(i, i + 10));
-
-    for (const chunk of chunks) {
-      const q = query(collection(db, 'notifications'), where('tokenId', 'in', chunk), where('read', '==', false));
-      const unsub = onSnapshot(q, (snapshot) => setUnreadDoctorCount(snapshot.docs.length), () => {});
-      unsubscribes.push(unsub);
-    }
+    const unsubscribes = tokenIds.map(tokenId =>
+      subscribeToNotifications(tokenId, (notifs) => {
+        setUnreadDoctorCount(notifs.filter(n => !n.read).length);
+      })
+    );
 
     return () => unsubscribes.forEach((u) => u());
   }, [currentUser, tokenIds]);

@@ -96,13 +96,7 @@ export const SlideContact = () => {
     setError(null);
 
     try {
-      const result = await validateToken(newToken.trim());
-
-      if (!result.valid) {
-        setError(result.error || 'Token invalide');
-        setIsValidating(false);
-        return;
-      }
+      if (!user) throw new Error('Non connecte');
 
       const existingChild = children.find(c => c.tokenId === newToken.trim());
       if (existingChild) {
@@ -111,7 +105,13 @@ export const SlideContact = () => {
         return;
       }
 
-      if (!user) throw new Error('Non connecte');
+      const result = await validateToken(newToken.trim(), user.uid, newNickname.trim());
+
+      if (!result.valid) {
+        setError(result.error || 'Token invalide');
+        setIsValidating(false);
+        return;
+      }
 
       await accountStorage.addChild(user.uid, newToken.trim(), newNickname.trim());
 
