@@ -154,14 +154,22 @@ Ces 3 collections (`tokens`, `messages`, `notifications`) forment un **pont bidi
   - Auto-création compte VPS au login si absent (fallback `userContext.tsx` lit pseudo depuis Firestore `users/{uid}`)
   - `RegisterForm.tsx` (legacy) crée maintenant le compte VPS en plus de Firestore
 
+- **Phase 4 — Bridge MedCompanion ↔ Parent'aile** ✅ *(2026-04-17 → 2026-04-25)*
+  - Tables PostgreSQL `bridge_tokens`, `bridge_notifications`, `bridge_messages` dans `account_db`
+  - `bridge_router.py` intégré dans account-service : endpoints CRUD tokens, notifications (+ FCM push), messages (+ auto-reply notification)
+  - Parent'aile (11 fichiers) : dual-write VPS + Firebase via flag `VITE_FIREBASE_BRIDGE`, code Firebase marqué `@FIREBASE_LEGACY`
+  - MedCompanion (6 fichiers) : `VpsBridgeService.cs` + dual-write dans `TokenService`, `PatientMessageService`, `MessagesControl`, `PilotageControl`
+  - Script migration one-shot `migrate_firebase_to_vps.py` : testé dry-run (220 tokens, 314 notifs, 169 messages, 4 users = 707 documents)
+  - Prêt pour coupure Firebase : `VITE_FIREBASE_BRIDGE=false` + suppression code `@FIREBASE_LEGACY`
+
 **Encore dans Firebase :**
 - **Firebase Auth** (à vie — règle)
 - **FCM** (à vie — règle, transport push uniquement)
 - Firestore `banReports` → conservé pour l'admin (usage résiduel, peu critique)
-- Collections MedCompanion ↔ Parent'aile : `tokens`, `messages`, `notifications` (médecin) → Phase 4 (Bridge)
+- Collections `tokens`, `messages`, `notifications` → dual-write en place, coupure au merge
 
 **Prochaine étape :**
-- **4 — Bridge MedCompanion ↔ Parent'aile** : tokens + notifications médecin + messages. Planifié 2026-04-17.
+- **Merge day** : exécuter `migrate_firebase_to_vps.py`, couper `VITE_FIREBASE_BRIDGE=false`, merger dev → main. Voir `MERGE_PLAN.md`.
 
 ---
 
