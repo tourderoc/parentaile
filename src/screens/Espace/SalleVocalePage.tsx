@@ -3533,7 +3533,6 @@ export const SalleVocalePage = () => {
   const { groupeId } = useParams<{ groupeId: string }>();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  // const isEvalDirect = searchParams.get('eval') === 'true'; // Handled via searchParams directly if needed
 
   // Group Metadata
   const [groupeTitre, setGroupeTitre] = useState('');
