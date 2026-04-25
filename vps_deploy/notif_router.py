@@ -380,6 +380,19 @@ async def cron_vocal_reminders():
                 await conn.execute("DELETE FROM groupes WHERE id = $1", c["id"])
                 results.append({"groupe": c["id"], "action": "deleted_no_interaction"})
 
+        # ── Étape 4 : purge groupes expirés (completed/cancelled > 7j après expiration) ──
+        # date_expiration = création + 7j. On supprime 7j après expiration (= 14j après création).
+        # Les FK ON DELETE CASCADE nettoient participants, messages, évaluations, exits, reminders.
+        expired = await conn.fetch(
+            """SELECT id FROM groupes
+               WHERE status IN ('completed', 'cancelled')
+                 AND date_expiration < $1""",
+            now - timedelta(days=7),
+        )
+        for e in expired:
+            await conn.execute("DELETE FROM groupes WHERE id = $1", e["id"])
+            results.append({"groupe": e["id"], "action": "purged_expired"})
+
     return {"processed": len(results), "details": results}
 
 
