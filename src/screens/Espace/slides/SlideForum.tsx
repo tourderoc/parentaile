@@ -6,7 +6,8 @@ import { Users, Mic, Clock, Plus, MessageCircle, Filter, Loader2, Heart, Setting
 import { Swiper, SwiperSlide } from 'swiper/react';
 import 'swiper/css';
 import { auth } from '../../../lib/firebase';
-import { onGroupeRating } from '../../../lib/groupeParoleService';
+import { onGroupeRating, rejoindreGroupe } from '../../../lib/groupeParoleService';
+import { accountStorage } from '../../../lib/accountStorage';
 import { useUpcomingGroup } from '../../../lib/upcomingGroupContext';
 import type { GroupeParole, ThemeGroupe } from '../../../types/groupeParole';
 import { THEME_LABELS, THEME_COLORS, THEME_SHORT_LABELS } from '../../../types/groupeParole';
@@ -549,7 +550,19 @@ export const SlideForum: React.FC<{ isActive?: boolean }> = ({ isActive = false 
                           filter: isActive ? 'drop-shadow(0 12px 24px rgba(0,0,0,0.06))' : 'drop-shadow(0 4px 8px rgba(0,0,0,0.02))'
                         }}
                       >
-                        <GroupeCard groupe={groupe} index={i} total={groupesFiltres.length} onClick={() => navigate(`/espace/groupes/${groupe.id}`)} onJoinVocal={() => navigate(`/espace/groupes/${groupe.id}/vocal`)} />
+                        <GroupeCard groupe={groupe} index={i} total={groupesFiltres.length} onClick={() => navigate(`/espace/groupes/${groupe.id}`)} onJoinVocal={async () => {
+                          const user = auth.currentUser;
+                          if (!user) return navigate(`/espace/groupes/${groupe.id}`);
+                          const isParticipant = groupe.participants.some(p => p.uid === user.uid);
+                          if (!isParticipant && !groupe.participants.some(p => p.uid === user.uid && p.banni)) {
+                            try {
+                              const account = await accountStorage.getAccount(user.uid);
+                              const pseudo = account?.pseudo || 'Parent';
+                              await rejoindreGroupe(groupe.id, { uid: user.uid, pseudo });
+                            } catch { /* groupe plein ou erreur — SalleVocalePage affichera l'erreur */ }
+                          }
+                          navigate(`/espace/groupes/${groupe.id}/vocal`);
+                        }} />
                       </div>
                     )}
                   </SwiperSlide>
