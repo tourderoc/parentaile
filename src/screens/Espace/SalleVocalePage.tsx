@@ -492,7 +492,7 @@ const CircleParticipant: React.FC<{
 
           {/* Animateur crown */}
           {isAnimateur && (
-            <div className={`absolute -top-2 left-1/2 -translate-x-1/2 w-6 h-6 bg-amber-500 rounded-full flex items-center justify-center shadow-lg border-2 transition-colors duration-300 ${
+            <div className={`absolute -top-[14px] left-1/2 -translate-x-1/2 w-6 h-6 bg-amber-500 rounded-full flex items-center justify-center shadow-lg border-2 transition-colors duration-300 ${
               lightMode ? 'border-amber-100' : 'border-[#1a1f3a]'
             }`}>
               <Crown size={11} className="text-white" />
