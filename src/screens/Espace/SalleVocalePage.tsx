@@ -32,7 +32,7 @@ import {
   advancePhase, onGroupeParole,
   extendSession, endSession, submitBanFeedback,
   initSessionStateV2,
-  cancelGroup, banParticipantExplicit, isParticipantBanned
+  cancelGroup, banParticipantExplicit, isParticipantBanned, rejoindreGroupe
 } from '../../lib/groupeParoleService';
 import { 
   STRUCTURE_DEFAUT, getBadgeInfo, PHASE_MIC_POLICY, DEFAULT_MIC_POLICY, getBadgeForPoints,
@@ -3657,6 +3657,16 @@ export const SalleVocalePage = () => {
           setStep('cancelled');
           alert('Vous avez été définitivement banni de cette salle.');
           return;
+        }
+
+        // Auto-inscription si l'utilisateur n'est pas encore participant
+        const isInParticipants = (groupe.participants || []).some(p => p.uid === currentUser?.uid);
+        if (currentUser && !isInParticipants) {
+          try {
+            const account = await accountStorage.getAccount(currentUser.uid);
+            const pseudo = account?.pseudo || currentUser.displayName || 'Parent';
+            await rejoindreGroupe(groupeId, { uid: currentUser.uid, pseudo });
+          } catch { /* ignore */ }
         }
 
         // Redirection évaluation si session terminée/annulée
