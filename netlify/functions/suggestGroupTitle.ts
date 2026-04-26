@@ -38,17 +38,18 @@ export const handler: Handler = async (event) => {
         {
           role: 'system',
           content: `Tu es un assistant pour une application de groupes de parole entre parents.
-Génère un titre court (maximum 60 caractères), bienveillant et engageant pour un groupe de parole.
-Le titre doit donner envie aux autres parents de rejoindre le groupe.
-Réponds uniquement avec le titre, sans guillemets, sans explications.`,
+Génère un titre TRÈS COURT (2 à 5 mots maximum, 30 caractères max) qui résume la situation du parent.
+Le titre doit être direct et parlant, comme une expression du quotidien.
+Exemples : "Crises de colère", "Mon enfant me tyrannise", "Refus scolaire", "Nuits sans sommeil", "Opposition constante", "Jalousie entre frères".
+Réponds uniquement avec le titre, sans guillemets, sans ponctuation finale, sans explications.`,
         },
         {
           role: 'user',
-          content: `Thème : ${theme}\nDescription de la situation : ${description}`,
+          content: `Thème : ${theme}\nSituation : ${description}`,
         },
       ],
-      temperature: 0.8,
-      max_tokens: 60,
+      temperature: 0.7,
+      max_tokens: 20,
     });
 
     const title = completion.choices[0].message.content?.trim() || '';

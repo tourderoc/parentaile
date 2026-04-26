@@ -93,6 +93,19 @@ export const CreateGroupeParole: React.FC<CreateGroupeParoleProps> = ({ onBack, 
 
   // Title suggestion
   const [isSuggestingTitle, setIsSuggestingTitle] = useState(false);
+  const titreTextareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const autoResizeTitre = () => {
+    const el = titreTextareaRef.current;
+    if (el) {
+      el.style.height = 'auto';
+      el.style.height = el.scrollHeight + 'px';
+    }
+  };
+
+  useEffect(() => {
+    autoResizeTitre();
+  }, [titre]);
 
   // Submit
   const [isPublishing, setIsPublishing] = useState(false);
@@ -716,15 +729,19 @@ export const CreateGroupeParole: React.FC<CreateGroupeParoleProps> = ({ onBack, 
                 <label className="text-[10px] font-bold text-gray-400 uppercase ml-1 tracking-widest">Donnez un titre à votre groupe</label>
 
                 <div className="glass rounded-2xl border-2 border-white focus-within:border-orange-200 shadow-glass overflow-hidden">
-                  <input
-                    type="text"
+                  <textarea
+                    ref={titreTextareaRef}
                     value={titre}
-                    onChange={(e) => setTitre(e.target.value.slice(0, 80))}
+                    onChange={(e) => {
+                      setTitre(e.target.value.slice(0, 80));
+                      autoResizeTitre();
+                    }}
                     placeholder={selectedTheme
-                      ? `Ex: ${selectedTheme === 'ecole' ? 'Mon enfant refuse l\'école' : selectedTheme === 'comportement' ? 'Gérer les crises de colère' : selectedTheme === 'emotions' ? 'Aider mon enfant à s\'exprimer' : selectedTheme === 'developpement' ? 'Retard de langage, que faire ?' : 'Partage d\'expérience entre parents'}`
+                      ? `Ex: ${selectedTheme === 'ecole' ? 'Mon enfant refuse l\'école' : selectedTheme === 'comportement' ? 'Crises de colère' : selectedTheme === 'emotions' ? 'Aider mon enfant à s\'exprimer' : selectedTheme === 'developpement' ? 'Retard de langage' : 'Partage entre parents'}`
                       : 'Titre de votre groupe...'
                     }
-                    className="w-full px-4 py-4 bg-transparent focus:outline-none font-bold text-gray-700 placeholder:text-gray-300 text-sm"
+                    rows={1}
+                    className="w-full px-4 py-4 bg-transparent focus:outline-none font-bold text-gray-700 placeholder:text-gray-300 text-sm resize-none overflow-hidden leading-snug"
                     style={{ fontSize: '16px' }}
                   />
                 </div>
