@@ -37,10 +37,10 @@ La version actuelle de MedCompanion (commit `f0beef4`) inclut le dual-write VPS.
 Rebuild l'exe et l'utiliser quelques jours avant le merge pour vérifier que les tokens,
 notifications et réponses arrivent bien sur le VPS.
 
-### 3. Test VPS-only en conditions réelles (dimanche 27 avril 2026)
+### 3. Test VPS-only en conditions réelles ✅ EFFECTUÉ 2026-04-26
 
-Test grandeur nature : couper Firebase temporairement, vérifier que tout fonctionne,
-puis revenir sur Firebase. Aucun risque de perte de données (Firestore conserve tout).
+Test grandeur nature : Firebase coupé temporairement, tout fonctionnel, Firebase rétabli.
+Aucune perte de données (Firestore conservait tout pendant le test).
 
 **Pré-requis :** MedCompanion rebuild avec le dual-write (commit `f0beef4`).
 
@@ -84,48 +84,126 @@ sans l'étape D. Si des problèmes sont détectés → on les corrige avant le v
 
 ---
 
+## Résultats du test VPS-only du 2026-04-26
+
+**Contexte :** test effectué depuis la maison (sans accès physique au cabinet). Migration des données Firestore → PostgreSQL **skippée volontairement** (dual-write actif depuis le 17 avril, données déjà présentes sur VPS).
+
+### Déroulement
+
+| Étape | Résultat |
+|-------|----------|
+| A — Migration données | ⏭️ Skippée (dual-write suffisant, données déjà sur VPS) |
+| B — Couper Firebase (`VITE_FIREBASE_BRIDGE=false`) + build + deploy | ✅ OK |
+| C — Créer token MedCompanion + activer sur Parent'aile | ✅ Token visible dans VPS (`status: used`) |
+| C — Envoyer message depuis Parent'aile | ✅ Message dans PostgreSQL, visible dans MedCompanion |
+| C — Vérifier notifications | ✅ Fonctionnel |
+| D — Rétablir dual-write + restore main sur parentaile.fr | ✅ OK |
+
+### Bugs découverts et corrigés pendant le test
+
+**1. `GET /bridge/tokens` → 405 (MedCompanion)**
+- Cause : `VpsBridgeService.FetchAllTokensAsync()` appelait `GET /bridge/tokens` (n'existe pas en GET)
+- Fix : endpoint corrigé → `GET /bridge/tokens/sync/medcompanion`
+- Commit : `3e11131` (MedCompanion)
+
+**2. `GET /bridge/messages` → 405 (MedCompanion)**
+- Cause : `VpsBridgeService.FetchMessagesAsync()` appelait `GET /bridge/messages` (n'existe pas)
+- Fix : endpoint corrigé → `GET /bridge/messages/doctor/medcompanion`
+- Commit : `3e11131` (MedCompanion)
+
+**3. `doctor_id` vide dans les messages (VPS)**
+- Cause : `MessageComposer.tsx` envoyait `doctor_id: ''` au POST `/bridge/messages`
+- Fix VPS : `bridge_router.py` déduit `doctor_id` depuis `bridge_tokens` si champ vide
+- Fix data : 3 messages existants backfillés via SQL `UPDATE bridge_messages SET doctor_id = ...`
+- Note pour le merge : corriger `MessageComposer.tsx` pour envoyer le vrai `doctor_id`
+
+**4. Badge "Messages" ne se mettait pas à jour (MedCompanion)**
+- Cause : `RunSyncAttemptAsync` dans `PilotageControl` lisait uniquement Firebase
+- Fix : ajout d'un check VPS en premier dans la boucle de sync
+- Commit : `3e11131` (MedCompanion)
+
+**5. Messages en double dans le dialog MedCompanion**
+- Cause : `FetchAndSyncMessagesAsync` dédupliquait par ID uniquement (UUID VPS ≠ ID Firestore → même message compté deux fois)
+- Fix : déduplication supplémentaire par `tokenId|contenu`
+- Commit : `3e11131` (MedCompanion)
+
+### Verdict
+
+**Le bridge VPS fonctionne de bout en bout sans Firebase.** Les 5 bugs trouvés sont tous corrigés. Le merge peut se faire en confiance.
+
+---
+
 ## Jour du merge (dimanche, après 250 users) — Checklist
 
-### Étape 1 — Migration des données (5 min)
+> ⚠️ **IMPÉRATIF : faire depuis le cabinet (bureau), pas depuis la maison.**
+> La migration des données Firestore → PostgreSQL nécessite un accès réseau stable et le poste de développement principal.
+> La branche `dev` de Parent'aile et le projet MedCompanion sont sur la machine du bureau.
+
+### Pré-requis le matin du merge
+
+- [ ] Être au cabinet avec accès à la machine de développement
+- [ ] MedCompanion rebuild depuis le bureau (`dotnet build medcompagnio2.sln`)
+- [ ] Vérifier que parentaile-v0 est sur la branche `dev` et à jour (`git pull`)
+- [ ] Avoir une connexion internet stable (upload du build Netlify ~2 min)
+- [ ] Prévenir les utilisateurs actifs si possible (heure creuse recommandée : dimanche matin)
+
+### Étape 1 — Migration des données (5-10 min)
+
+**Depuis le cabinet uniquement.** Le script lit Firestore et écrit dans PostgreSQL VPS.
 
 ```bash
 ssh root@145.223.117.145
 cd /root/account-service
 
-# Dry-run de contrôle
+# Dry-run de contrôle (vérifier les chiffres avant d'écrire)
 export DATABASE_URL='postgresql://account_service:1e72630fed2a950b67c4a7eade300993dfa2adb9e07e7c54@127.0.0.1:5432/account_db'
 export FIREBASE_SA_PATH='/root/account-service/firebase-service-account.json'
 venv/bin/python3 migrate_firebase_to_vps.py --dry-run
 
-# Migration réelle (idempotent, ON CONFLICT DO NOTHING)
+# Migration réelle (idempotent, ON CONFLICT DO NOTHING — safe à relancer)
 venv/bin/python3 migrate_firebase_to_vps.py
 ```
 
-- [ ] Dry-run affiche les bons chiffres (~220 tokens, ~314 notifs, ~169 messages, ~4 users)
+- [ ] Dry-run affiche des chiffres cohérents (tokens, messages, notifs — comparer avec Firestore console)
 - [ ] Migration réelle sans erreur
-- [ ] Vérifier quelques tokens dans PostgreSQL :
+- [ ] Vérifier les counts dans PostgreSQL :
   ```bash
   sudo -u postgres psql account_db -c "SELECT count(*) FROM bridge_tokens;"
   sudo -u postgres psql account_db -c "SELECT count(*) FROM bridge_messages;"
   sudo -u postgres psql account_db -c "SELECT count(*) FROM bridge_notifications;"
   ```
+- [ ] Backfill `doctor_id` si nécessaire (bug connu, corrigé côté VPS mais anciens messages peuvent être vides) :
+  ```bash
+  sudo -u postgres psql account_db -c "UPDATE bridge_messages m SET doctor_id = t.doctor_id FROM bridge_tokens t WHERE m.token_id = t.token_id AND (m.doctor_id IS NULL OR m.doctor_id = '');"
+  ```
 
 ### Étape 2 — Couper Firebase côté Parent'aile (5 min)
 
 ```bash
-# Dans le .env de production Parent'aile
+# Depuis le bureau, branche dev de parentaile-v0
+# Dans le .env
 VITE_FIREBASE_BRIDGE=false
+
+npm run build
+netlify deploy --prod --dir=dist
 ```
 
-- [ ] Modifier `.env` (ou `.env.production`)
-- [ ] `npm run build`
-- [ ] Déployer sur Firebase Hosting (`firebase deploy --only hosting`)
+- [ ] Modifier `.env` (`VITE_FIREBASE_BRIDGE=false`)
+- [ ] `npm run build` (depuis la branche `dev`)
+- [ ] `netlify deploy --prod --dir=dist`
 
 ### Étape 3 — Merger dev → main (5 min)
 
-- [ ] `git checkout main && git merge dev`
-- [ ] Résoudre les conflits éventuels
+```bash
+# Depuis le bureau, repo parentaile-v0
+git checkout main
+git merge dev
+git push origin main
+```
+
+- [ ] Résoudre les conflits éventuels (peu probables — main n'a pas évolué)
 - [ ] `git push origin main`
+- [ ] Netlify rebuild automatique depuis main (si CI configuré) — sinon redéployer manuellement
 
 ### Étape 4 — Vérifier le VPS (2 min)
 
