@@ -3605,6 +3605,13 @@ export const SalleVocalePage = () => {
         (p) => p.uid === auth.currentUser?.uid && p.banni
       );
 
+      // Auto-déconnexion LiveKit si banni en cours de session
+      const terminalSteps = ['loading', 'too_early', 'too_late', 'cancelled', 'end', 'evaluation'];
+      if (isBannedRef.current && !terminalSteps.includes(step)) {
+        setStep('end');
+        return;
+      }
+
       // 4. Flow Control
       if (groupe.status === 'cancelled') {
         setStep('cancelled');
