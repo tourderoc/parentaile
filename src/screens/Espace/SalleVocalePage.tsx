@@ -1826,13 +1826,16 @@ const RoomContent: React.FC<{
             </div>
           </div>
 
-          {/* Participants around the circle */}
-          {participants.map((p, index) => {
+          {/* Participants around the circle — filter out banned participants */}
+          {participants.filter((p) => {
+            const vpsParticipant = groupeParticipants.find(gp => gp.uid === p.identity);
+            return !vpsParticipant?.banni;
+          }).map((p, index, filteredList) => {
             const isLocal = p.identity === localParticipant?.identity;
             const pIsAnimateur = p.identity === effectiveAnimateurUid;
             const micPub = p.getTrackPublication(Track.Source.Microphone);
             const isMuted = !micPub || micPub.isMuted;
-            const count = participants.length;
+            const count = filteredList.length;
             const angle = -Math.PI / 2 + (2 * Math.PI * index) / count;
             const color = AVATAR_COLORS[index % AVATAR_COLORS.length];
 
