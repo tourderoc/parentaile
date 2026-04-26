@@ -225,7 +225,74 @@ journalctl -u parentaile-account -f
 - [ ] **Inscription** : nouveau parent s'inscrit → compte créé dans VPS
 - [ ] **Groupes vocaux** : vérifier qu'un groupe existant charge correctement
 
-### Étape 6 — Vérifier les logs (5 min)
+### Étape 6 — Backup hors-site Google Drive (30 min, une seule fois)
+
+> Fait le jour du merge pour sécuriser les données avant la coupure Firebase.
+> Le backup PostgreSQL quotidien tourne déjà sur le VPS, mais il est stocké localement —
+> si Hostinger perd le serveur, les données seraient perdues. Google Drive = copie externe gratuite.
+
+**Installer rclone et configurer Google Drive :**
+
+```bash
+ssh root@145.223.117.145
+
+# Installer rclone
+curl https://rclone.org/install.sh | sudo bash
+
+# Configurer Google Drive (interface interactive)
+rclone config
+# → n (new remote) → nom: gdrive → type: drive (Google Drive)
+# → laisser client_id et client_secret vides
+# → scope: drive.file (accès uniquement aux fichiers créés par rclone)
+# → Suivre le lien OAuth → se connecter avec nairmedcin@gmail.com → coller le code
+```
+
+**Créer le script de backup hors-site :**
+
+```bash
+cat > /root/backup-offsite.sh << 'EOF'
+#!/bin/bash
+DATE=$(date +%Y%m%d)
+BACKUP_FILE="/root/backups/postgres_${DATE}.sql.gz"
+
+# Dump PostgreSQL
+sudo -u postgres pg_dump account_db | gzip > "$BACKUP_FILE"
+
+# Upload Google Drive dans dossier parentaile-backups/
+rclone copy "$BACKUP_FILE" gdrive:parentaile-backups/
+
+# Garder uniquement les 30 derniers jours en local
+find /root/backups/ -name "*.sql.gz" -mtime +30 -delete
+
+# Garder uniquement les 30 derniers fichiers sur Drive
+rclone delete --min-age 30d gdrive:parentaile-backups/
+
+echo "[$(date)] Backup hors-site OK: $BACKUP_FILE"
+EOF
+chmod +x /root/backup-offsite.sh
+mkdir -p /root/backups
+```
+
+**Configurer le cron quotidien (3h30 — après le backup local à 3h15) :**
+
+```bash
+(crontab -l; echo "30 3 * * * /root/backup-offsite.sh >> /root/logs/backup-offsite.log 2>&1") | crontab -
+```
+
+**Tester immédiatement :**
+
+```bash
+/root/backup-offsite.sh
+rclone ls gdrive:parentaile-backups/
+```
+
+- [ ] `rclone` installé et configuré avec `nairmedcin@gmail.com`
+- [ ] Script `/root/backup-offsite.sh` créé et exécutable
+- [ ] Cron 3h30 ajouté
+- [ ] Test manuel OK — fichier visible dans Google Drive (dossier `parentaile-backups`)
+- [ ] Vérifier que le fichier est lisible : `gunzip -t /root/backups/postgres_$(date +%Y%m%d).sql.gz`
+
+### Étape 7 — Vérifier les logs (5 min)
 
 ```bash
 # Logs VPS
