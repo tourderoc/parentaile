@@ -100,7 +100,7 @@ export function onGroupesParole(
     }
   };
   poll();
-  const interval = setInterval(poll, 10000);
+  const interval = setInterval(poll, 3000);
   return () => clearInterval(interval);
 }
 
