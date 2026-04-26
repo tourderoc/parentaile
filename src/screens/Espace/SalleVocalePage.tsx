@@ -1091,7 +1091,8 @@ const RoomContent: React.FC<{
   onOptimisticSessionUpdate?: (patch: Partial<SessionState>) => void;
   lightMode?: boolean;
   onToggleLight?: () => void;
-}> = ({ isAnimateur, groupeId, groupeTitre, groupeTheme, dateVocal, onLeave, onCancelled, animateurNotes, structureType, structure, defaultDurationMin, onSessionProgress, onSessionEnded, sessionPrenom, createurUid, sessionCancelledRef, groupeStatus, firestoreSession, onOptimisticSessionUpdate, lightMode, onToggleLight }) => {
+  groupeParticipants: ParticipantGroupe[];
+}> = ({ isAnimateur, groupeId, groupeTitre, groupeTheme, dateVocal, onLeave, onCancelled, animateurNotes, structureType, structure, defaultDurationMin, onSessionProgress, onSessionEnded, sessionPrenom, createurUid, sessionCancelledRef, groupeStatus, firestoreSession, onOptimisticSessionUpdate, lightMode, onToggleLight, groupeParticipants }) => {
   useWakeLock(); // Keep screen on during vocal session
   const participants = useParticipants();
   const { localParticipant } = useLocalParticipant();
@@ -4180,6 +4181,7 @@ export const SalleVocalePage = () => {
           }
           lightMode={lightMode}
           onToggleLight={() => setLightMode(prev => !prev)}
+          groupeParticipants={groupeParticipants}
         />
       </LiveKitRoom>
     </div>
