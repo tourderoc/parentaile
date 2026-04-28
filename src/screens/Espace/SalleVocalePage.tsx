@@ -565,9 +565,10 @@ const PHASE_SUGGESTIONS: Record<string, string[]> = {
     'Creez un climat de confiance des le depart',
   ],
   'Partage du vecu': [
-    'Encouragez les temoignages personnels',
-    'Reformulez pour montrer votre ecoute',
-    'Veillez a la repartition du temps de parole',
+    'Partagez une experience personnelle en lien avec le theme',
+    'Parlez simplement, avec authenticite',
+    'Evitez les conseils ou les explications',
+    'Laissez un court silence apres votre partage',
   ],
   'Tour de parole': [
     'Donnez la parole a ceux qui ne se sont pas exprimes',

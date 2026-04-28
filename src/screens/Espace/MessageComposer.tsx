@@ -312,7 +312,18 @@ export const MessageComposer: React.FC = () => {
       }
 
       setIsSent(true);
-      setTimeout(() => navigate('/espace/messages'), 2500);
+      setTimeout(() => {
+        navigate('/espace/messages');
+        // Reset : le slide Contact reste monté dans le Swiper, sans ça l'écran
+        // "Message envoyé !" persiste au prochain retour sur l'onglet Écrire.
+        setMessage('');
+        setReformulatedMessage('');
+        setShowReformulated(false);
+        setError(null);
+        setIsSent(false);
+        setIsSending(false);
+        finalTranscriptRef.current = '';
+      }, 2500);
 
     } catch (err) {
       console.error('Erreur envoi:', err);
