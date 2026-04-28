@@ -133,6 +133,31 @@ sans l'étape D. Si des problèmes sont détectés → on les corrige avant le v
 
 ---
 
+## Bug découvert en dual-write actif — 2026-04-28
+
+**Symptôme :** un parent active son token depuis `parentaile.fr` (branche `main`) → MedCompanion continue d'afficher "En attente d'activation" indéfiniment, même après refresh de l'onglet Utilisateurs.
+
+**Cause racine :**
+- `main` n'a PAS le code dual-write (il n'est livré que sur `dev`).
+- Quand le parent active : Firebase reçoit `status: used`, mais le VPS n'est jamais notifié → reste `pending`.
+- Côté MedCompanion, [TokenService.cs `SyncFromFirebaseAsync`](../MedCompagion%20V1%20b%C3%A9ta/MedCompanion/Services/TokenService.cs) lit le VPS en priorité. Comme le VPS connaît le token (en `pending`), Firebase est ignoré pour ce token (condition `if (!ContainsKey)`).
+- Résultat : MedCompanion montre l'état VPS obsolète.
+
+**Patch temporaire appliqué (à retirer après merge) :**
+- Dans `SyncFromFirebaseAsync`, si VPS dit `pending` ET Firebase dit `used` → on croit Firebase (état plus avancé).
+- 3 lignes ajoutées dans la boucle de fusion `fbStatuses`. Commenté `Patch dual-write` pour traçabilité.
+
+**Pourquoi ce patch et pas un fix côté React :**
+- Le vrai fix = couper Firebase et basculer `main` sur le code VPS-only = c'est exactement le merge final.
+- En attendant, ce patch protège l'affichage MedCompanion contre la divergence Firebase/VPS pendant que les deux sources coexistent.
+
+**À FAIRE après le merge :**
+- ✅ Couper `VITE_FIREBASE_BRIDGE=false` + déployer `main` (déjà dans la checklist Étape 2)
+- 🆕 Retirer le patch dual-write dans `TokenService.cs` (la branche `else if (kvp.Value == "used" && tokenStatuses[kvp.Key] == "pending")`)
+- 🆕 Backfill des tokens orphelins éventuels : tout token Firebase `used` qui n'est pas `used` côté VPS doit être resynchronisé. Script SQL ou one-shot Python à prévoir.
+
+---
+
 ## Jour du merge (dimanche, après 250 users) — Checklist
 
 > ⚠️ **IMPÉRATIF : faire depuis le cabinet (bureau), pas depuis la maison.**
@@ -345,6 +370,7 @@ grep -r "@FIREBASE_LEGACY" src/ --include="*.ts" --include="*.tsx" -l
 - [ ] Dans `PilotageControl.xaml.cs` : supprimer les appels `_firebaseService.WriteNotification/SendBroadcast`
 - [ ] `PatientMessageService.cs` : supprimer le merge Firebase dans `FetchAndSyncMessagesAsync`
 - [ ] `TokenService.cs` : supprimer le fallback Firebase dans `SyncFromFirebaseAsync`
+- [ ] `TokenService.cs` : retirer le **patch dual-write 2026-04-28** (branche `else if Firebase=used && VPS=pending`) — voir section "Bug découvert en dual-write actif"
 - [ ] Évaluer la suppression complète de `FirebaseService.cs` (listeners Firestore SDK)
 
 ### Firebase — archivage
