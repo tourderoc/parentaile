@@ -174,8 +174,8 @@ export async function submitBanFeedback(
 }
 ```
 
-Les parents qui restent sur main (jusqu'au merge) continuent à écrire dans Firebase
-`banReports`. La Phase 4 (migration one-shot au jour du merge) rapatrie tout ça sur VPS.
+Main continue son ancien code Firebase jusqu'au merge. Au merge, `banReports` sera
+simplement archivée/supprimée — aucune migration nécessaire (Phase 4 annulée, voir ci-dessous).
 
 ### 2.3 — Signalement participant (existant)
 
@@ -229,43 +229,19 @@ Vue adaptée au type :
 
 ---
 
-## Phase 4 — Migration Firebase `banReports` → PostgreSQL `ban_appeals`
+## ~~Phase 4~~ — Migration Firebase `banReports` → ANNULÉE
 
-> À faire **avant** le merge final, pour que la coupure Firebase emporte aussi
-> cette collection.
-
-Script one-shot Python (à ajouter dans `migrate_firebase_to_vps.py` existant ou nouveau script) :
-
-```python
-# Lecture Firebase banReports
-docs = db.collection('banReports').stream()
-for doc in docs:
-    data = doc.to_dict()
-    await pool.execute("""
-        INSERT INTO ban_appeals (
-            groupe_id, participant_uid, participant_pseudo,
-            feedback, reviewed, created_at
-        )
-        VALUES ($1, $2, $3, $4, $5, $6)
-        ON CONFLICT DO NOTHING
-    """,
-        data.get('groupeId'),
-        data.get('participantUid'),
-        data.get('participantPseudo'),
-        data.get('feedback'),
-        data.get('reviewed', False),
-        data.get('dateReport').to_pydatetime() if data.get('dateReport') else now,
-    )
-```
-
-Idempotent (`ON CONFLICT DO NOTHING`), exécutable plusieurs fois sans risque.
-
-À intégrer dans la **checklist du jour du merge** comme étape supplémentaire :
-
-```
-3. Migration des données — étape 1.bis :
-   venv/bin/python3 migrate_ban_reports_to_appeals.py
-```
+> **Décision 2026-04-29 : Phase 4 supprimée, rien à faire au merge.**
+>
+> Raisonnement :
+> - `submitBanFeedback` n'existe que sur la branche **dev** — main n'a jamais écrit
+>   dans Firebase `banReports` via ce chemin.
+> - Tout ce qui se trouve dans `banReports` sur Firebase est du **données de test dev**,
+>   sans valeur à conserver.
+> - Depuis Phase 2, dev écrit directement sur VPS `/ban-appeals`. Aucun dual-write,
+>   aucun rattrapage nécessaire.
+> - Au merge, `banReports` sera simplement **archivée puis supprimée** comme les autres
+>   collections Firebase obsolètes (tokens, messages, notifications).
 
 ---
 
@@ -300,8 +276,8 @@ Idempotent (`ON CONFLICT DO NOTHING`), exécutable plusieurs fois sans risque.
 | 1 — Endpoints VPS (CRUD + `/admin/inbox` agrégé) | 0.5j |
 | 2 — Parent'aile (carte Mon Espace + dual-write submitBanFeedback) | 0.5j |
 | 3 — MedCompanion (onglet Boîte admin) | 1j |
-| 4 — Migration one-shot `banReports` Firebase → VPS | 0.5j |
-| **Total** | **~3 jours** |
+| ~~4 — Migration `banReports` Firebase → VPS~~ | ~~0.5j~~ → **ANNULÉE** |
+| **Total** | **~2.5 jours** ✅ LIVRÉ |
 
 À étaler sur plusieurs commits successifs, comme convenu.
 
@@ -324,7 +300,7 @@ Pas de refonte intermédiaire — l'onglet V1 reste tel quel jusqu'à la grande 
 
 1. **Phase 0 + 1 (VPS)** en premier — peut être fait sans toucher Parent'aile ni MedCompanion
 2. **Phase 2 (Parent'aile)** — dual-write actif pour `submitBanFeedback`, nouvelle carte Mon Espace
-3. **Phase 3 (MedCompanion)** — onglet de lecture
-4. **Phase 4 (migration)** — au moment du merge, intégrée à la checklist
+3. **Phase 3 (MedCompanion)** — onglet de lecture ✅ LIVRÉ
+4. ~~**Phase 4 (migration)**~~ — annulée (voir section dédiée)
 
 Chaque phase = un ou plusieurs petits commits, validés en bout-en-bout avant de passer à la suivante.

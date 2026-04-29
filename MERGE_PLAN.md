@@ -379,4 +379,4 @@ grep -r "@FIREBASE_LEGACY" src/ --include="*.ts" --include="*.tsx" -l
 - [ ] Archiver la collection Firestore `users` (remplacée par VPS accounts)
 - [ ] Archiver les collections `tokens`, `messages`, `notifications` (30 jours lecture seule puis suppression)
 - [ ] Supprimer les Cloud Functions Firebase si plus utilisées (`functions/src/index.ts` déjà vidé)
-- [ ] `banReports` : migrer ou archiver (usage résiduel)
+- [ ] `banReports` : **supprimer directement** (données de test dev uniquement — `submitBanFeedback` n'existait que sur dev, aucune migration nécessaire)
