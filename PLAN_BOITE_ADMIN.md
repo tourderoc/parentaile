@@ -42,8 +42,8 @@ les 3 canaux, pour que la psychiatre/admin puisse traiter ces signaux en un seul
 - ✅ **Une seule boîte admin** dans MedCompanion (3ème onglet du Pilotage, à côté d'Utilisateurs et Serveur)
 - ✅ **3 tables séparées** côté VPS (pas de fourre-tout polymorphe), endpoint agrégé pour la lecture
 - ✅ **Avant le merge** : tout doit fonctionner pour pouvoir couper Firebase `banReports` lors du merge
-- ✅ **Dual-write pendant la transition** sur `submitBanFeedback` (VPS + Firebase, cohérent avec le bridge actuel)
-- ✅ **Migration one-shot** de Firebase `banReports` → PostgreSQL `ban_appeals` avant le merge
+- ✅ **VPS only côté dev** (pas de dual-write) — la carte "Donner mon avis" est nouvelle (rien à synchroniser), et `submitBanFeedback` bascule sur VPS uniquement sur dev. Main continue à écrire Firebase jusqu'au merge.
+- ✅ **Migration one-shot** de Firebase `banReports` → PostgreSQL `ban_appeals` au jour du merge (rattrape les recours écrits par les parents main pendant l'intervalle)
 - ✅ **Pas de système de tickets / réponse** en V1 → juste lecture, marquer comme lu, supprimer
 - ✅ **Polling 5 min** côté MedCompanion (pas de SSE/WebSocket nécessaire)
 
@@ -148,11 +148,11 @@ GET    /admin/inbox/stats
 - POST `/feedback` avec `{ sender_uid, sender_pseudo, type, message, context }`
 - Confirmation "Merci, votre retour a bien été reçu"
 
-### 2.2 — Migration `submitBanFeedback` Firebase → VPS
+### 2.2 — Migration `submitBanFeedback` Firebase → VPS (sur dev uniquement)
 
 Dans [groupeParoleService.ts:653-668](src/lib/groupeParoleService.ts#L653-L668), remplacer
-l'écriture Firebase par un POST `/ban-appeals`. **Dual-write** pendant la transition (cohérent
-avec le bridge actuel) :
+l'écriture Firebase par un POST `/ban-appeals`. **Pas de dual-write** : la fonctionnalité n'est
+livrée que sur dev, main continue son ancien code (Firebase only) jusqu'au merge.
 
 ```typescript
 export async function submitBanFeedback(
@@ -161,7 +161,6 @@ export async function submitBanFeedback(
   participantPseudo: string,
   feedback: string
 ): Promise<void> {
-  // VPS bridge — source de vérité
   await fetch(`${VPS_URL}/ban-appeals`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-Api-Key': VPS_KEY },
@@ -172,18 +171,11 @@ export async function submitBanFeedback(
       feedback,
     }),
   });
-
-  // @FIREBASE_LEGACY — dual-write tant que VITE_FIREBASE_BRIDGE !== 'false'
-  if (USE_FIREBASE) {
-    try {
-      await addDoc(collection(db, 'banReports'), {
-        groupeId, participantUid, participantPseudo, feedback,
-        dateReport: serverTimestamp(), reviewed: false,
-      });
-    } catch { /* Firebase indisponible, VPS fait foi */ }
-  }
 }
 ```
+
+Les parents qui restent sur main (jusqu'au merge) continuent à écrire dans Firebase
+`banReports`. La Phase 4 (migration one-shot au jour du merge) rapatrie tout ça sur VPS.
 
 ### 2.3 — Signalement participant (existant)
 

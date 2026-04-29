@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { auth } from '../../../lib/firebase';
-import { Bell, Users, ChevronRight, LayoutGrid, Loader2, Heart, X, Star, Check } from 'lucide-react';
+import { Bell, Users, ChevronRight, LayoutGrid, Loader2, Heart, X, Star, Check, MessageSquarePlus, Bug, Lightbulb, HelpCircle, Send } from 'lucide-react';
 import { subscribeToNotifications } from '../../../lib/doctorNotifications';
 import { motion, AnimatePresence } from 'framer-motion';
 import { onPendingEvaluations, dismissEvaluation, isParticipantBanned } from '../../../lib/groupeParoleService';
@@ -10,6 +10,11 @@ import { useUpcomingGroup } from '../../../lib/upcomingGroupContext';
 import { useUser } from '../../../lib/userContext';
 import { AuthWall } from '../../../components/ui/AuthWall';
 import type { GroupeParole, EvaluationPendante, BadgeLevel } from '../../../types/groupeParole';
+
+const VPS_URL = import.meta.env.VITE_ACCOUNT_API_URL as string | undefined;
+const VPS_KEY = import.meta.env.VITE_ACCOUNT_API_KEY as string | undefined;
+
+type FeedbackType = 'bug' | 'suggestion' | 'question';
 import { getNextBadge, BADGE_THRESHOLDS, THEME_COLORS, THEME_LABELS } from '../../../types/groupeParole';
 
 const SquareCard = ({ icon: Icon, label, description, count, bgImage, onClick, colorClasses, isBadge }: any) => (
@@ -137,6 +142,48 @@ export const SlideMonEspace = ({ unreadParentCount = 0 }: { unreadParentCount?: 
     });
   }, [pendingEvals, currentUser]);
   const [showBadgeModal, setShowBadgeModal] = useState(false);
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [feedbackType, setFeedbackType] = useState<FeedbackType>('suggestion');
+  const [feedbackText, setFeedbackText] = useState('');
+  const [feedbackSending, setFeedbackSending] = useState(false);
+  const [feedbackSent, setFeedbackSent] = useState(false);
+  const [feedbackError, setFeedbackError] = useState<string | null>(null);
+
+  const handleSendFeedback = async () => {
+    if (!currentUser || feedbackText.trim().length < 10) return;
+    setFeedbackSending(true);
+    setFeedbackError(null);
+    try {
+      if (!VPS_URL || !VPS_KEY) throw new Error('VPS non configuré');
+      const res = await fetch(`${VPS_URL}/feedback`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Api-Key': VPS_KEY },
+        body: JSON.stringify({
+          sender_uid: currentUser.uid,
+          sender_pseudo: currentUser.displayName || null,
+          type: feedbackType,
+          message: feedbackText.trim(),
+          context: {
+            url: window.location.href,
+            user_agent: navigator.userAgent,
+            app_version: import.meta.env.VITE_APP_VERSION || 'dev',
+          },
+        }),
+      });
+      if (!res.ok) throw new Error(`Erreur ${res.status}`);
+      setFeedbackSent(true);
+      setTimeout(() => {
+        setShowFeedbackModal(false);
+        setFeedbackSent(false);
+        setFeedbackText('');
+        setFeedbackType('suggestion');
+      }, 2000);
+    } catch (err: any) {
+      setFeedbackError("Impossible d'envoyer, réessayez plus tard.");
+    } finally {
+      setFeedbackSending(false);
+    }
+  };
 
   const handleCardClick = (path: string) => {
     if (!currentUser) {
@@ -233,7 +280,7 @@ export const SlideMonEspace = ({ unreadParentCount = 0 }: { unreadParentCount?: 
              />
           )}
 
-          {/* Card: Donner mon avis OR (Empty) */}
+          {/* Card: Évaluations post-session */}
           {filteredPendingEvals.length > 0 && (
             <SquareCard
               icon={Heart}
@@ -243,6 +290,18 @@ export const SlideMonEspace = ({ unreadParentCount = 0 }: { unreadParentCount?: 
               bgImage="/assets/backgrounds/profile_bg.png"
               colorClasses="bg-gradient-to-br from-pink-500 to-rose-600"
               onClick={() => setShowEvalsModal(true)}
+            />
+          )}
+
+          {/* Card: Feedback app (toujours visible si connecté) */}
+          {currentUser && (
+            <SquareCard
+              icon={MessageSquarePlus}
+              label="Mon avis"
+              description="Bug · Suggestion"
+              bgImage="/assets/backgrounds/slide_bg_forum.png"
+              colorClasses="bg-gradient-to-br from-teal-500 to-cyan-700"
+              onClick={() => setShowFeedbackModal(true)}
             />
           )}
         </div>
@@ -568,6 +627,107 @@ export const SlideMonEspace = ({ unreadParentCount = 0 }: { unreadParentCount?: 
           </div>,
           document.body
         )}
+
+      {/* Feedback Modal */}
+      {showFeedbackModal && createPortal(
+        <div
+          className="fixed inset-0 z-[9999]"
+          onClick={() => { if (!feedbackSending) { setShowFeedbackModal(false); setFeedbackError(null); } }}
+        >
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+          <motion.div
+            initial={{ y: '100%' }}
+            animate={{ y: 0 }}
+            transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+            onClick={(e: React.MouseEvent) => e.stopPropagation()}
+            className="absolute bottom-0 inset-x-0 bg-white rounded-t-[32px] shadow-2xl"
+          >
+            <div className="flex justify-center pt-3 pb-1">
+              <div className="w-10 h-1 bg-gray-200 rounded-full" />
+            </div>
+
+            <div className="flex items-center justify-between px-6 py-3 border-b border-gray-100">
+              <div className="flex items-center gap-2">
+                <MessageSquarePlus size={18} className="text-teal-500" />
+                <h3 className="text-base font-extrabold text-gray-800 tracking-tight">Donner mon avis</h3>
+              </div>
+              <button
+                onClick={() => { setShowFeedbackModal(false); setFeedbackError(null); }}
+                className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center active:scale-90 transition-transform"
+              >
+                <X size={16} className="text-gray-400" />
+              </button>
+            </div>
+
+            <div className="px-6 pt-4 pb-8">
+              {feedbackSent ? (
+                <div className="flex flex-col items-center justify-center py-10 gap-3">
+                  <div className="w-14 h-14 bg-teal-50 rounded-full flex items-center justify-center">
+                    <Check size={28} className="text-teal-500" />
+                  </div>
+                  <p className="text-base font-bold text-gray-800">Merci, votre retour a bien été reçu !</p>
+                </div>
+              ) : (
+                <>
+                  {/* Type selector */}
+                  <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Type de retour</p>
+                  <div className="flex gap-3 mb-5">
+                    {([
+                      { value: 'bug' as FeedbackType, label: 'Bug', icon: Bug, color: 'bg-blue-50 text-blue-600 border-blue-200' },
+                      { value: 'suggestion' as FeedbackType, label: 'Suggestion', icon: Lightbulb, color: 'bg-green-50 text-green-600 border-green-200' },
+                      { value: 'question' as FeedbackType, label: 'Question', icon: HelpCircle, color: 'bg-amber-50 text-amber-600 border-amber-200' },
+                    ] as const).map(({ value, label, icon: Icon, color }) => (
+                      <button
+                        key={value}
+                        onClick={() => setFeedbackType(value)}
+                        className={`flex-1 flex flex-col items-center gap-1.5 py-3 rounded-2xl border-2 font-bold text-xs transition-all ${
+                          feedbackType === value ? `${color} scale-[1.03] shadow-sm` : 'bg-gray-50 text-gray-400 border-gray-100'
+                        }`}
+                      >
+                        <Icon size={18} />
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Message */}
+                  <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Votre message</p>
+                  <textarea
+                    value={feedbackText}
+                    onChange={(e) => setFeedbackText(e.target.value.slice(0, 1000))}
+                    placeholder="Décrivez votre retour en quelques mots…"
+                    rows={4}
+                    className="w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-800 resize-none focus:outline-none focus:ring-2 focus:ring-teal-300 transition"
+                  />
+                  <div className="flex justify-end mt-1 mb-4">
+                    <span className="text-[10px] text-gray-300 font-medium">{feedbackText.length}/1000</span>
+                  </div>
+
+                  {feedbackError && (
+                    <p className="text-xs text-red-500 font-medium mb-3 text-center">{feedbackError}</p>
+                  )}
+
+                  <button
+                    onClick={handleSendFeedback}
+                    disabled={feedbackSending || feedbackText.trim().length < 10}
+                    className="w-full h-14 bg-gray-900 text-white rounded-2xl font-bold flex items-center justify-center gap-2 disabled:opacity-40 active:scale-[0.98] transition-all"
+                  >
+                    {feedbackSending ? (
+                      <Loader2 size={18} className="animate-spin" />
+                    ) : (
+                      <>
+                        <Send size={16} />
+                        Envoyer
+                      </>
+                    )}
+                  </button>
+                </>
+              )}
+            </div>
+          </motion.div>
+        </div>,
+        document.body
+      )}
 
       {/* Auth Modal */}
         {showAuthModal && createPortal(

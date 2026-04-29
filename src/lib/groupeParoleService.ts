@@ -4,6 +4,9 @@ import {
   addDoc,
   serverTimestamp,
 } from 'firebase/firestore';
+
+const VPS_URL = import.meta.env.VITE_ACCOUNT_API_URL as string | undefined;
+const VPS_KEY = import.meta.env.VITE_ACCOUNT_API_KEY as string | undefined;
 import type { 
   GroupeParole, MessageGroupe, ThemeGroupe, StructureEtape, 
   EvaluationGroupe, EvaluationPendante, BadgeLevel, 
@@ -656,15 +659,18 @@ export async function submitBanFeedback(
   participantPseudo: string,
   feedback: string
 ): Promise<void> {
-  // Optionnel: on peut garder Firebase pour les reports de ban car c'est de l'admin
-  await addDoc(collection(db, 'banReports'), {
-    groupeId,
-    participantUid,
-    participantPseudo,
-    feedback,
-    dateReport: serverTimestamp(),
-    reviewed: false,
+  if (!VPS_URL || !VPS_KEY) throw new Error('VPS non configuré');
+  const res = await fetch(`${VPS_URL}/ban-appeals`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Api-Key': VPS_KEY },
+    body: JSON.stringify({
+      groupe_id: groupeId,
+      participant_uid: participantUid,
+      participant_pseudo: participantPseudo,
+      feedback,
+    }),
   });
+  if (!res.ok) throw new Error(`VPS erreur ${res.status}`);
 }
 
 // ========== Session vocale en temps réel ==========
