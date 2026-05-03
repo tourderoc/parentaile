@@ -296,11 +296,11 @@ export const SlideMonEspace = ({ unreadParentCount = 0 }: { unreadParentCount?: 
           {/* Card: Feedback app (toujours visible si connecté) */}
           {currentUser && (
             <SquareCard
-              icon={MessageSquarePlus}
-              label="Mon avis"
-              description="Bug · Suggestion"
-              bgImage="/assets/backgrounds/slide_bg_forum.png"
-              colorClasses="bg-gradient-to-br from-teal-500 to-cyan-700"
+              icon={Lightbulb}
+              label="Suggestions"
+              description="Bug • idée • amélioration"
+              bgImage="/assets/backgrounds/slide_bg_suggestions.png"
+              colorClasses="bg-gradient-to-br from-cyan-600 to-blue-800"
               onClick={() => setShowFeedbackModal(true)}
             />
           )}
@@ -648,8 +648,8 @@ export const SlideMonEspace = ({ unreadParentCount = 0 }: { unreadParentCount?: 
 
             <div className="flex items-center justify-between px-6 py-3 border-b border-gray-100">
               <div className="flex items-center gap-2">
-                <MessageSquarePlus size={18} className="text-teal-500" />
-                <h3 className="text-base font-extrabold text-gray-800 tracking-tight">Donner mon avis</h3>
+                <Lightbulb size={18} className="text-slate-600" />
+                <h3 className="text-base font-extrabold text-gray-800 tracking-tight">Suggestions</h3>
               </div>
               <button
                 onClick={() => { setShowFeedbackModal(false); setFeedbackError(null); }}
