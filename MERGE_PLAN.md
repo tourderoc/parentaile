@@ -158,105 +158,163 @@ sans l'étape D. Si des problèmes sont détectés → on les corrige avant le v
 
 ---
 
-## Jour du merge (dimanche, après 250 users) — Checklist
+## Jour du merge — Dimanche 29 juin 2026, 9h au cabinet
 
 > ⚠️ **IMPÉRATIF : faire depuis le cabinet (bureau), pas depuis la maison.**
-> La migration des données Firestore → PostgreSQL nécessite un accès réseau stable et le poste de développement principal.
-> La branche `dev` de Parent'aile et le projet MedCompanion sont sur la machine du bureau.
+> Durée totale estimée : **45-60 min** (backup Google Drive inclus).
 
-### Pré-requis le matin du merge
+**Avant de commencer, ouvrir 3 onglets dans le navigateur :**
+- [Console Firestore](https://console.firebase.google.com/) → pour comparer les counts à l'étape 1
+- [Pilotage Parent'aile](https://parentaile.fr) connecté en admin → pour les tests smoke
+- MedCompanion ouvert sur le bureau → pour les tests smoke
 
-- [ ] Être au cabinet avec accès à la machine de développement
-- [ ] MedCompanion rebuild depuis le bureau (`dotnet build medcompagnio2.sln`)
-- [ ] Vérifier que parentaile-v0 est sur la branche `dev` et à jour (`git pull`)
-- [ ] Avoir une connexion internet stable (upload du build Netlify ~2 min)
-- [ ] Prévenir les utilisateurs actifs si possible (heure creuse recommandée : dimanche matin)
+---
 
-### Étape 1 — Migration des données (5-10 min)
+### Étape 0 — Vérifications préliminaires (5 min)
 
-**Depuis le cabinet uniquement.** Le script lit Firestore et écrit dans PostgreSQL VPS.
+**Terminal du bureau :**
+```bash
+cd "c:\Users\nair\Desktop\parentaile-v0"
+git checkout dev
+git pull origin dev
+git status
+```
+→ doit afficher `nothing to commit, working tree clean`
+
+**VPS en ligne :**
+```bash
+ssh root@145.223.117.145 "systemctl is-active parentaile-account && echo VPS_OK"
+```
+→ doit afficher `VPS_OK`
+
+- [ ] Repo `dev` propre et à jour
+- [ ] VPS répond
+
+---
+
+### Étape 1 — Migration des données Firestore → PostgreSQL (10 min)
 
 ```bash
 ssh root@145.223.117.145
 cd /root/account-service
-
-# Dry-run de contrôle (vérifier les chiffres avant d'écrire)
 export DATABASE_URL='postgresql://account_service:1e72630fed2a950b67c4a7eade300993dfa2adb9e07e7c54@127.0.0.1:5432/account_db'
 export FIREBASE_SA_PATH='/root/account-service/firebase-service-account.json'
-venv/bin/python3 migrate_firebase_to_vps.py --dry-run
+```
 
-# Migration réelle (idempotent, ON CONFLICT DO NOTHING — safe à relancer)
+**Dry-run d'abord — lire les chiffres attentivement :**
+```bash
+venv/bin/python3 migrate_firebase_to_vps.py --dry-run
+```
+> Comparer les chiffres affichés avec la console Firestore (tokens, messages, notifications).
+> Si les chiffres semblent aberrants → **STOP**, ne pas continuer, contacter Claude.
+
+**Si dry-run OK — migration réelle (idempotent, safe à relancer) :**
+```bash
 venv/bin/python3 migrate_firebase_to_vps.py
 ```
 
-- [ ] Dry-run affiche des chiffres cohérents (tokens, messages, notifs — comparer avec Firestore console)
-- [ ] Migration réelle sans erreur
-- [ ] Vérifier les counts dans PostgreSQL :
-  ```bash
-  sudo -u postgres psql account_db -c "SELECT count(*) FROM bridge_tokens;"
-  sudo -u postgres psql account_db -c "SELECT count(*) FROM bridge_messages;"
-  sudo -u postgres psql account_db -c "SELECT count(*) FROM bridge_notifications;"
-  ```
-- [ ] Backfill `doctor_id` si nécessaire (bug connu, corrigé côté VPS mais anciens messages peuvent être vides) :
-  ```bash
-  sudo -u postgres psql account_db -c "UPDATE bridge_messages m SET doctor_id = t.doctor_id FROM bridge_tokens t WHERE m.token_id = t.token_id AND (m.doctor_id IS NULL OR m.doctor_id = '');"
-  ```
+**Vérifier les counts dans PostgreSQL :**
+```bash
+sudo -u postgres psql account_db -c "SELECT count(*) FROM bridge_tokens;"
+sudo -u postgres psql account_db -c "SELECT count(*) FROM bridge_messages;"
+sudo -u postgres psql account_db -c "SELECT count(*) FROM bridge_notifications;"
+```
+
+**Backfill `doctor_id` (bug connu sur anciens messages) :**
+```bash
+sudo -u postgres psql account_db -c "UPDATE bridge_messages m SET doctor_id = t.doctor_id FROM bridge_tokens t WHERE m.token_id = t.token_id AND (m.doctor_id IS NULL OR m.doctor_id = '');"
+```
+
+- [ ] Dry-run affiche des chiffres cohérents avec Firestore console
+- [ ] Migration réelle terminée sans erreur
+- [ ] Counts PostgreSQL cohérents
+- [ ] Backfill `doctor_id` exécuté
+
+---
 
 ### Étape 2 — Couper Firebase côté Parent'aile (5 min)
 
-```bash
-# Depuis le bureau, branche dev de parentaile-v0
-# Dans le .env
-VITE_FIREBASE_BRIDGE=false
+**Depuis le bureau, dans `parentaile-v0` :**
 
+Ouvrir le fichier `.env` et modifier :
+```
+VITE_FIREBASE_BRIDGE=false
+```
+
+```bash
 npm run build
 netlify deploy --prod --dir=dist
 ```
+> Attendre la fin du déploiement (1-2 min), puis vérifier que [parentaile.fr](https://parentaile.fr) charge.
 
-- [ ] Modifier `.env` (`VITE_FIREBASE_BRIDGE=false`)
-- [ ] `npm run build` (depuis la branche `dev`)
-- [ ] `netlify deploy --prod --dir=dist`
+- [ ] `.env` modifié (`VITE_FIREBASE_BRIDGE=false`)
+- [ ] `npm run build` sans erreur
+- [ ] `netlify deploy --prod --dir=dist` terminé
+- [ ] parentaile.fr accessible
+
+---
 
 ### Étape 3 — Merger dev → main (5 min)
 
 ```bash
-# Depuis le bureau, repo parentaile-v0
 git checkout main
 git merge dev
 git push origin main
 ```
+> Conflits peu probables — `main` n'a pas évolué depuis avril.
+> Si Netlify CI actif sur `main` → rebuild automatique, sinon :
+```bash
+netlify deploy --prod --dir=dist
+```
 
-- [ ] Résoudre les conflits éventuels (peu probables — main n'a pas évolué)
-- [ ] `git push origin main`
-- [ ] Netlify rebuild automatique depuis main (si CI configuré) — sinon redéployer manuellement
+- [ ] `git merge dev` sans conflit bloquant
+- [ ] `git push origin main` OK
+- [ ] parentaile.fr toujours accessible après rebuild
 
-### Étape 4 — Vérifier le VPS (2 min)
+---
+
+### Étape 4 — Redémarrer et surveiller le VPS (2 min)
 
 ```bash
+ssh root@145.223.117.145
 systemctl restart parentaile-account
 journalctl -u parentaile-account -f
 ```
+> Laisser défiler 30 secondes. Pas d'erreur rouge → `Ctrl+C`.
 
-- [ ] Service redémarré sans erreur
-- [ ] `systemctl status vocal-reminders.timer` actif
+```bash
+systemctl status vocal-reminders.timer
+```
+→ doit afficher `active`
+
+- [ ] Service redémarré sans erreur critique
+- [ ] `vocal-reminders.timer` actif
+
+---
 
 ### Étape 5 — Tests smoke (10 min)
 
-- [ ] **Token** : créer un token dans MedCompanion → vérifier qu'il apparaît dans PostgreSQL
-- [ ] **Activation** : utiliser le token sur Parent'aile → statut passe à "used" dans PostgreSQL
-- [ ] **Message** : envoyer un message depuis Parent'aile → apparaît dans MedCompanion
-- [ ] **Réponse** : répondre depuis MedCompanion → réponse visible dans Parent'aile
-- [ ] **Notification** : envoyer une notification rapide → badge + push FCM reçu
-- [ ] **Inscription** : nouveau parent s'inscrit → compte créé dans VPS
-- [ ] **Groupes vocaux** : vérifier qu'un groupe existant charge correctement
+Faire chaque test dans l'ordre. Un seul échec → voir **Rollback** en bas de page.
 
-### Étape 6 — Backup hors-site Google Drive (30 min, une seule fois)
+- [ ] **Token** : créer un token dans MedCompanion → vérifier qu'il apparaît dans Pilotage > Utilisateurs (statut "En attente")
+- [ ] **Activation** : utiliser le token sur Parent'aile → statut passe à "Actif" dans Pilotage
+- [ ] **Message parent → médecin** : envoyer un message depuis Parent'aile → message visible dans MedCompanion
+- [ ] **Réponse médecin → parent** : répondre depuis MedCompanion → réponse visible dans Parent'aile
+- [ ] **Notification rapide** : envoyer une notif depuis MedCompanion → badge + push FCM reçu sur le téléphone
+- [ ] **Inscription** : créer un nouveau compte parent → compte visible dans Pilotage
+- [ ] **Logs propres** :
+  ```bash
+  journalctl -u parentaile-account --since "15 min ago" | grep -i error
+  ```
+  → aucune erreur critique
 
-> Fait le jour du merge pour sécuriser les données avant la coupure Firebase.
-> Le backup PostgreSQL quotidien tourne déjà sur le VPS, mais il est stocké localement —
-> si Hostinger perd le serveur, les données seraient perdues. Google Drive = copie externe gratuite.
+---
 
-**Installer rclone et configurer Google Drive :**
+### Étape 6 — Backup hors-site Google Drive (30 min, à faire une seule fois)
+
+> Peut être lancé pendant les tests smoke (tourne en parallèle).
+> Le backup PostgreSQL quotidien tourne déjà sur le VPS mais est stocké localement —
+> si le serveur est perdu, les données partent avec. Google Drive = copie externe gratuite.
 
 ```bash
 ssh root@145.223.117.145
@@ -264,87 +322,80 @@ ssh root@145.223.117.145
 # Installer rclone
 curl https://rclone.org/install.sh | sudo bash
 
-# Configurer Google Drive (interface interactive)
+# Configurer Google Drive (guide interactif)
 rclone config
-# → n (new remote) → nom: gdrive → type: drive (Google Drive)
-# → laisser client_id et client_secret vides
-# → scope: drive.file (accès uniquement aux fichiers créés par rclone)
-# → Suivre le lien OAuth → se connecter avec nairmedcin@gmail.com → coller le code
+# → n (new remote)
+# → nom : gdrive
+# → type : drive (Google Drive)
+# → client_id et client_secret : laisser vides (Entrée)
+# → scope : drive.file
+# → Suivre le lien OAuth → se connecter avec nairmedcin@gmail.com → coller le code affiché
 ```
 
-**Créer le script de backup hors-site :**
-
+**Créer le script de backup :**
 ```bash
-cat > /root/backup-offsite.sh << 'EOF'
+cat > /root/backup-offsite.sh << 'SCRIPT'
 #!/bin/bash
 DATE=$(date +%Y%m%d)
 BACKUP_FILE="/root/backups/postgres_${DATE}.sql.gz"
-
-# Dump PostgreSQL
 sudo -u postgres pg_dump account_db | gzip > "$BACKUP_FILE"
-
-# Upload Google Drive dans dossier parentaile-backups/
 rclone copy "$BACKUP_FILE" gdrive:parentaile-backups/
-
-# Garder uniquement les 30 derniers jours en local
 find /root/backups/ -name "*.sql.gz" -mtime +30 -delete
-
-# Garder uniquement les 30 derniers fichiers sur Drive
-rclone delete --min-age 30d gdrive:parentaile-backups/
-
 echo "[$(date)] Backup hors-site OK: $BACKUP_FILE"
-EOF
+SCRIPT
 chmod +x /root/backup-offsite.sh
-mkdir -p /root/backups
+mkdir -p /root/backups /root/logs
 ```
 
-**Configurer le cron quotidien (3h30 — après le backup local à 3h15) :**
-
+**Ajouter le cron à 3h30 (après le backup local à 3h15) :**
 ```bash
 (crontab -l; echo "30 3 * * * /root/backup-offsite.sh >> /root/logs/backup-offsite.log 2>&1") | crontab -
 ```
 
 **Tester immédiatement :**
-
 ```bash
 /root/backup-offsite.sh
 rclone ls gdrive:parentaile-backups/
 ```
+→ le fichier doit apparaître dans Google Drive
 
 - [ ] `rclone` installé et configuré avec `nairmedcin@gmail.com`
 - [ ] Script `/root/backup-offsite.sh` créé et exécutable
-- [ ] Cron 3h30 ajouté
+- [ ] Cron 3h30 ajouté (`crontab -l` pour vérifier)
 - [ ] Test manuel OK — fichier visible dans Google Drive (dossier `parentaile-backups`)
-- [ ] Vérifier que le fichier est lisible : `gunzip -t /root/backups/postgres_$(date +%Y%m%d).sql.gz`
-
-### Étape 7 — Vérifier les logs (5 min)
-
-```bash
-# Logs VPS
-journalctl -u parentaile-account --since "30 min ago" | grep -i error
-
-# Console Firebase — vérifier qu'il n'y a plus d'écriture Firestore
-# (sauf Firebase Auth qui reste)
-```
-
-- [ ] Aucune erreur critique dans les logs
-- [ ] Firestore ne reçoit plus d'écritures (sauf Auth)
 
 ---
 
-## Rollback d'urgence (si problème)
+### Étape 7 — Vérification finale des logs (5 min)
 
 ```bash
-# 1. Remettre Firebase côté Parent'aile
-# .env : VITE_FIREBASE_BRIDGE=true (ou supprimer la ligne)
-# npm run build && firebase deploy --only hosting
-
-# 2. Les données sont toujours dans Firestore (dual-write = rien n'a été supprimé)
-# 3. MedCompanion continue à écrire sur les deux — aucune action nécessaire
+ssh root@145.223.117.145
+journalctl -u parentaile-account --since "30 min ago" | grep -i error
 ```
 
-Le rollback prend 5 minutes. Aucune donnée n'est perdue car le dual-write gardait
-Firebase à jour jusqu'à la coupure.
+Ouvrir la console Firebase → onglet Firestore → vérifier qu'il n'y a plus de nouvelles écritures dans `tokens`, `messages`, `notifications` (Firebase Auth reste actif, c'est normal).
+
+- [ ] Aucune erreur critique dans les logs VPS
+- [ ] Firestore ne reçoit plus d'écritures (hors Auth)
+
+---
+
+## ✅ Merge terminé — durée réelle : _____ min
+
+---
+
+## Rollback d'urgence (si problème à n'importe quelle étape)
+
+```bash
+# 1. Remettre Firebase dans .env
+VITE_FIREBASE_BRIDGE=true
+
+# 2. Rebuild et déployer
+npm run build
+netlify deploy --prod --dir=dist
+```
+
+**Le rollback prend 5 minutes.** Aucune donnée n'est perdue — le dual-write gardait Firebase à jour jusqu'à la coupure. MedCompanion continue d'écrire sur les deux sans aucune action de ta part.
 
 ---
 
