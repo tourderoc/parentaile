@@ -1,7 +1,28 @@
 # MERGE PLAN — Fusion branche principale + coupure Firebase
 
-> **Jour cible** : un dimanche, une fois l'objectif de **250 utilisateurs** atteint.
-> **Durée estimée** : 30-45 minutes (pas de maintenance visible pour les parents).
+> **Jour cible merge** : **Dimanche 29 juin 2026, 9h au cabinet**
+> **Durée estimée merge** : 45-60 minutes (pas de maintenance visible pour les parents).
+
+---
+
+## ⚡ Vendredi 27 juin — Communication utilisateurs (5 min)
+
+> Faire une fois les **250 utilisateurs atteints**.
+
+**Dans MedCompanion :**
+1. Ouvrir **Pilotage → Utilisateurs**
+2. Cliquer **"Broadcast"** (bouton en haut de la liste)
+3. Message suggéré :
+
+```
+Bonne nouvelle ! Le groupe de parole est maintenant disponible sur Parent'aile.
+Retrouvez-le dans Mon Espace → Groupes.
+Une mise à jour importante arrivera ce dimanche — aucune action requise de votre part.
+```
+
+4. Envoyer → push FCM envoyé à tous les parents actifs
+
+> Le dual-write Firebase est encore actif vendredi → couverture maximale.
 
 ---
 
