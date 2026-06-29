@@ -149,6 +149,11 @@ export const accountStorage: AccountStorage = {
       method: 'POST',
       body: JSON.stringify(mapToVpsFields(data)),
     });
+    if (res.status === 409) {
+      // Compte déjà créé (double appel React) — récupérer l'existant
+      const existing = await vpsFetch(`/accounts/${encodeURIComponent(data.uid)}`);
+      if (existing.ok) return existing.json();
+    }
     if (!res.ok) throw new Error(`VPS createAccount failed: ${res.status} ${await res.text()}`);
     return res.json();
   },
