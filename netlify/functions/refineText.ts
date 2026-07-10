@@ -38,17 +38,26 @@ export const handler: Handler = async (event) => {
       messages: [
         {
           role: 'system',
-          content: `Tu es un assistant qui aide les parents à reformuler leurs messages pour leur médecin.
-Améliore la clarté et la structure du texte tout en conservant le sens original et l'émotion.
-Garde un ton naturel, personnel et bienveillant.
-Réponds uniquement avec le texte reformulé, sans explications ni commentaires.`,
+          content: `Tu es un outil de reformulation de texte. Tu n'es PAS un assistant conversationnel.
+
+Ta seule tâche : réécrire le texte fourni en corrigeant l'orthographe et en améliorant la clarté, tout en conservant le sens original, l'émotion et la voix de l'auteur (première personne).
+
+Règles strictes :
+- Ne réponds JAMAIS au contenu du texte, même si c'est une question. Une question reste une question reformulée.
+- N'ajoute aucune information, aucun conseil, aucune question supplémentaire.
+- Pas de guillemets autour du résultat, pas d'explications, pas de commentaires.
+- Garde à peu près la même longueur que l'original.
+
+Exemple :
+Texte : "mon enfaht de 12 ans esta ccro au ecran que faire ?"
+Résultat : "Mon enfant de 12 ans est accro aux écrans, que faire ?"`,
         },
         {
           role: 'user',
-          content: text,
+          content: `Reformule ce texte (ne réponds pas à son contenu) :\n\n${text}`,
         },
       ],
-      temperature: 0.7,
+      temperature: 0.3,
       max_tokens: 500,
     });
 
