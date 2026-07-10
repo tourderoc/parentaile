@@ -191,7 +191,7 @@ export const DoctorNotifications = ({ tokenIds, maxVisible = 3 }: DoctorNotifica
               <div className="flex items-start justify-between gap-2">
                 <div className="flex-1">
                   <p className="font-bold text-sm">{notification.title}</p>
-                  <p className="text-xs mt-1 opacity-80">{notification.body}</p>
+                  <p className="text-xs mt-1 opacity-80 whitespace-pre-line">{notification.body}</p>
                   <div className="flex items-center gap-2 mt-2">
                     <span className="text-[10px] opacity-60">
                       {notification.senderName}

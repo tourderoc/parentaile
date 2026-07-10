@@ -373,7 +373,7 @@ export const MessageHistory = () => {
                       </div>
                     </div>
                     <div className="bg-blue-50 rounded-2xl p-4 border border-blue-100">
-                      <p className="text-blue-800 font-medium leading-relaxed">{selectedMessage.replyContent}</p>
+                      <p className="text-blue-800 font-medium leading-relaxed whitespace-pre-line">{selectedMessage.replyContent}</p>
                     </div>
                   </div>
                 )}
