@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Library, Gamepad2, ShieldCheck, Play } from 'lucide-react';
+import { ArrowLeft, Library, Gamepad2, ShieldCheck, Play, Download } from 'lucide-react';
 
 /**
  * Les ressources de Parent'aile (10/11/2026) : des outils pour la famille, rangés par rubrique.
@@ -16,6 +16,8 @@ interface Ressource {
   confiance: string;
   image: string;
   lien: string;
+  /** L'écran « Installer le jeu » de la ressource (icône sur l'écran d'accueil, marche sans internet). */
+  installer?: string;
 }
 
 interface Rubrique { titre: string; icone: typeof Gamepad2; ressources: Ressource[] }
@@ -33,6 +35,7 @@ const RUBRIQUES: Rubrique[] = [
         confiance: 'Les progrès de l\'enfant restent sur la tablette : rien n\'est envoyé sur internet.',
         image: '/assets/ressources/bataille-multiplication.jpg',
         lien: 'https://jeu.parentaile.fr',
+        installer: 'https://jeu.parentaile.fr/?installer',
       },
     ],
   },
@@ -70,9 +73,16 @@ const Cartouche = ({ r, i }: { r: Ressource; i: number }) => (
       >
         <Play size={16} className="fill-white" /> Jouer
       </a>
-      <p className="text-[11px] text-gray-500 text-center">
-        Sur la tablette, le navigateur propose de l'« Installer » : le jeu a alors son icône et marche même sans internet.
-      </p>
+      {r.installer && (
+        <a
+          href={r.installer}
+          target="_blank"
+          rel="noopener"
+          className="flex items-center justify-center gap-2 w-full py-3 glass bg-white/60 rounded-xl text-sm uppercase tracking-wider font-extrabold text-orange-600 shadow-sm hover:bg-white/80 active:scale-[0.98] transition-all border border-orange-200"
+        >
+          <Download size={16} /> Télécharger le jeu
+        </a>
+      )}
     </div>
   </motion.article>
 );
