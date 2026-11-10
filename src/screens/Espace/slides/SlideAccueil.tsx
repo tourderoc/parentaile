@@ -23,6 +23,8 @@ interface SectionCard {
   /** Une page à part (hors des glissements de l'espace), comme les Ressources. */
   route?: string;
   requiresAuth?: boolean;
+  /** Changer la teinte de l'image (filtre CSS), pour qu'elle ne ressemble pas à une autre carte. */
+  teinte?: string;
 }
 
 const getSectionCards = (hasChildren: boolean): SectionCard[] => [
@@ -55,6 +57,8 @@ const getSectionCards = (hasChildren: boolean): SectionCard[] => [
     icon: Library,
     bgImage: '/assets/backgrounds/slide_bg_ressources.png',
     route: '/ressources',
+    // Vert, comme l'arbre du logo : l'orange est déjà celui de Contact (10/11/2026).
+    teinte: 'hue-rotate(75deg) saturate(1.15)',
   },
   {
     label: 'Parametres',
@@ -260,7 +264,7 @@ export const SlideAccueil = () => {
                 {/* Background Image */}
                 <div 
                   className="absolute inset-0 bg-cover bg-center transition-transform duration-700 group-hover:scale-105"
-                  style={{ backgroundImage: `url(${card.bgImage})` }}
+                  style={{ backgroundImage: `url(${card.bgImage})`, filter: card.teinte }}
                 />
                 
                 {/* Overlay gradient for readability */}
