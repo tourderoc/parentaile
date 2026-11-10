@@ -17,6 +17,7 @@ import { MesMessagesPage } from './screens/Espace/MesMessagesPage';
 import { MesGroupesPage } from './screens/Espace/MesGroupesPage';
 import { SalleVocalePage } from './screens/Espace/SalleVocalePage';
 import { WelcomeWithSplash } from './screens/Welcome/WelcomeWithSplash';
+import { Ressources } from './screens/Ressources';
 
 const Layout = () => {
   return (
@@ -27,6 +28,7 @@ const Layout = () => {
 
       {/* ========== MENTIONS LÉGALES ========== */}
       <Route path="/mentions-legales" element={<LegalNotice />} />
+      <Route path="/ressources" element={<Ressources />} />
 
       {/* ========== BOUTIQUE (Stripe) ========== */}
       <Route path="/boutique" element={<Shop />} />

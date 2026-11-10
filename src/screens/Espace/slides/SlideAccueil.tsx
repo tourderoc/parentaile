@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { auth } from '../../../lib/firebase';
 import { signOut } from 'firebase/auth';
-import { LogOut, Loader2, MessageSquarePlus, LayoutGrid, Users, Settings, ShieldCheck } from 'lucide-react';
+import { LogOut, Loader2, MessageSquarePlus, LayoutGrid, Users, Settings, ShieldCheck, Library } from 'lucide-react';
 import { UserAvatar } from '../../../components/ui/UserAvatar';
 import type { AvatarConfig } from '../../../lib/avatarTypes';
 import { motion } from 'framer-motion';
@@ -14,7 +14,20 @@ import { useUser } from '../../../lib/userContext';
 import { initializePushNotifications, clearAppBadge, onForegroundNotification } from '../../../lib/pushNotifications';
 import { markAllAsReadForTokens } from '../../../lib/doctorNotifications';
 
-const getSectionCards = (hasChildren: boolean) => [
+interface SectionCard {
+  label: string;
+  description: string;
+  icon: typeof Users;
+  bgImage: string;
+  slideIndex?: number;
+  /** Une page à part (hors des glissements de l'espace), comme les Ressources. */
+  route?: string;
+  requiresAuth?: boolean;
+  /** Une image chargée (une capture de jeu) : un voile plus sombre pour lire le texte. */
+  voile?: boolean;
+}
+
+const getSectionCards = (hasChildren: boolean): SectionCard[] => [
   {
     label: 'Groupes',
     description: 'Groupes de parole',
@@ -36,6 +49,15 @@ const getSectionCards = (hasChildren: boolean) => [
     bgImage: '/assets/backgrounds/slide_bg_contact.png',
     slideIndex: 3,
     requiresAuth: true,
+  },
+  {
+    // Les ressources pour la famille (10/11/2026) : pour l'instant, la bataille de la multiplication.
+    label: 'Ressources',
+    description: 'Jeux et outils pour la famille',
+    icon: Library,
+    bgImage: '/assets/ressources/bataille-multiplication.jpg',
+    route: '/ressources',
+    voile: true,
   },
   {
     label: 'Parametres',
@@ -230,8 +252,10 @@ export const SlideAccueil = () => {
                 onClick={() => {
                   if (card.requiresAuth && !currentUser) {
                     navigate('/espace?mode=login');
+                  } else if (card.route) {
+                    navigate(card.route);
                   } else {
-                    navigateToSlide?.(card.slideIndex);
+                    navigateToSlide?.(card.slideIndex ?? 0);
                   }
                 }}
                 className="w-full h-[85%] rounded-[2rem] shadow-premium flex flex-col items-center justify-center gap-3 transition-all active:scale-[0.96] relative overflow-hidden group"
@@ -244,6 +268,7 @@ export const SlideAccueil = () => {
                 
                 {/* Overlay gradient for readability */}
                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
+                {card.voile && <div className="absolute inset-0 bg-black/35" />}
 
                 {/* Badge "Accès Réservé" for Contact */}
                 {card.requiresAuth && (
