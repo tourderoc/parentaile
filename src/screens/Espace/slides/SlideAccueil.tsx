@@ -23,8 +23,6 @@ interface SectionCard {
   /** Une page à part (hors des glissements de l'espace), comme les Ressources. */
   route?: string;
   requiresAuth?: boolean;
-  /** Une image chargée (une capture de jeu) : un voile plus sombre pour lire le texte. */
-  voile?: boolean;
 }
 
 const getSectionCards = (hasChildren: boolean): SectionCard[] => [
@@ -55,9 +53,8 @@ const getSectionCards = (hasChildren: boolean): SectionCard[] => [
     label: 'Ressources',
     description: 'Jeux et outils pour la famille',
     icon: Library,
-    bgImage: '/assets/ressources/bataille-multiplication.jpg',
+    bgImage: '/assets/backgrounds/slide_bg_ressources.png',
     route: '/ressources',
-    voile: true,
   },
   {
     label: 'Parametres',
@@ -268,7 +265,6 @@ export const SlideAccueil = () => {
                 
                 {/* Overlay gradient for readability */}
                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
-                {card.voile && <div className="absolute inset-0 bg-black/35" />}
 
                 {/* Badge "Accès Réservé" for Contact */}
                 {card.requiresAuth && (
