@@ -31,7 +31,7 @@ const RUBRIQUES: Rubrique[] = [
         titre: 'La bataille de la multiplication',
         accroche: 'Un jeu qui réunit la famille.',
         texte: 'Parent et enfant, côte à côte sur la tablette : on calcule pour lever son armée, puis on part à la bataille. Les tables s\'apprennent en jouant, du CP au CM2.',
-        pastilles: ['CP → CM2', '2 à 4 joueurs', 'Aussi à distance', 'Gratuit, sans publicité'],
+        pastilles: ['Tablette recommandée', 'CP → CM2', '2 à 4 joueurs', 'Aussi à distance', 'Gratuit, sans publicité'],
         confiance: 'Les progrès de l\'enfant restent sur la tablette : rien n\'est envoyé sur internet.',
         image: '/assets/ressources/bataille-multiplication.jpg',
         lien: 'https://jeu.parentaile.fr',
